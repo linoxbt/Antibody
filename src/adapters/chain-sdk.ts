@@ -119,6 +119,27 @@ export class SdkChainReader implements ChainReader {
     return tx.build({ client: this.client });
   }
 
+  /** FR-18: checkpoints affecting the wallet, streamed over gRPC. Undefined on JSON-RPC. */
+  get watchCheckpoints(): ChainReader['watchCheckpoints'] {
+    if (this.o.transport !== 'grpc') return undefined;
+    return async (address, onCheckpoint, signal) => {
+      const client = this.client as SuiGrpcClient;
+      const call = client.subscriptionService.subscribeCheckpoints(
+        {
+          readMask: { paths: ['sequence_number'] },
+          filter: { terms: [{ literals: [{ negated: false, predicate: { oneofKind: 'affectedAddress', affectedAddress: { address: normalizeSuiAddress(address) } } }] }] },
+        },
+        { abort: signal },
+      );
+      // With a filter the server sends a cursor-only heartbeat every few
+      // checkpoints and a checkpoint body only when one touches the address.
+      for await (const r of call.responses) {
+        const seq = r.checkpoint?.sequenceNumber;
+        if (seq !== undefined) onCheckpoint(Number(seq));
+      }
+    };
+  }
+
   /**
    * Unsigned owner transaction: {package}::account::remove_delegate_key. The
    * console hands these bytes to the owner's browser wallet to sign (FR-16).

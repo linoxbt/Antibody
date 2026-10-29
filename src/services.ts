@@ -18,6 +18,7 @@ import { createRuntime, type Runtime } from './runtime.ts';
 import { Signer, type SignRequest } from './signer/signer.ts';
 import { ingestExternalText, scanWallet, type IngestDeps, type SentinelSink } from './ingest/scan.ts';
 import { loadGuardians } from './ingest/guardians.ts';
+import { watchWallet, type WatchOptions } from './ingest/watch.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
 import { suiNetworkId } from './payments/x402.ts';
@@ -192,6 +193,23 @@ async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Prom
 
 export async function runIngestScan(rt: Runtime, sinkOverride?: SentinelSink | null) {
   return scanWallet(await ingestDeps(rt, sinkOverride));
+}
+
+/** The always-on sentinel (FR-18): scans whenever a checkpoint touches Steward's wallet. */
+export async function runIngestWatch(rt: Runtime, o: Pick<WatchOptions, 'signal' | 'onScan' | 'log'> & { pollMs?: number }, sinkOverride?: SentinelSink | null) {
+  const deps = await ingestDeps(rt, sinkOverride);
+  const offline = rt.cfg.backend === 'offline';
+  return watchWallet({
+    chain: rt.chain,
+    wallet: deps.wallet,
+    scan: () => scanWallet(deps),
+    signal: o.signal,
+    // Mainnet checkpoints advance every ~250 ms, so a polling fallback scans on a slower clock.
+    pollMs: o.pollMs ?? (offline ? 2000 : 15_000),
+    minScanGapMs: offline ? 500 : 5000,
+    log: o.log ?? ((event, data) => rt.log.info(`watch.${event}`, data ?? {})),
+    ...(o.onScan ? { onScan: o.onScan } : {}),
+  });
 }
 
 export async function runIngestPaste(rt: Runtime, text: string, origin: string, sinkOverride?: SentinelSink | null) {

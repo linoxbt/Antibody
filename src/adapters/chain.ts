@@ -58,6 +58,12 @@ export interface ChainReader {
   /** Dry-run (sui_dryRunTransactionBlock / SimulateTransaction). */
   simulate(txBytes: Uint8Array): Promise<SimulationResult>;
   execute(txBytes: Uint8Array, signature: string): Promise<TxInfo>;
+  /**
+   * Stream checkpoints that touch `address` (gRPC SubscriptionService), calling
+   * onCheckpoint with each sequence number until the stream ends or `signal`
+   * aborts. Absent where the transport cannot stream; callers poll instead.
+   */
+  watchCheckpoints?(address: string, onCheckpoint: (seq: number) => void, signal: AbortSignal): Promise<void>;
 }
 
 /** Owner-signed account operations (setup, revoke, rotate). */

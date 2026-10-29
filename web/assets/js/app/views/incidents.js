@@ -109,7 +109,7 @@ export default {
             qs.length
               ? el('div', { class: 'row-list' }, ...qs.map((q) => el('div', { class: 'row-i', style: 'flex-wrap:wrap' }, el('span', { class: 'dot r' }), el('span', { class: 'grow' }, `#${q.seq} · ${q.seed.type} ${short(q.seed.value, 12)}`), el('span', { class: 'meta' }, q.auto ? 'auto' : 'manual'), reportCell(ctx, q.seq, reports))))
               : el('p', { class: 'empty' }, 'None.'),
-            qs.length ? el('div', { style: 'margin-top:12px;display:grid;gap:8px' }, el('p', { class: 'hint' }, 'Releasing is a human decision, signed with your user key:'), command(`antibody release ${qs[0].seq} --reason "reviewed: safe"`)) : null,
+            qs.length && !s.sandbox ? el('div', { style: 'margin-top:12px;display:grid;gap:8px' }, el('p', { class: 'hint' }, 'Releasing is a human decision, signed with your user key:'), command(`antibody release ${qs[0].seq} --reason "reviewed: safe"`)) : null,
           ),
         ),
       ),

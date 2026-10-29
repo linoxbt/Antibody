@@ -51,9 +51,10 @@ export default {
       });
     });
 
+    const presetList = ctx.state.sandbox ? PRESETS.filter((p) => !p.includes('http')) : PRESETS;
     const presets = recorded
       ? src.steps.flatMap((s, i) => (s.run ? [el('button', { class: 'chip', type: 'button', onclick: () => (src.setIndex(i), ctx.rerender()) }, `${s.time} · ${s.run.instruction.length > 34 ? s.run.instruction.slice(0, 34) + '…' : s.run.instruction}`)] : []))
-      : PRESETS.map((p) => el('button', { class: 'chip', type: 'button', onclick: () => ((live.instruction = p), ctx.rerender()) }, p.length > 40 ? p.slice(0, 40) + '…' : p));
+      : presetList.map((p) => el('button', { class: 'chip', type: 'button', onclick: () => ((live.instruction = p), ctx.rerender()) }, p.length > 40 ? p.slice(0, 40) + '…' : p));
 
     const model = run?.protected?.model ? `${run.protected.model}${run.protected.simulatedModel ? ' · simulated' : ''}` : '';
     const ctxItems = run?.protected?.steps?.find((s) => s.tool === 'recall_memories')?.result?.items?.length ?? 0;

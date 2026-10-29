@@ -148,7 +148,7 @@ function renderTop() {
     });
     parts.push(el('span', { class: 'pill rec' }, 'Recorded'), sel);
   } else {
-    parts.push(el('span', { class: 'pill live' }, s.backend === 'offline' ? 'Live · simulated' : 'Live · mainnet'));
+    parts.push(el('span', { class: 'pill live' }, s.sandbox ? 'Sandbox · simulated' : s.backend === 'offline' ? 'Live · simulated' : 'Live · mainnet'));
     const r = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Refresh', title: 'Refresh' }, icon('refresh'));
     r.addEventListener('click', () => ctx.act(async () => (await src.refresh(), route({ keepScroll: true }), toast('Refreshed from Walrus + Sui.'))));
     parts.push(r);

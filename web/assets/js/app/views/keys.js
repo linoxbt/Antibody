@@ -120,7 +120,7 @@ export default {
               found.length > 1 ? walletSel() : null,
               el('button', { class: 'btn btn-primary', type: 'button', ...(revoking || !activeLanes.includes(revokeLane) ? { disabled: true } : {}), onclick: () => ctx.act(() => revokeWithWallet(ctx)) }, revoking ? 'Waiting…' : found.length ? `Revoke with ${(found.find((x) => x.name === walletName) ?? found[0]).name}` : 'Revoke with owner wallet'),
               revoking ? el('p', { class: 'hint', role: 'status' }, revoking) : el('p', { class: 'hint' }, activeLanes.includes(revokeLane) ? 'Writes signed by that key after the revocation checkpoint are excluded. Quarantines are untouched.' : `antibody:${revokeLane} has no active key. Rotate one in:`),
-              !activeLanes.includes(revokeLane) || lastRevoked === revokeLane ? command(`antibody rotate --lane ${revokeLane}`) : el('details', {}, el('summary', { class: 'small muted', style: 'cursor:pointer' }, 'or from the command line'), el('div', { style: 'margin-top:10px' }, command(`antibody revoke --lane ${revokeLane} --rotate`))),
+              s.sandbox ? (!activeLanes.includes(revokeLane) ? el('p', { class: 'hint' }, 'Reset your sandbox in Settings for fresh keys.') : null) : !activeLanes.includes(revokeLane) || lastRevoked === revokeLane ? command(`antibody rotate --lane ${revokeLane}`) : el('details', {}, el('summary', { class: 'small muted', style: 'cursor:pointer' }, 'or from the command line'), el('div', { style: 'margin-top:10px' }, command(`antibody revoke --lane ${revokeLane} --rotate`))),
             ),
           ),
         ),

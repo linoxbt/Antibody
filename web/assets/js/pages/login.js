@@ -51,7 +51,8 @@ async function signInWith(w, btn) {
 function renderWallets() {
   const host = $('wallets');
   if (!wallets.length) {
-    host.replaceChildren(el('div', { class: 'wallet-empty' }, 'No Sui wallet found. ', el('a', { href: 'https://slush.app', target: '_blank', rel: 'noopener' }, 'Get Slush')));
+    const phone = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    host.replaceChildren(el('div', { class: 'wallet-empty' }, phone ? 'No wallet here. Open this page in your wallet app’s browser, or ' : 'No Sui wallet found. ', el('a', { href: 'https://slush.app', target: '_blank', rel: 'noopener' }, phone ? 'get Slush' : 'Get Slush'), '.'));
     return;
   }
   host.replaceChildren(
@@ -92,6 +93,7 @@ $('demo').addEventListener('click', () => setDemo(true));
   if (fromHash) history.replaceState(null, '', location.pathname + location.search); // keep the token out of history
   const st = await authStatus();
   document.body.dataset.node = st ? 'on' : 'off';
+  if (st?.mode) document.body.dataset.mode = st.mode;
   if (!st) return;
   if (st.authenticated) return location.replace(next);
   $('demo').href = next;

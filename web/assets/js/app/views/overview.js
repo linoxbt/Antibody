@@ -13,6 +13,26 @@ function greeting() {
   return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
+/** Sandbox only: drop the next poisoned coin on this visitor's Steward and let the sentinel see it. */
+function attackButton(ctx) {
+  const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Send a poisoned coin');
+  b.addEventListener('click', () =>
+    ctx.act(async () => {
+      b.disabled = true;
+      try {
+        const r = await ctx.src.api('/api/sandbox/attack', {});
+        await ctx.src.refresh();
+        const inc = r.items[0]?.incident;
+        ctx.toast(`${r.coin.name} landed in Steward's wallet: ${inc ? (inc.status === 'auto-quarantined' ? 'a lesson caught it and quarantined it.' : 'the sentinel flagged it. Now ask Steward to pay rent.') : 'observed.'}`, 6000);
+        ctx.rerender();
+      } finally {
+        b.disabled = false;
+      }
+    }),
+  );
+  return b;
+}
+
 export default {
   id: 'overview',
   path: '/app',
@@ -40,7 +60,7 @@ export default {
           el('h1', {}, `${greeting()}.`, ' ', el('span', { class: 'tail' }, healthy ? 'Steward is guarded.' : 'Payments are held.')),
           el('div', { class: 'health' }, el('span', { class: `dot ${healthy ? 'g' : 'r'}` }), healthy ? `Ledger #${s.ledger.head.seq} verified · ${s.lanes.length} lanes active · checkpoint ${s.checkpoint}` : s.ledger.ok ? 'A lane is revoked: rotate it from Keys.' : `Ledger unreadable (${s.ledger.code}): every payment is blocked until it verifies.`),
         ),
-        el('div', { class: 'actions' }, navLink('/app/steward', 'Run Steward', 'btn btn-primary btn-sm')),
+        el('div', { class: 'actions' }, s.sandbox ? attackButton(ctx) : null, navLink('/app/steward', 'Run Steward', `btn ${s.sandbox ? 'btn-ghost' : 'btn-primary'} btn-sm`)),
       ),
       el(
         'section',

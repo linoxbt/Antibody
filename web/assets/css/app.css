@@ -205,3 +205,5 @@ body.auth[data-node='on'] .demo-btn:hover { color: var(--text); }
 .auth-foot a.back { font-size: 13px; color: var(--muted); }
 .auth-foot a.back:hover { color: var(--text); }
 .auth-msg:empty { display: none; }
+body.auth:not([data-mode='sandbox']) .sandbox-only, body.auth[data-mode='sandbox'] .op { display: none; }
+body.auth[data-mode='sandbox'] .sandbox-only { margin-top: -8px; }

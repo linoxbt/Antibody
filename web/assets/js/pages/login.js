@@ -3,6 +3,7 @@
 import { sky, armReveals } from '../motion.js';
 import { api, authStatus, setDemo } from '../data.js';
 import { $, el } from '../ui.js';
+import { discoverWallets, connect, signMessage, cancelled } from '../wallets.js';
 
 sky();
 armReveals();
@@ -25,23 +26,8 @@ const done = () => {
   location.replace(next);
 };
 
-// ---- Wallet Standard ------------------------------------------------------------
+// ---- wallets ---------------------------------------------------------------------
 const wallets = [];
-const isSui = (w) => w?.chains?.some((c) => String(c).startsWith('sui:')) && w.features?.['standard:connect'] && w.features?.['sui:signPersonalMessage'];
-function register(...ws) {
-  for (const w of ws) if (isSui(w) && !wallets.includes(w)) wallets.push(w);
-  renderWallets();
-  return () => {};
-}
-addEventListener('wallet-standard:register-wallet', (e) => {
-  try {
-    e.detail({ register });
-  } catch {
-    /* a misbehaving wallet must not break the page */
-  }
-});
-dispatchEvent(new CustomEvent('wallet-standard:app-ready', { detail: { register } }));
-
 async function signInWith(w, btn) {
   if (!node) return say('Wallet sign-in needs a running Antibody node: run antibody up, then open its console.', 'err');
   btn.disabled = true;
@@ -49,17 +35,15 @@ async function signInWith(w, btn) {
   const hint = btn.querySelector('small');
   try {
     hint.textContent = 'connecting';
-    const { accounts } = await w.features['standard:connect'].connect();
-    const account = accounts.find((a) => a.chains?.some((c) => String(c).startsWith('sui:'))) ?? accounts[0];
-    if (!account) throw new Error('the wallet shared no account');
+    const account = await connect(w);
     hint.textContent = 'sign in wallet';
     const ch = await api('/api/auth/challenge', { address: account.address });
-    const { signature } = await w.features['sui:signPersonalMessage'].signPersonalMessage({ message: new TextEncoder().encode(ch.message), account });
+    const signature = await signMessage(w, account, ch.message);
     hint.textContent = 'verifying';
     await api('/api/auth/wallet', { address: account.address, message: ch.message, signature });
     done();
   } catch (e) {
-    say(/reject|denied|cancel/i.test(e.message ?? '') ? 'Request cancelled in the wallet.' : e.message, 'err');
+    say(cancelled(e) ? 'Request cancelled in the wallet.' : e.message, 'err');
     hint.textContent = 'detected';
     btn.disabled = false;
     btn.classList.remove('busy');
@@ -80,6 +64,10 @@ function renderWallets() {
     }),
   );
 }
+discoverWallets((ws) => {
+  wallets.splice(0, wallets.length, ...ws.filter((w) => w.features['sui:signPersonalMessage']));
+  if (wallets.length) renderWallets();
+});
 // Wallets register within a tick of app-ready; show the empty state only after that.
 setTimeout(renderWallets, 600);
 

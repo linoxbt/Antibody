@@ -76,12 +76,12 @@ export interface World {
   dispose(): void;
 }
 
-export async function createWorld(opts: { home?: string; model?: ChatModel; keep?: boolean } = {}): Promise<World> {
+export async function createWorld(opts: { home?: string; model?: ChatModel; keep?: boolean; ownerSecret?: string } = {}): Promise<World> {
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'antibody-'));
   const env = { ...process.env, ANTIBODY_HOME: home, ANTIBODY_BACKEND: 'offline', ANTIBODY_KEY_ISOLATION: 'simulated', ANTIBODY_ROLE: '' };
   delete (env as Record<string, string | undefined>).ANTIBODY_ROLE;
   const readKey = (role: Role) => readFileSync(keyPath(home, role), 'utf8').trim();
-  const setup = await setupOffline(loadConfig(env), { readKeyFile: readKey });
+  const setup = await setupOffline(loadConfig(env), { readKeyFile: readKey, ownerSecret: opts.ownerSecret });
   const cfg = loadConfig(env);
   const rt = createRuntime(cfg, 'cli');
   const fixture = rt.fixture!;

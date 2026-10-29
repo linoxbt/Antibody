@@ -20,6 +20,7 @@ import type { Runtime } from '../runtime.ts';
 import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
+import { RevokeFlow } from './revoke.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WEB = join(ROOT, 'web');
@@ -132,6 +133,7 @@ export function tokenPath(rt: Runtime): string {
 
 export async function startWeb(rt: Runtime, control: Control, port: number, auth?: Auth): Promise<{ server: Server; auth: Auth }> {
   const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined });
+  const revoke = new RevokeFlow(rt, control);
   mkdirSync(join(rt.cfg.home, 'run'), { recursive: true, mode: 0o700 });
   writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600 });
   chmodSync(tokenPath(rt), 0o600);
@@ -216,6 +218,8 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         const line = stdout.trim().split('\n').filter((l) => l.startsWith('{')).at(-1);
         return send(200, line ? JSON.parse(line) : { error: stdout });
       }
+      if (url.pathname === '/api/revoke/prepare') return send(200, await revoke.prepare(String(body.lane ?? '')));
+      if (url.pathname === '/api/revoke/submit') return send(200, await revoke.submit(String(body.id ?? ''), { signature: String(body.signature ?? ''), ...(typeof body.bytes === 'string' ? { bytes: body.bytes } : {}) }));
       if (url.pathname === '/api/report') {
         const r = await control.report(Number(body.seq));
         return send(200, r.upload);

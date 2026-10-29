@@ -73,8 +73,17 @@ The web app (`web/`) is served by the control process. The public pages are
 **Security** (invariants, lanes, trust assumptions). The **console** at `/app`
 sits behind **sign-in** (`/login`) and has eight views: Overview, Steward (split
 screen against the unprotected agent), Memory (blast-radius lineage explorer),
-Payees, Ledger, Incidents (sentinel, quarantine, forensic view), Keys (lanes,
-revocation, rebuild digests) and Settings.
+Payees, Ledger, Incidents (sentinel, quarantine, forensic view, incident
+reports), Keys (lanes, revocation, rebuild digests) and Settings.
+
+**Revoke from the console (FR-16).** The Keys view revokes a lane with the
+owner's browser wallet. Control prepares exactly one `remove_delegate_key` call
+and the wallet signs it. Control checks that the signed bytes are still that
+call, submits them through Tatum, and writes `lane.revoke` only after it
+re-reads the account and finds the key gone. On the offline backend the wallet
+signs a one-time authorization message instead, labelled SIMULATED. Rotation
+writes a new key file on the role's machine, so it stays on the CLI:
+`antibody rotate --lane <lane>`.
 
 **Sign-in.** The owner wallet is the root of trust, so the console admits whoever
 proves control of it: any Sui wallet in the browser (Wallet Standard, e.g. Slush)
@@ -274,6 +283,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody setup` | control + owner | generate keys, register `antibody:*` labels, write genesis |
 | `antibody up` / `down` | — | start/stop signer, control (+web) and agent daemons |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
+| `antibody rotate --lane <lane>` | owner | add a fresh key after a revocation; `lane.rotate` record |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
 | `antibody release <seq> --reason …` | user | `quarantine.release` (human decision) |
@@ -310,11 +320,11 @@ src/signer/     signer (re-simulates, signs, executes)
 src/payments/   x402 (v2 types/headers) · x402-server (resource server + Sui exact facilitator)
 src/user/       human CLI operations (user-signed records)
 src/cli/        antibody CLI · render
-src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions)
+src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions) · revoke (owner-wallet revocation)
 web/            index · walkthrough · security · login · app (console SPA) · 404 (.html)
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth)
+test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 

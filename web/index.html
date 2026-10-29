@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Antibody</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="banners"></div>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◈</span>
+      <div>
+        <h1>Antibody</h1>
+        <p class="sub">Provenance and quarantine for Steward's memory · Walrus Memory + Sui</p>
+      </div>
+    </div>
+    <div class="digests">
+      <div class="digest"><span class="k">live digest</span><code id="digest-live">…</code></div>
+      <div class="digest"><span class="k">rebuild digest</span><code id="digest-rebuild">—</code><button id="btn-rebuild" class="ghost">Rebuild --fresh</button></div>
+      <div id="digest-match" class="pill"></div>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card span2" id="split">
+      <div class="card-head">
+        <h2>Split screen</h2>
+        <p class="hint">Same model, same memories. Left: Steward behind Antibody. Right: the unprotected agent (dry-run only, never signs).</p>
+      </div>
+      <form id="run-form" class="run">
+        <input id="instruction" value="Pay this month's rent." aria-label="Instruction to Steward" />
+        <label class="chk"><input type="checkbox" id="execute" /> execute if allowed</label>
+        <button type="submit" id="btn-run">Run</button>
+      </form>
+      <div class="split">
+        <div class="pane" id="pane-protected"><h3>Steward + Antibody</h3><div class="body muted">Run an instruction to compare.</div></div>
+        <div class="pane" id="pane-unprotected"><h3>Unprotected agent</h3><div class="body muted">—</div></div>
+      </div>
+    </section>
+
+    <section class="card" id="lanes-card">
+      <div class="card-head"><h2>Lanes</h2><p class="hint">Delegate keys labelled on-chain by the owner wallet. A memory's lane is the label of the key that signed it.</p></div>
+      <div id="lanes"></div>
+      <div id="account" class="muted small"></div>
+    </section>
+
+    <section class="card span3" id="graph-card">
+      <div class="card-head row">
+        <div>
+          <h2>Blast radius</h2>
+          <p class="hint">Every memory, coloured by trust class. Taint follows what each turn read. Select a quarantine to light up what it reached.</p>
+        </div>
+        <div class="legend">
+          <span><i class="dot trusted"></i>trusted</span>
+          <span><i class="dot derived"></i>derived</span>
+          <span><i class="dot untrusted"></i>untrusted</span>
+          <span><i class="dot unverified"></i>unverified</span>
+          <span><i class="dot q"></i>quarantined</span>
+          <select id="seed-select" aria-label="Highlight quarantine"><option value="">highlight: none</option></select>
+        </div>
+      </div>
+      <div class="graph-wrap"><svg id="graph" role="img" aria-label="Lineage graph"></svg></div>
+      <div id="node-detail" class="detail muted">Click a node for its envelope, class and lineage.</div>
+    </section>
+
+    <section class="card" id="incidents-card">
+      <div class="card-head"><h2>Incidents</h2><p class="hint">Detection proposes; quarantine excludes; revocation cuts off a writer. Nothing is deleted.</p></div>
+      <div id="incidents"></div>
+      <form id="q-form" class="qform">
+        <select id="q-type"><option>source</option><option>memory</option><option>turn</option></select>
+        <input id="q-value" placeholder="0x… object id / envelope id" />
+        <button type="submit">Quarantine</button>
+      </form>
+      <div class="revoke">
+        <button id="btn-revoke" class="ghost">Revoke a lane key…</button>
+        <p id="revoke-help" class="small muted hidden">Revocation needs the owner wallet, which never lives on this server. Run <code>antibody revoke --lane wallet-objects [--rotate]</code> with the owner key. Revoke only when a lane key itself is suspected, not when a lane merely carried poison.</p>
+      </div>
+    </section>
+
+    <section class="card" id="ledger-card">
+      <div class="card-head"><h2>Ledger</h2><p class="hint">Hash-chained control records on Walrus. If it can't be shown complete and intact, every payment is blocked.</p></div>
+      <div id="ledger"></div>
+    </section>
+
+    <section class="card" id="learn-card">
+      <div class="card-head"><h2>What Antibody learned</h2><p class="hint">Each confirmed quarantine teaches the sentinel. Repeat attacks are caught before Steward reads them.</p></div>
+      <div id="lessons"></div>
+      <h3 class="mt">Payees</h3>
+      <div id="payees"></div>
+    </section>
+
+    <section class="card span3" id="forensic-card">
+      <div class="card-head row"><div><h2>Forensic view</h2><p class="hint">Excluded memories stay on Walrus as evidence, with the reason they were excluded.</p></div></div>
+      <div id="forensic"></div>
+    </section>
+  </main>
+  <footer class="muted small" id="footer"></footer>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

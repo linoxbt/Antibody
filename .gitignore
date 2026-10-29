@@ -1,0 +1,10 @@
+node_modules/
+.antibody/
+.antibody-*/
+*.key
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+dist/

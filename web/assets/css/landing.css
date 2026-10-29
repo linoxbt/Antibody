@@ -163,6 +163,7 @@ html:not(.motion) .panel:first-child { opacity: 1; position: relative; inset: au
 .dash-head .btns { display: flex; gap: 10px; }
 .dash-head .btns b { font: 500 14px var(--sans); letter-spacing: 0; height: 38px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 10px; border: 1px solid var(--line-2); background: rgba(var(--fg-rgb), 0.05); }
 .dash-head .btns b.hi { background: var(--accent-hi); color: #071331; border-color: transparent; box-shadow: 0 0 24px rgba(122, 177, 254, 0.45); }
+:root[data-theme='light'] .dash-head .btns b.hi { color: #fff; box-shadow: none; }
 .dash-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 16px; background: rgba(var(--fg-rgb), 0.025); }
 .dash-stats > div { padding: 18px 20px; border-left: 1px solid var(--line); min-width: 0; }
 .dash-stats > div:first-child { border-left: 0; }

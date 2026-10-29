@@ -1,6 +1,7 @@
 // The signed-in console: session gate, sidebar shell, client-side router.
 // Live mode talks to the control process behind a console session; the
 // recorded demo replays demo.json read-only (the public site has no node).
+import '../pwa.js';
 import { sky } from '../motion.js';
 import { authStatus, demoChosen, liveSource, recordedSource, signOut, AuthRequired, ReadOnlyError } from '../data.js';
 import { el, short } from '../ui.js';

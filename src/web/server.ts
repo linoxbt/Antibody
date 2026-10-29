@@ -38,6 +38,8 @@ export const TYPES: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.json': 'application/json',
   '.md': 'text/markdown; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
+  '.ico': 'image/x-icon',
 };
 export const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
 

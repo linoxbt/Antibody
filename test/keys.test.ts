@@ -26,7 +26,7 @@ test('T-19: with enforcement on, a role that can read another role\'s key refuse
   }
 });
 
-test('T-19: once other roles\' key files are unreadable, the role starts (skipped as root, which reads everything)', { skip: process.getuid?.() === 0 }, () => {
+test('T-19: once other roles\' key files are unreadable, the role starts (skipped as root, which reads everything, and on Windows, which uses ACLs)', { skip: process.getuid?.() === 0 || process.platform === 'win32' }, () => {
   const h = home();
   try {
     for (const r of ['control', 'user', 'ingest'] as const) chmodSync(keyPath(h, r), 0o000);
@@ -52,6 +52,7 @@ test('key files are 0600 and are never overwritten', () => {
   const h = home();
   try {
     assert.throws(() => writeKeyFile(h, 'agent', generateSeedHex()), /refusing to overwrite/);
+    if (process.platform === 'win32') return; // no POSIX modes on Windows
     chmodSync(keyPath(h, 'agent'), 0o644);
     const cfg = loadConfig({ ANTIBODY_HOME: h, ANTIBODY_BACKEND: 'offline' });
     assert.throws(() => loadLaneKey(cfg, 'agent'), /must be mode 0600/);
@@ -63,8 +64,10 @@ test('key files are 0600 and are never overwritten', () => {
 test('IPC endpoints: Unix sockets in the run directory, named pipes on Windows (one set per ANTIBODY_HOME)', async () => {
   const { ipcPath, isPipe, loadConfig } = await import('../src/config.ts');
   const cfg = loadConfig({ ANTIBODY_HOME: '/tmp/ab-home-a' } as NodeJS.ProcessEnv);
-  assert.equal(ipcPath(cfg, 'control'), '/tmp/ab-home-a/run/control.sock');
-  assert.equal(isPipe(ipcPath(cfg, 'control')), false);
+  if (process.platform !== 'win32') {
+    assert.equal(ipcPath(cfg, 'control'), '/tmp/ab-home-a/run/control.sock');
+    assert.equal(isPipe(ipcPath(cfg, 'control')), false);
+  }
   const real = Object.getOwnPropertyDescriptor(process, 'platform')!;
   Object.defineProperty(process, 'platform', { value: 'win32' });
   try {

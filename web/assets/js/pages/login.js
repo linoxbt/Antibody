@@ -6,6 +6,7 @@ import { api, authStatus, setDemo } from '../data.js';
 import { $, el } from '../ui.js';
 import { discoverWallets, connect, signMessage, cancelled } from '../wallets.js';
 import { themeSwitch } from '../theme.js';
+import '../pwa.js';
 
 sky();
 armReveals();

@@ -61,7 +61,7 @@ export default {
             payees.length
               ? el(
                   'div',
-                  { class: 'table-wrap' },
+                  { class: 'table-wrap', tabindex: 0, role: 'region', 'aria-label': 'Table, scrolls sideways' },
                   el(
                     'table',
                     { class: 'table' },

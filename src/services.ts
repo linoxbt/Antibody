@@ -22,6 +22,7 @@ import { watchWallet, type WatchOptions } from './ingest/watch.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
 import { suiNetworkId } from './payments/x402.ts';
+import { Alerter, alertConfigFrom, type Alert } from './ops/alerts.ts';
 
 /** Map a public key to its lane from the live account (for daemons other than control). */
 export function chainLaneOf(rt: Runtime): (pub: string) => Promise<Lane | undefined> {
@@ -46,6 +47,7 @@ export async function startupCheck(rt: Runtime, lane: Lane, pub: string): Promis
 export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noCache?: boolean; cacheDirOverride?: string; fetchImpl?: typeof fetch } = {}): Control {
   const cfg = rt.cfg;
   const key = loadLaneKey(cfg, 'control');
+  const alerter = new Alerter(alertConfigFrom(), { log: rt.log, simulated: rt.simulated, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
   const signerTransport = opts.signer === undefined ? unixTransport(socketPath(cfg, 'signer')) : opts.signer;
   return new Control({
     acct: requireAccount(cfg),
@@ -62,6 +64,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
     x402Network: suiNetworkId(cfg.network, cfg.backend === 'offline'),
     cacheDir: opts.cacheDirOverride ?? cacheDir(cfg),
     autoQuarantineScore: cfg.autoQuarantineScore,
+    ...(alerter.enabled ? { alert: (a: Alert) => void alerter.send(a) } : {}),
     ...(opts.noCache ? { noCache: true } : {}),
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
   });

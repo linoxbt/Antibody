@@ -19,8 +19,14 @@ import { verifyEnvelope } from './verify.ts';
 import { LANES, LABEL_LANE, NS_LEDGER, type Envelope, type Lane, type Payee, type QuarantineSeed, type StoredMemory } from './types.ts';
 
 export const LEDGER_PHRASE = 'antibody ledger record';
-/** recall returns at most 100 hits per call, so the MVP ledger stops at 90 records (spec §7). */
-export const LEDGER_CAP = 90;
+/**
+ * Upper bound on ledger length. The MVP stopped at 90 because one recall
+ * returns at most 100 hits; retrieval now follows up per missing seq (and the
+ * immutable-blob cache makes warm reads free), so the bound only keeps a cold
+ * rebuild's query count and verification time finite. Completeness is still
+ * checked against the inventory: anything retrieval misses fails closed.
+ */
+export const LEDGER_CAP = 5000;
 export const GENESIS_PREV = '0'.repeat(64);
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
@@ -371,9 +377,9 @@ export function activeSeeds(state: Pick<LedgerState, 'quarantines'>): { seed: Qu
   return state.quarantines.filter((q) => !q.released).map((q) => ({ seed: q.seed, seq: q.seq }));
 }
 
-/** Next (seq, prev) for an append, enforcing the MVP cap. */
+/** Next (seq, prev) for an append, enforcing the cap. */
 export function nextAppend(state: LedgerState): { seq: number; prev: string } {
   const seq = state.head.seq + 1;
-  if (seq >= LEDGER_CAP) throw new Error(`ledger is at the MVP cap of ${LEDGER_CAP} records`);
+  if (seq >= LEDGER_CAP) throw new Error(`ledger is at the cap of ${LEDGER_CAP} records`);
   return { seq, prev: state.head.hash };
 }

@@ -25,6 +25,7 @@ import { RevokeFlow } from './revoke.ts';
 import { zkLoginClient } from '../adapters/zklogin.ts';
 import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
 import { symbolOf } from '../adapters/rates.ts';
+import { processHealth } from '../ops/resilience.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const WEB = join(ROOT, 'web');
@@ -121,6 +122,7 @@ export async function stateJson(rt: Runtime, control: Control) {
   return {
     simulated: rt.simulated,
     banners: rt.banners,
+    health: processHealth.snapshot(),
     backend: rt.cfg.backend,
     chain: rt.chain.kind,
     account: { id: snap.account.accountId, owner: snap.account.owner, active: snap.account.active },

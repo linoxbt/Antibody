@@ -91,6 +91,8 @@ body.app { padding-top: 0; }
 .step-select { height: 36px; font-size: 13px; border-radius: 999px; max-width: 280px; min-width: 0; padding: 0 12px; text-overflow: ellipsis; }
 .demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px clamp(16px, 3vw, 36px); border-bottom: 1px solid var(--line); background: linear-gradient(90deg, rgba(43, 127, 255, 0.12), rgba(43, 127, 255, 0.02)); font-size: 13.5px; color: var(--text-2); }
 .demo-bar a { color: var(--accent-hi); margin-left: auto; }
+.demo-bar.degraded { background: linear-gradient(90deg, rgba(255, 92, 92, 0.16), rgba(255, 92, 92, 0.03)); }
+.demo-bar .dot.r { background: var(--block); box-shadow: 0 0 10px var(--block); }
 .view { padding: clamp(24px, 3.5vw, 44px) clamp(16px, 3vw, 36px) 80px; display: grid; gap: 16px; max-width: 1360px; width: 100%; animation: view-in 0.5s var(--ease) both; }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .view-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 8px; }

@@ -37,6 +37,7 @@ import type { MemoryClient } from '../adapters/memory.ts';
 import type { ReportStore } from '../adapters/storage-tatum.ts';
 import type { IpcClient } from '../ipc.ts';
 import type { Logger } from '../log.ts';
+import type { Alert } from '../ops/alerts.ts';
 import { decodeHeader, encodeHeader, HDR_REQUIRED, HDR_RESPONSE, HDR_SIGNATURE, paymentRequiredSchema, selectRequirement, type PaymentPayload, type SettlementResponse } from '../payments/x402.ts';
 import { retrieveContent, retrieveLedger } from './retrieve.ts';
 import { HighWaterMark, IncidentStore, ReportLog, TextCache, type Incident } from './store.ts';
@@ -62,6 +63,8 @@ export interface ControlDeps {
   fetchImpl?: typeof fetch;
   /** Use no cached texts at all (rebuild --fresh). */
   noCache?: boolean;
+  /** Best-effort human alerts (webhook / Telegram); never awaited on the payment path. */
+  alert?: (a: Alert) => void;
 }
 
 export interface Snapshot {
@@ -130,7 +133,10 @@ export class Control {
     if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories]);
     const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId) });
     if (ledger.ok) this.hwm.advance(ledger.head);
-    else this.d.log.warn('ledger.unverified', { code: ledger.code, detail: ledger.detail });
+    else {
+      this.d.log.warn('ledger.unverified', { code: ledger.code, detail: ledger.detail });
+      this.d.alert?.({ kind: 'ledger-unverified', severity: 'critical', key: `ledger:${ledger.code}`, title: `ledger ${ledger.code}: every payment is blocked`, text: ledger.detail, data: { code: ledger.code } });
+    }
     const snap: Snapshot = { account, ckpt, ledger, projection, coverage: { ledgerMissing: led.missing, contentMissing: content.missing, queries: led.queries + content.queries } };
     this.last = snap;
     return snap;
@@ -410,6 +416,7 @@ export class Control {
     const { blobId } = await this.d.mem.remember(env.text, NS_CONTENT, id);
     this.cache.put([{ blobId, namespace: NS_CONTENT, text: env.text }]);
     this.d.log.info('decision', { envelopeId: id, blobId, verdict: v.decision, code: v.code, txDigest: a.txDigest, turn: a.turn });
+    if (v.decision === 'BLOCK') this.d.alert?.({ kind: 'payment-blocked', severity: 'warning', key: `block:${id}`, title: `payment blocked (${v.code})`, text: `${a.proposal.amount} to ${a.proposal.recipient}: ${v.reasons.join('; ').slice(0, 400)}`, data: { decisionId: id, code: v.code, turn: a.turn } });
     return { decisionId: id, decisionBlobId: blobId };
   }
 
@@ -449,6 +456,7 @@ export class Control {
       if (novel) lessonSeq = (await this.writeOwn('lesson', lesson)).seq;
     }
     this.d.log.info('quarantine', { seq, seed: seedKey(s), memories: radius.memories.map((m) => m.id), decisions: radius.decisions.map((m) => m.id), lessonSeq, auto });
+    this.d.alert?.({ kind: auto ? 'auto-quarantine' : 'quarantine', severity: auto ? 'critical' : 'warning', key: `q:${seq}`, title: `${auto ? 'auto-' : ''}quarantined ${s.type} ${s.value.slice(0, 24)} (ledger #${seq})`, text: `${reason.slice(0, 300)}\n${radius.memories.length} memories and ${radius.decisions.length} decisions left Steward's context.${lessonSeq !== null ? ` Learned lesson #${lessonSeq}.` : ''}`, data: { seq, seed: s, lessonSeq } });
     for (const i of this.incidents.list()) {
       if (i.status === 'open' && s.type === 'source' && i.objectId === s.value) this.incidents.upsert({ ...i, status: auto ? 'auto-quarantined' : 'quarantined', quarantineSeq: seq });
     }
@@ -492,6 +500,7 @@ export class Control {
       }
     }
     this.d.log.info('incident', { id: inc.id, objectId: inc.objectId, score: inc.score, status: inc.status });
+    if (inc.status === 'open') this.d.alert?.({ kind: 'incident', severity: 'warning', key: `inc:${inc.objectId}`, title: `suspicious object in Steward's wallet (score ${inc.score.toFixed(2)})`, text: `${inc.objectId}\n${inc.rules.join(' · ').slice(0, 300)}\nReview it in the console: Incidents.`, data: { id: inc.id, objectId: inc.objectId, score: inc.score } });
     return inc;
   }
 

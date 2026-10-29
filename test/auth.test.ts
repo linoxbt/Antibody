@@ -141,3 +141,16 @@ test('only zkLogin signatures are sent to the chain for verification', async () 
   assert.equal(isZkLogin(signature), false);
   assert.equal(isZkLogin('not-a-signature'), false);
 });
+
+test('static files stay inside web/ with POSIX and Windows paths alike', async () => {
+  const { isInside } = await import('../src/web/server.ts');
+  const { posix, win32 } = await import('node:path');
+  assert.equal(isInside('/srv/app/web', '/srv/app/web/login.html', posix), true);
+  assert.equal(isInside('/srv/app/web', '/srv/app/web-evil/x.html', posix), false);
+  assert.equal(isInside('/srv/app/web', '/srv/app/secret.key', posix), false);
+  const root = 'C:\\Users\\LINO ALEMZ\\AppData\\Local\\Antibody\\app\\web';
+  assert.equal(isInside(root, win32.resolve(root, './login.html'), win32), true, 'Windows backslash paths are served');
+  assert.equal(isInside(root, win32.resolve(root, './assets/css/brand.css'), win32), true);
+  assert.equal(isInside(root, win32.resolve(root, './../keys/x.key'), win32), false, 'and still cannot escape web\\');
+  assert.equal(isInside(root, 'D:\\other\\login.html', win32), false);
+});

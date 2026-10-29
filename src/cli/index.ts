@@ -45,6 +45,7 @@ import { retrieveAll } from '../adapters/memory.ts';
 import { startBillServer } from '../payments/x402-server.ts';
 import { suiNetworkId } from '../payments/x402.ts';
 import { startWeb } from '../web/server.ts';
+import { ownerSession, verifyOwnerMessage, walletAccountAdmin, type OwnerSession } from '../web/owner-sign.ts';
 import { doctorExitCode, runDoctor, type Check } from '../ops/doctor.ts';
 import { installService, serviceStatus, servicePlan, uninstallService } from '../ops/service.ts';
 import { Alerter, alertConfigFrom } from '../ops/alerts.ts';
@@ -95,14 +96,46 @@ function seedFrom(v: Record<string, string | boolean | undefined>): QuarantineSe
   throw new Error('give one of --source, --memory, --turn or --signer-window <pub> [--from N --to N]');
 }
 
-function ownerAdmin(r: Runtime): AccountAdmin {
+/**
+ * Who signs owner acts. With --wallet (or live with no OWNER_SUI_PRIVATE_KEY)
+ * the owner's browser wallet, through a one-off local page; otherwise the
+ * offline fixture owner or the throwaway demo key.
+ */
+async function ownerAdmin(r: Runtime, wallet = false): Promise<{ admin: AccountAdmin; session: OwnerSession | null }> {
+  const secret = process.env.OWNER_SUI_PRIVATE_KEY;
+  if (wallet || (!r.fixture && !secret)) {
+    const account = await r.chain.getAccount(requireAccount(r.cfg));
+    const session = await openOwnerSession();
+    const primary = primaryOf(r.chain);
+    return { session, admin: walletAccountAdmin({ session, owner: account.owner, accountId: account.accountId, chain: r.chain, packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, ...(r.fixture ? { fixture: r.fixture } : {}), ...(primary instanceof SdkChainReader ? { reader: primary } : {}) }) };
+  }
   if (r.fixture) {
     const owner = (JSON.parse(readFileSync(join(r.cfg.home, 'offline', 'chain.json'), 'utf8')) as { account: { owner: string } }).account.owner;
-    return r.fixture.admin(owner);
+    return { session: null, admin: r.fixture.admin(owner) };
   }
-  const secret = process.env.OWNER_SUI_PRIVATE_KEY;
-  if (!secret) throw new Error('this step needs the owner wallet: set OWNER_SUI_PRIVATE_KEY (throwaway demo owner only)');
-  return liveAccountAdmin({ ownerSecret: secret, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (primaryOf(r.chain) as SdkChainReader).client });
+  return { session: null, admin: liveAccountAdmin({ ownerSecret: secret!, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (primaryOf(r.chain) as SdkChainReader).client }) };
+}
+
+/** The owner approval page, opened in the default browser. */
+async function openOwnerSession(): Promise<OwnerSession> {
+  return ownerSession({
+    onUrl: (url) => {
+      console.log(bold('Approve with the owner wallet') + `\n  ${cyan(url)}\n` + dim('  (opening your browser; on another device, open the link there while this runs)'));
+      if (!process.env.ANTIBODY_NO_BROWSER) openBrowser(url);
+    },
+  });
+}
+
+/** Run an owner act, then tell the approval page how it ended. */
+async function withOwner<T>(o: { session: OwnerSession | null }, fn: () => Promise<T>, okText: (t: T) => string): Promise<T> {
+  try {
+    const t = await fn();
+    await o.session?.finish({ ok: true, text: okText(t) });
+    return t;
+  } catch (e) {
+    await o.session?.finish({ ok: false, text: (e as Error).message });
+    throw e;
+  }
 }
 
 /** Owner adds a fresh key for the lane; the role's key file is replaced (the old one kept aside); lane.rotate recorded. */
@@ -141,14 +174,39 @@ async function main(argv: string[]): Promise<void> {
   switch (cmd) {
     case 'setup': {
       const cfg = loadConfig();
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { wallet: { type: 'boolean', default: false } });
       if (cfg.backend === 'offline') banner(['━━ SIMULATED ━━ offline backend: fixture chain + local relayer ━━']);
       const read = (role: Role) => readKeyText(keyPath(cfg.home, role));
-      const res = cfg.backend === 'offline' ? await setupOffline(cfg, { readKeyFile: read, ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY || undefined }) : await setupLive(cfg, { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY ?? '', readKeyFile: read });
-      console.log(bold('Antibody set up'));
-      console.log(`  account ${res.accountId}\n  owner   ${res.owner}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
-      for (const l of res.lanes) console.log(`  ${l.label.padEnd(24)} ${l.pub}  ${dim('tx ' + l.digest)}`);
-      console.log(`  genesis blob ${res.genesis.blobId} envelope ${res.genesis.envelopeId}`);
-      console.log(dim(`Keys: ${cfg.home}/keys/<role>/ (0600). For real isolation, give each role its own OS user: scripts/setup-roles.sh`));
+      // --wallet (or live with no OWNER_SUI_PRIVATE_KEY): the owner signs in their own browser wallet.
+      const useWallet = !!values.wallet || (cfg.backend === 'live' && !process.env.OWNER_SUI_PRIVATE_KEY);
+      const session = useWallet ? await openOwnerSession() : null;
+      try {
+        let res: Awaited<ReturnType<typeof setupLive>>;
+        if (cfg.backend === 'offline') {
+          let ownerAddress: string | undefined;
+          if (session) {
+            const message = ['Antibody · become the owner of this install (offline backend, SIMULATED)', `Home: ${cfg.home}`, `Nonce: ${sha256Hex(String(Date.now()) + Math.random()).slice(0, 24)}`].join('\n');
+            const s = await session.sign({ kind: 'message', title: 'own this Antibody install', lines: ['Backend: offline (SIMULATED)', `Home: ${cfg.home}`], owner: null, message });
+            await verifyOwnerMessage(message, s, s.address);
+            ownerAddress = normalizeSuiAddress(s.address);
+          }
+          res = await setupOffline(cfg, { readKeyFile: read, ...(ownerAddress ? { ownerAddress } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY || undefined }) });
+        } else {
+          res = await setupLive(cfg, {
+            readKeyFile: read,
+            ...(session ? { admin: (owner: string, chain: SdkChainReader) => walletAccountAdmin({ session, owner, accountId: cfg.accountId!, chain, reader: chain, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network }) } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY }),
+          });
+        }
+        await session?.finish({ ok: true, text: `Antibody is set up. Owner ${short(res.owner, 14)}; the lane keys are registered${res.simulated ? ' (simulated)' : ' on Sui'}. Back in the terminal: antibody up.` });
+        console.log(bold('Antibody set up'));
+        console.log(`  account ${res.accountId}\n  owner   ${res.owner}${session ? dim(' (your wallet: sign in to the console with it)') : ''}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
+        for (const l of res.lanes) console.log(`  ${l.label.padEnd(24)} ${l.pub}  ${dim('tx ' + l.digest)}`);
+        console.log(`  genesis blob ${res.genesis.blobId} envelope ${res.genesis.envelopeId}`);
+        console.log(dim(`Keys: ${cfg.home}/keys/<role>/ (0600${keyPassphrase() ? ', encrypted' : ''}). For real isolation, give each role its own OS user: scripts/setup-roles.sh`));
+      } catch (e) {
+        await session?.finish({ ok: false, text: (e as Error).message });
+        throw e;
+      }
       return;
     }
 
@@ -347,7 +405,7 @@ async function main(argv: string[]): Promise<void> {
 
     case 'revoke': {
       const r = rt('control');
-      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, rotate: { type: 'boolean', default: false } });
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, rotate: { type: 'boolean', default: false }, wallet: { type: 'boolean', default: false } });
       const lane = String(values.lane) as Lane;
       if (!LANES.includes(lane)) throw new Error(`--lane must be one of ${LANES.join(', ')}`);
       if (lane === 'antibody') throw new Error('revoking the control lane needs rotate-first by the owner; not supported in this build');
@@ -355,24 +413,32 @@ async function main(argv: string[]): Promise<void> {
       const account = await r.chain.getAccount(requireAccount(r.cfg));
       const old = account.delegateKeys.find((k) => k.label === LANE_LABEL[lane]);
       if (!old) throw new Error(`no active ${LANE_LABEL[lane]} key on-chain`);
-      const admin = ownerAdmin(r);
-      console.log(`Owner ${admin.ownerAddress()} removes ${LANE_LABEL[lane]} ${old.publicKeyHex}…`);
-      const rm = await admin.removeDelegateKey(old.publicKeyHex);
-      const rev = await control.recordRevoke(old.publicKeyHex, lane, rm.digest);
-      console.log(green(`lane.revoke written as ledger #${rev.seq}`) + dim(` (remove_delegate_key ${rm.digest}). Quarantine set unchanged (I-9). The old key can still decrypt memories saved before removal: treat it as compromised.`));
-      if (values.rotate) await rotateLane(r, control, admin, lane);
+      const o = await ownerAdmin(r, !!values.wallet);
+      console.log(`Owner ${o.admin.ownerAddress()} removes ${LANE_LABEL[lane]} ${old.publicKeyHex}…`);
+      await withOwner(
+        o,
+        async () => {
+          const rm = await o.admin.removeDelegateKey(old.publicKeyHex);
+          const rev = await control.recordRevoke(old.publicKeyHex, lane, rm.digest);
+          console.log(green(`lane.revoke written as ledger #${rev.seq}`) + dim(` (remove_delegate_key ${rm.digest}). Quarantine set unchanged (I-9). The old key can still decrypt memories saved before removal: treat it as compromised.`));
+          if (values.rotate) await rotateLane(r, control, o.admin, lane);
+          return rev;
+        },
+        (rev) => `${LANE_LABEL[lane]} revoked (ledger #${rev.seq})${values.rotate ? ' and a fresh key rotated in' : ''}.`,
+      );
       return;
     }
 
     case 'rotate': {
       // After a revocation (CLI or the console's owner-wallet button): a fresh key for the lane.
       const r = rt('control');
-      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' } });
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, wallet: { type: 'boolean', default: false } });
       const lane = String(values.lane) as Lane;
-      if (!LANES.includes(lane) || lane === 'antibody') throw new Error('usage: antibody rotate --lane user|agent|wallet-objects');
+      if (!LANES.includes(lane) || lane === 'antibody') throw new Error('usage: antibody rotate --lane user|agent|wallet-objects [--wallet]');
       const account = await r.chain.getAccount(requireAccount(r.cfg));
       if (account.delegateKeys.some((k) => k.label === LANE_LABEL[lane])) throw new Error(`${LANE_LABEL[lane]} still has an active key: revoke it first`);
-      await rotateLane(r, buildControl(r, { signer: null }), ownerAdmin(r), lane);
+      const o = await ownerAdmin(r, !!values.wallet);
+      await withOwner(o, () => rotateLane(r, buildControl(r, { signer: null }), o.admin, lane), () => `A fresh ${LANE_LABEL[lane]} key is registered and lane.rotate recorded.`);
       return;
     }
 
@@ -840,7 +906,7 @@ async function waitFor(path: string, ms: number) {
 const HELP = `antibody — provenance and quarantine for agent memory on Walrus Memory + Sui
 
 Setup and status
-  antibody setup                              keys, on-chain lane labels, ledger genesis
+  antibody setup [--wallet]                   keys, on-chain lane labels, ledger genesis (--wallet: owner signs in the browser)
   antibody status                             account, lane keys, checkpoint, wallet
   antibody up | down                          start/stop control (+web), signer, agent and sentinel daemons
   antibody up --foreground                    the same, supervised: crashed daemons restart (what the service runs)
@@ -868,8 +934,8 @@ Agents
 Control (antibody key)
   antibody show [--forensic] [--graph <seq>]  projection, ledger, payees, blast radius
   antibody quarantine --source 0x… | --memory <id> | --turn <id> | --signer-window <pub> --from N --to N
-  antibody revoke --lane <lane> [--rotate]    owner removes the key on-chain; lane.revoke record
-  antibody rotate --lane <lane>               owner adds a fresh key after a revocation; lane.rotate record
+  antibody revoke --lane <lane> [--rotate] [--wallet]   owner removes the key on-chain; lane.revoke record
+  antibody rotate --lane <lane> [--wallet]    owner adds a fresh key after a revocation; lane.rotate record
   antibody rebuild --fresh                    reconstruct from Walrus + Sui alone; projection digest
   antibody verify-ledger                      completeness, integrity, rollback
   antibody report <seq>                       incident JSON via the Tatum Storage API

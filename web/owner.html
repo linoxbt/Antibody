@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Owner approval · Antibody</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#030407" />
+  <script src="/assets/js/theme-init.js"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+</head>
+<body class="auth">
+  <div class="auth-grid">
+    <main class="auth-col">
+      <div class="auth-top">
+        <span class="brand"><img src="/assets/img/mark.svg" alt="" width="30" height="30" /><span class="wordmark">antibody</span></span>
+      </div>
+      <div class="auth-body">
+        <h1 class="words" id="title">Owner <span class="tail">approval.</span></h1>
+        <p class="auth-note" id="lead">Waiting for the command line…</p>
+        <section class="owner-req" id="req" hidden>
+          <dl class="kv-card" id="details"></dl>
+        </section>
+        <section aria-label="Sui wallets"><div class="wallets" id="wallets"></div></section>
+        <p class="auth-msg" id="msg" role="status" aria-live="polite"></p>
+        <p class="auth-note">Your wallet signs here; the command line only receives the signature. Your owner key never leaves the wallet.</p>
+      </div>
+    </main>
+    <aside class="auth-art" aria-hidden="true"><div class="planet-l"></div><div class="ring"><i></i></div></aside>
+  </div>
+  <script type="module" src="/assets/js/pages/owner.js"></script>
+</body>
+</html>

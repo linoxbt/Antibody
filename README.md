@@ -51,12 +51,12 @@ Interactive, with real daemons and the web view:
 export ANTIBODY_HOME=$PWD/.antibody ANTIBODY_BACKEND=offline
 alias antibody="node $PWD/bin/antibody.mjs"
 antibody setup                                   # lane keys, on-chain labels, genesis
-antibody up                                      # signer, control (+ web on :7402), agent daemons; prints a sign-in link
+antibody up                                      # signer, control (+ web on :7402), agent and sentinel daemons; prints a sign-in link
 antibody payee add --label landlord --address 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d --coin USDC --cap 500
 antibody statement "Rent is 450 USDC (coin type 0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC), paid on the 1st to my landlord at 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d."
 antibody steward "Pay this month's rent."        # ALLOW (dry-run; add --execute to pay)
 antibody dev airdrop                             # a second wallet sends "USDC Rewards" with a poisoned description
-antibody ingest scan                             # → untrusted observation, sentinel incident
+antibody ingest scan                             # → untrusted observation, sentinel incident (the sentinel daemon also does this on its own)
 antibody steward "Pay this month's rent."        # model is fooled → BLOCK LABEL_MISMATCH
 antibody compare "Pay this month's rent."        # unprotected agent: would have sent 450 USDC to 0xbad0…
 antibody quarantine --source <coin object id> --yes   # blast radius preview, ledger record, lesson learned
@@ -281,13 +281,14 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | Command | Role | Does |
 | --- | --- | --- |
 | `antibody setup` | control + owner | generate keys, register `antibody:*` labels, write genesis |
-| `antibody up` / `down` | — | start/stop signer, control (+web) and agent daemons |
+| `antibody up` / `down` | — | start/stop signer, control (+web), agent and sentinel daemons |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
 | `antibody rotate --lane <lane>` | owner | add a fresh key after a revocation; `lane.rotate` record |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
 | `antibody release <seq> --reason …` | user | `quarantine.release` (human decision) |
 | `antibody ingest scan` | ingest | one wallet scan → untrusted observations, incidents |
+| `antibody ingest watch` | ingest | the always-on sentinel (FR-18): scans when a checkpoint touches Steward's wallet (gRPC stream, polling fallback); `antibody up` runs it |
 | `antibody ingest paste "<text>" --origin …` | ingest | external text the human pasted (enters untrusted) |
 | `antibody steward "<instruction>" [--execute]` | agent | one Steward turn: readSet, proposals, verdicts |
 | `antibody compare "<instruction>"` | agent | unprotected agent, dry-run only |
@@ -324,7 +325,7 @@ src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth
 web/            index · walkthrough · security · login · app (console SPA) · 404 (.html)
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke)
+test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 
@@ -332,8 +333,9 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
-| Core invariants T-01…T-20, learning loop, x402 | ✅ 58 tests | same code |
+| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel | ✅ 70 tests | same code |
 | Relayer reachable, package/registry IDs match | — | ✅ probe P-1 run on 2026-10-29 |
+| FR-18 checkpoint stream with an affected-address filter | fixture (polling) | ✅ streamed from a mainnet fullnode: busy address matched, random address none |
 | MemWalAccount parsing (`delegate_keys`, base64 keys) | fixture | ✅ read a live account over gRPC |
 | Build + dry-run + R5 on a real transfer | fixture | ✅ live gRPC dry-run passes R5 (negative net gas handled) |
 | P-2…P-8 (byte-identical retrieval, delegate add/remove, Tatum gateway, restore, coverage) | — | ⏳ needs your keys: `npx tsx scripts/probe.ts` ([runbook](docs/demo-live.md)) |

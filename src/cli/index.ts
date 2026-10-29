@@ -27,6 +27,7 @@ import {
   createModel,
   runIngestPaste,
   runIngestScan,
+  runIngestWatch,
   runStewardRemote,
   serveAgent,
   serveControl,
@@ -216,7 +217,24 @@ async function main(argv: string[]): Promise<void> {
         console.log(`${yellow('untrusted')} observation ${i.observationId} (external text from ${i.objectId}) score ${i.score.toFixed(2)}${i.incident ? yellow(' INCIDENT ' + i.incident.id) : ''}`);
         return;
       }
-      if (sub !== 'scan') throw new Error('usage: antibody ingest scan | ingest paste "<text>" --origin <where>');
+      if (sub === 'watch') {
+        // FR-18: the always-on sentinel; `antibody up` runs it as the ingest daemon.
+        const r = rt('ingest');
+        const ac = new AbortController();
+        for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => ac.abort());
+        console.log(green(`sentinel watching ${r.cfg.stewardWallet} via ${r.chain.kind}${r.chain.watchCheckpoints ? ' (checkpoint stream, polling fallback)' : ' (polling)'}`));
+        await runIngestWatch(r, {
+          signal: ac.signal,
+          log: (event, data) => (event === 'scan' ? undefined : console.log(dim(`${new Date().toISOString()} ${event} ${data ? JSON.stringify(data) : ''}`))),
+          onScan: (res, why) => {
+            if (!res.items.length) return;
+            console.log(`${new Date().toISOString()} ${why} scan at checkpoint ${res.checkpoint}: ${res.items.length} new`);
+            for (const i of res.items) console.log(`  ${yellow('untrusted')} ${short(i.type, 40)} score ${i.score.toFixed(2)}${i.incident ? (i.incident.status === 'auto-quarantined' ? red(' AUTO-QUARANTINED') : yellow(' INCIDENT')) : ''}`);
+          },
+        });
+        return;
+      }
+      if (sub !== 'scan') throw new Error('usage: antibody ingest scan | watch | paste "<text>" --origin <where>');
       const r = rt('ingest');
       const res = await runIngestScan(r);
       console.log(bold(`Scanned Steward's wallet at checkpoint ${res.checkpoint}: ${res.items.length} new, ${res.skipped} already observed`));
@@ -485,6 +503,7 @@ async function main(argv: string[]): Promise<void> {
         ['signer', ['signer', 'serve'], 'signer'],
         ['control', ['control', 'serve', '--web'], 'control'],
         ['agent', ['agent', 'serve'], 'agent'],
+        ['ingest', ['ingest', 'watch'], 'ingest'],
       ];
       // Stale sockets from a previous run would satisfy the readiness check before the daemon serves.
       for (const s of ['signer.sock', 'control.sock', 'agent.sock']) rmSync(join(runDir(cfg), s), { force: true });
@@ -493,7 +512,8 @@ async function main(argv: string[]): Promise<void> {
         const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
         child.unref();
         writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
-        await waitFor(name === 'agent' ? join(runDir(cfg), 'agent.sock') : socketPath(cfg, name as 'control' | 'signer'), 30_000);
+        if (name === 'ingest') await new Promise((res) => setTimeout(res, 300)); // no socket: it only talks to control
+        else await waitFor(name === 'agent' ? join(runDir(cfg), 'agent.sock') : socketPath(cfg, name as 'control' | 'signer'), 30_000);
         if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/auth/status`, 30_000);
         console.log(green(`${name} up`) + dim(` pid ${child.pid}, log ${join(cfg.home, 'logs', `${name}.out`)}`));
       }
@@ -510,7 +530,7 @@ async function main(argv: string[]): Promise<void> {
 
     case 'down': {
       const cfg = loadConfig();
-      for (const name of ['agent', 'control', 'signer']) {
+      for (const name of ['ingest', 'agent', 'control', 'signer']) {
         const p = join(runDir(cfg), `${name}.pid`);
         if (!existsSync(p)) continue;
         try {
@@ -608,7 +628,7 @@ const HELP = `antibody — provenance and quarantine for agent memory on Walrus 
 Setup and status
   antibody setup                              keys, on-chain lane labels, ledger genesis
   antibody status                             account, lane keys, checkpoint, wallet
-  antibody up | down                          start/stop control (+web), signer and agent daemons
+  antibody up | down                          start/stop control (+web), signer, agent and sentinel daemons
   antibody login                              print a one-click sign-in link for the web console
 
 Human (user key)
@@ -619,6 +639,7 @@ Human (user key)
 
 Agents
   antibody ingest scan                        wallet-objects lane: observe the wallet, score, raise incidents
+  antibody ingest watch                       the same, continuously: checkpoint stream (gRPC) or polling
   antibody ingest paste "<text>" --origin O   external text the human pasted (enters as untrusted)
   antibody steward "<instruction>" [--execute] one Steward turn (dry-run unless --execute)
   antibody compare "<instruction>"            unprotected agent, dry-run only

@@ -3,7 +3,7 @@
 /* ---- 1 · hero ---------------------------------------------------------------- */
 .hero { position: relative; min-height: max(100svh, 720px); display: grid; place-items: center; overflow: hidden; isolation: isolate; }
 .hero-inner { position: relative; z-index: 2; text-align: center; display: grid; justify-items: center; gap: 28px; padding: 140px 0 120px; }
-.hero h1 { max-width: 15ch; font-size: clamp(46px, 7.4vw, 104px); font-weight: 400; }
+.hero h1 { max-width: 15ch; font-size: clamp(40px, 6.2vw, 88px); font-weight: 400; }
 .hero .lede { text-align: center; }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 6px; }
 .ctas .btn-primary { box-shadow: 0 0 0 1px #fff inset, 0 0 60px -6px rgba(255, 255, 255, 0.45); }

@@ -119,6 +119,21 @@ export class SdkChainReader implements ChainReader {
     return tx.build({ client: this.client });
   }
 
+  /**
+   * Unsigned owner transaction: {package}::account::remove_delegate_key. The
+   * console hands these bytes to the owner's browser wallet to sign (FR-16).
+   */
+  async buildRemoveDelegateKey(req: { sender: string; accountId: string; packageId: string; registryId: string; publicKeyHex: string }): Promise<Uint8Array> {
+    const tx = new Transaction();
+    tx.setSender(req.sender);
+    tx.moveCall({
+      target: `${req.packageId}::account::remove_delegate_key`,
+      arguments: [tx.object(req.accountId), tx.object(req.registryId), tx.pure.vector('u8', Array.from(Buffer.from(req.publicKeyHex, 'hex')))],
+    });
+    if (this.o.gasBudget) tx.setGasBudget(this.o.gasBudget);
+    return tx.build({ client: this.client });
+  }
+
   async simulate(txBytes: Uint8Array): Promise<SimulationResult> {
     const sender = Transaction.from(txBytes).getData().sender ?? '';
     try {

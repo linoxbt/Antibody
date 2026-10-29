@@ -97,6 +97,20 @@ function ownerAdmin(r: Runtime): AccountAdmin {
   return liveAccountAdmin({ ownerSecret: secret, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (r.chain as SdkChainReader).client });
 }
 
+/** Owner adds a fresh key for the lane; the role's key file is replaced (the old one kept aside); lane.rotate recorded. */
+async function rotateLane(r: Runtime, control: ReturnType<typeof buildControl>, admin: AccountAdmin, lane: Lane) {
+  const role = (Object.entries({ user: 'user', agent: 'agent', 'wallet-objects': 'ingest' }) as [Lane, Role][]).find(([l]) => l === lane)![1];
+  const p = keyPath(r.cfg.home, role);
+  const seed = generateSeedHex();
+  const pub = laneKeyFromSeedHex(seed).publicKeyHex;
+  const add = await admin.addDelegateKey(pub, LANE_LABEL[lane]);
+  if (existsSync(p)) renameSync(p, `${p}.revoked-${Date.now()}`);
+  mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
+  writeFileSync(p, seed + '\n', { mode: 0o600, flag: 'wx' });
+  const rot = await control.recordRotate(pub, lane, add.digest);
+  console.log(green(`lane.rotate written as ledger #${rot.seq}`) + dim(` new key ${pub} (add_delegate_key ${add.digest})`));
+}
+
 function printLedger(l: LedgerState) {
   console.log(bold(`Ledger head #${l.head.seq}`) + dim(` ${l.head.hash}`) + (l.firstSync ? yellow('  [first sync on this machine: no prior high-water mark]') : ''));
   for (const r of l.records) {
@@ -321,18 +335,19 @@ async function main(argv: string[]): Promise<void> {
       const rm = await admin.removeDelegateKey(old.publicKeyHex);
       const rev = await control.recordRevoke(old.publicKeyHex, lane, rm.digest);
       console.log(green(`lane.revoke written as ledger #${rev.seq}`) + dim(` (remove_delegate_key ${rm.digest}). Quarantine set unchanged (I-9). The old key can still decrypt memories saved before removal: treat it as compromised.`));
-      if (values.rotate) {
-        const role = (Object.entries({ user: 'user', agent: 'agent', 'wallet-objects': 'ingest' }) as [Lane, Role][]).find(([l]) => l === lane)![1];
-        const p = keyPath(r.cfg.home, role);
-        const seed = generateSeedHex();
-        const pub = laneKeyFromSeedHex(seed).publicKeyHex;
-        const add = await admin.addDelegateKey(pub, LANE_LABEL[lane]);
-        if (existsSync(p)) renameSync(p, `${p}.revoked-${Date.now()}`);
-        mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
-        writeFileSync(p, seed + '\n', { mode: 0o600, flag: 'wx' });
-        const rot = await control.recordRotate(pub, lane, add.digest);
-        console.log(green(`lane.rotate written as ledger #${rot.seq}`) + dim(` new key ${pub} (add_delegate_key ${add.digest})`));
-      }
+      if (values.rotate) await rotateLane(r, control, admin, lane);
+      return;
+    }
+
+    case 'rotate': {
+      // After a revocation (CLI or the console's owner-wallet button): a fresh key for the lane.
+      const r = rt('control');
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' } });
+      const lane = String(values.lane) as Lane;
+      if (!LANES.includes(lane) || lane === 'antibody') throw new Error('usage: antibody rotate --lane user|agent|wallet-objects');
+      const account = await r.chain.getAccount(requireAccount(r.cfg));
+      if (account.delegateKeys.some((k) => k.label === LANE_LABEL[lane])) throw new Error(`${LANE_LABEL[lane]} still has an active key: revoke it first`);
+      await rotateLane(r, buildControl(r, { signer: null }), ownerAdmin(r), lane);
       return;
     }
 
@@ -612,6 +627,7 @@ Control (antibody key)
   antibody show [--forensic] [--graph <seq>]  projection, ledger, payees, blast radius
   antibody quarantine --source 0x… | --memory <id> | --turn <id> | --signer-window <pub> --from N --to N
   antibody revoke --lane <lane> [--rotate]    owner removes the key on-chain; lane.revoke record
+  antibody rotate --lane <lane>               owner adds a fresh key after a revocation; lane.rotate record
   antibody rebuild --fresh                    reconstruct from Walrus + Sui alone; projection digest
   antibody verify-ledger                      completeness, integrity, rollback
   antibody report <seq>                       incident JSON via the Tatum Storage API

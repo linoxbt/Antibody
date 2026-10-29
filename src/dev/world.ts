@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { loadConfig, USDC_MAINNET, type Config, type Role } from '../config.ts';
 import { laneKeyFromSeedHex } from '../core/keys.ts';
 import { normalizeSuiAddress, sha256Hex } from '../core/encoding.ts';
-import type { QuarantineSeed } from '../core/types.ts';
+import { LABEL_LANE, type QuarantineSeed } from '../core/types.ts';
 import { keyPath } from '../keystore.ts';
 import { IpcClient, type Transport } from '../ipc.ts';
 import { createRuntime, type Runtime } from '../runtime.ts';
@@ -76,12 +76,13 @@ export interface World {
   dispose(): void;
 }
 
-export async function createWorld(opts: { home?: string; model?: ChatModel; keep?: boolean; ownerSecret?: string } = {}): Promise<World> {
+export async function createWorld(opts: { home?: string; model?: ChatModel; keep?: boolean; ownerSecret?: string; ownerAddress?: string; open?: boolean } = {}): Promise<World> {
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'antibody-'));
   const env = { ...process.env, ANTIBODY_HOME: home, ANTIBODY_BACKEND: 'offline', ANTIBODY_KEY_ISOLATION: 'simulated', ANTIBODY_ROLE: '' };
   delete (env as Record<string, string | undefined>).ANTIBODY_ROLE;
   const readKey = (role: Role) => readFileSync(keyPath(home, role), 'utf8').trim();
-  const setup = await setupOffline(loadConfig(env), { readKeyFile: readKey, ownerSecret: opts.ownerSecret });
+  // open: reattach to a world set up earlier in `home` (the hosted sandbox reopens visitors' worlds).
+  const setup = opts.open ? await reopen(loadConfig(env)) : await setupOffline(loadConfig(env), { readKeyFile: readKey, ownerSecret: opts.ownerSecret, ownerAddress: opts.ownerAddress });
   const cfg = loadConfig(env);
   const rt = createRuntime(cfg, 'cli');
   const fixture = rt.fixture!;
@@ -125,6 +126,13 @@ export async function createWorld(opts: { home?: string; model?: ChatModel; keep
       if (!opts.keep && !opts.home) rmSync(home, { recursive: true, force: true });
     },
   };
+}
+
+async function reopen(cfg: Config): Promise<SetupResult> {
+  if (!cfg.accountId || !cfg.stewardWallet) throw new Error(`no world to reopen in ${cfg.home}`);
+  const account = await createRuntime(cfg, 'cli').chain.getAccount(cfg.accountId);
+  const lanes = account.delegateKeys.map((k) => ({ lane: LABEL_LANE[k.label]!, label: k.label, pub: k.publicKeyHex, digest: 'existing' }));
+  return { accountId: cfg.accountId, owner: normalizeSuiAddress(account.owner), wallet: cfg.stewardWallet, lanes, genesis: { blobId: '', envelopeId: '' }, simulated: true };
 }
 
 /** Ada's baseline: payees signed by her, plus the trusted facts Steward reads. */

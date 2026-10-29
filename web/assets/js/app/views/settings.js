@@ -2,6 +2,21 @@ import { el } from '../../ui.js';
 import { head, card, command, avatar } from '../kit.js';
 import { signOut } from '../../data.js';
 
+function resetBtn(ctx) {
+  const b = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, 'Reset sandbox');
+  b.addEventListener('click', () =>
+    ctx.act(async () => {
+      if (!confirm('Reset your sandbox? Its ledger, memories and keys are replaced with a fresh household.')) return;
+      b.disabled = true;
+      await ctx.src.api('/api/sandbox/reset', {});
+      await ctx.src.refresh();
+      ctx.toast('Fresh sandbox ready.');
+      ctx.rerender();
+    }),
+  );
+  return b;
+}
+
 export default {
   id: 'settings',
   path: '/app/settings',
@@ -44,7 +59,7 @@ export default {
         ),
       ),
       s.banners?.length ? card('Notices', null, ...s.banners.map((b) => el('p', { class: 'hint', style: 'font-size:14px' }, b.replace(/━+/g, '').trim()))) : null,
-      card('Command line', null, el('div', { style: 'display:grid;gap:10px' }, el('p', { class: 'hint' }, 'Everything here is also available from the CLI.'), command('antibody status'), command('antibody login'))),
+      s.sandbox ? card('Sandbox', null, el('div', { style: 'display:grid;gap:12px;justify-items:start' }, el('p', { class: 'hint', style: 'font-size:14px' }, 'Your own simulated Antibody, owned by your wallet. Reset it to start the story again with fresh keys.'), resetBtn(ctx))) : card('Command line', null, el('div', { style: 'display:grid;gap:10px' }, el('p', { class: 'hint' }, 'Everything here is also available from the CLI.'), command('antibody status'), command('antibody login'))),
     );
   },
 };

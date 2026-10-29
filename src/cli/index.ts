@@ -5,7 +5,7 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
@@ -523,6 +523,17 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
 
+    case 'cloud': {
+      // The hosted sandbox behind the public website (see src/web/cloud.ts). Every visitor's world is SIMULATED.
+      if (sub !== 'serve') throw new Error('usage: antibody cloud serve');
+      const port = Number(process.env.PORT ?? 8080);
+      const dataDir = process.env.ANTIBODY_CLOUD_DATA ?? join(process.env.ANTIBODY_HOME ?? join(homedir(), '.antibody'), 'cloud');
+      const { startCloud } = await import('../web/cloud.ts');
+      await startCloud({ dataDir, port, maxTenants: Number(process.env.ANTIBODY_CLOUD_MAX_TENANTS ?? 500), maxOpen: Number(process.env.ANTIBODY_CLOUD_MAX_OPEN ?? 40) });
+      console.log(green(`hosted sandbox on :${port}`) + dim(` (data ${dataDir}; every world is SIMULATED)`));
+      return;
+    }
+
     case 'login': {
       const cfg = loadConfig();
       console.log(loginLink(cfg));
@@ -631,6 +642,7 @@ Setup and status
   antibody status                             account, lane keys, checkpoint, wallet
   antibody up | down                          start/stop control (+web), signer, agent and sentinel daemons
   antibody login                              print a one-click sign-in link for the web console
+  antibody cloud serve                        the hosted sandbox: any wallet gets its own simulated Antibody ($PORT)
 
 Human (user key)
   antibody payee add --label L --address 0x… --coin USDC --cap N

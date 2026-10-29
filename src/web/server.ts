@@ -25,8 +25,8 @@ import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
 import { symbolOf } from '../adapters/rates.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const WEB = join(ROOT, 'web');
-const TYPES: Record<string, string> = {
+export const WEB = join(ROOT, 'web');
+export const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -36,13 +36,13 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.md': 'text/markdown; charset=utf-8',
 };
-const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
+export const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
 
 /** Pages that moved into the signed-in app. */
 export const MOVED: Record<string, string> = { '/console': '/app/steward', '/graph': '/app/memory', '/ledger': '/app/ledger', '/incidents': '/app/incidents' };
 
 /** Resolve a URL path to a file under web/ (clean URLs: /login → login.html). Never escapes web/. */
-function staticFile(pathname: string): string | null {
+export function staticFile(pathname: string): string | null {
   let rel: string;
   try {
     rel = decodeURIComponent(pathname);
@@ -60,14 +60,21 @@ function staticFile(pathname: string): string | null {
   if (rel === '/app' || rel.startsWith('/app/')) return join(WEB, 'app.html');
   // The recorded walkthrough lives in site/ once `scripts/build-site.ts` has run.
   if (rel === '/demo.json' && existsSync(join(ROOT, 'site', 'demo.json'))) return join(ROOT, 'site', 'demo.json');
+  if (/^\/reports\/[\w.-]+\.json$/.test(rel) && existsSync(join(ROOT, 'site', rel))) return join(ROOT, 'site', rel);
   return null;
 }
 
 const pexec = promisify(execFile);
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+/** JSON request body, refused past `limit` bytes. */
+export async function readBody(req: IncomingMessage, limit = 1 << 20): Promise<unknown> {
   const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > limit) throw new SyntaxError('request body too large');
+    chunks.push(c as Buffer);
+  }
   const s = Buffer.concat(chunks).toString('utf8');
   return s ? JSON.parse(s) : {};
 }

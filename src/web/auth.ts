@@ -43,13 +43,17 @@ const sha = (s: string) => createHash('sha256').update(s).digest();
 export class Auth {
   private sessions = new Map<string, Session>();
   private challenges = new Map<string, { address: string; expiresAt: number }>();
-  private failures: number[] = [];
+  /** Recent failures per client (an IP on the hosted sandbox, one bucket locally). */
+  private failures = new Map<string, number[]>();
   readonly operatorToken: string;
-  /** The address allowed to sign in with a wallet: the MemWal account owner. */
-  private owner: () => Promise<string>;
-  private opts: { operatorToken?: string; now?: () => number };
+  /**
+   * The address allowed to sign in with a wallet: the MemWal account owner.
+   * null on the hosted sandbox, where any wallet may sign in to its own world.
+   */
+  private owner: (() => Promise<string>) | null;
+  private opts: { operatorToken?: string; now?: () => number; statement?: string };
 
-  constructor(owner: () => Promise<string>, opts: { operatorToken?: string; now?: () => number } = {}) {
+  constructor(owner: (() => Promise<string>) | null, opts: { operatorToken?: string; now?: () => number; statement?: string } = {}) {
     this.owner = owner;
     this.opts = opts;
     this.operatorToken = opts.operatorToken ?? randomBytes(24).toString('base64url');
@@ -59,20 +63,22 @@ export class Auth {
     return this.opts.now?.() ?? Date.now();
   }
 
-  private throttle() {
+  private throttle(client: string) {
     const t = this.now();
-    this.failures = this.failures.filter((f) => t - f < FAIL_WINDOW);
-    if (this.failures.length >= FAIL_LIMIT) throw new AuthError(429, 'too many failed sign-in attempts; wait a minute');
+    const recent = (this.failures.get(client) ?? []).filter((f) => t - f < FAIL_WINDOW);
+    this.failures.set(client, recent);
+    if (this.failures.size > 10_000) for (const [k, v] of this.failures) if (!v.length) this.failures.delete(k);
+    if (recent.length >= FAIL_LIMIT) throw new AuthError(429, 'too many failed sign-in attempts; wait a minute');
   }
 
-  private fail(status: number, message: string): never {
-    this.failures.push(this.now());
+  private fail(status: number, message: string, client: string): never {
+    this.failures.set(client, [...(this.failures.get(client) ?? []), this.now()]);
     throw new AuthError(status, message);
   }
 
   /** A SIWE-style message for the wallet to sign; single use, five minutes. */
-  challenge(addressIn: string, origin: string): { message: string; expiresAt: number } {
-    this.throttle();
+  challenge(addressIn: string, origin: string, client = 'local'): { message: string; expiresAt: number } {
+    this.throttle(client);
     if (typeof addressIn !== 'string' || !/^0x[0-9a-fA-F]{1,64}$/.test(addressIn) || !isValidSuiAddress(normalizeSuiAddress(addressIn))) throw new AuthError(400, 'not a Sui address');
     const address = normalizeSuiAddress(addressIn);
     const nonce = randomBytes(16).toString('hex');
@@ -89,7 +95,7 @@ export class Auth {
       `${host} wants you to sign in to the Antibody console with your Sui account:`,
       address,
       '',
-      'Only the owner of this Antibody account can sign in. Signing costs nothing and moves no funds.',
+      this.opts.statement ?? 'Only the owner of this Antibody account can sign in. Signing costs nothing and moves no funds.',
       '',
       `URI: ${origin}`,
       `Nonce: ${nonce}`,
@@ -102,27 +108,29 @@ export class Auth {
   }
 
   /** Verify a signed challenge; the signer must be the account owner. */
-  async signInWithWallet(addressIn: string, message: string, signature: string): Promise<Session> {
-    this.throttle();
+  async signInWithWallet(addressIn: string, message: string, signature: string, client = 'local'): Promise<Session> {
+    this.throttle(client);
     const c = this.challenges.get(message);
     this.challenges.delete(message); // single use, even on failure
-    if (!c || c.expiresAt < this.now()) this.fail(401, 'challenge expired or unknown; try again');
+    if (!c || c.expiresAt < this.now()) this.fail(401, 'challenge expired or unknown; try again', client);
     const address = normalizeSuiAddress(addressIn);
-    if (address !== c.address) this.fail(401, 'challenge was issued to a different address');
+    if (address !== c.address) this.fail(401, 'challenge was issued to a different address', client);
     try {
       await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, { address });
     } catch {
-      this.fail(401, 'signature does not verify for this address');
+      this.fail(401, 'signature does not verify for this address', client);
     }
-    const owner = normalizeSuiAddress(await this.owner());
-    if (address !== owner) this.fail(403, `this wallet is not the account owner (${owner.slice(0, 8)}…${owner.slice(-4)})`);
+    if (this.owner) {
+      const owner = normalizeSuiAddress(await this.owner());
+      if (address !== owner) this.fail(403, `this wallet is not the account owner (${owner.slice(0, 8)}…${owner.slice(-4)})`, client);
+    }
     return this.open('wallet', address);
   }
 
-  signInWithOperatorToken(token: string): Session {
-    this.throttle();
+  signInWithOperatorToken(token: string, client = 'local'): Session {
+    this.throttle(client);
     const ok = typeof token === 'string' && token.length > 0 && timingSafeEqual(sha(token), sha(this.operatorToken));
-    if (!ok) this.fail(401, 'operator link is invalid or from an earlier run');
+    if (!ok) this.fail(401, 'operator link is invalid or from an earlier run', client);
     return this.open('operator', null);
   }
 
@@ -150,12 +158,13 @@ export class Auth {
     this.sessions.delete(id);
   }
 
-  static setCookie(s: Session): string {
-    return `${SESSION_COOKIE}=${s.id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor((s.expiresAt - s.createdAt) / 1000)}`;
+  /** `secure` adds the Secure flag: set it whenever the browser reached us over HTTPS. */
+  static setCookie(s: Session, secure = false): string {
+    return `${SESSION_COOKIE}=${s.id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor((s.expiresAt - s.createdAt) / 1000)}${secure ? '; Secure' : ''}`;
   }
 
-  static clearCookie(): string {
-    return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
+  static clearCookie(secure = false): string {
+    return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? '; Secure' : ''}`;
   }
 }
 

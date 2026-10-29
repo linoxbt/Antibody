@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Security model · Antibody</title>
+  <meta name="description" content="Antibody's twelve invariants, its architecture, lanes and trust assumptions." />
+  <meta name="theme-color" content="#06080d" />
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+</head>
+<body data-page="security">
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Security model</span><h1>The invariants <em>are the product.</em></h1><p>The model is treated as untrusted code. Every guarantee below is enforced in code and attacked by a named test; the pitch claims nothing this table doesn't prove.</p></div>
+    </div>
+    <div class="app-main">
+      <section class="card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>ID</th><th>Invariant</th><th>Enforced by</th><th>Tests</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">I-1</td><td><strong>Lane binding.</strong> A memory's lane is the on-chain label of the key whose signature verifies over its envelope.</td><td class="muted">verifier + chain reader</td><td class="mono">T-02 T-03 T-20</td></tr>
+              <tr><td class="mono">I-2</td><td><strong>Default deny.</strong> Missing, malformed or unverifiable envelopes, or unknown signers, are never trusted.</td><td class="muted">verifier</td><td class="mono">T-01 T-03</td></tr>
+              <tr><td class="mono">I-3</td><td><strong>Taint is monotonic.</strong> Parents are everything the turn read, set by the runtime; the model can't choose them.</td><td class="muted">turn context + lineage</td><td class="mono">T-04 T-05 T-06</td></tr>
+              <tr><td class="mono">I-4</td><td><strong>The model can't mint trust.</strong> Only user-lane records from a human action are trusted.</td><td class="muted">lane table · tool set · IPC routes</td><td class="mono">T-07</td></tr>
+              <tr><td class="mono">I-5</td><td><strong>Payments are authorised by code:</strong> registered payee, matching label, within cap, exact dry-run.</td><td class="muted">pure policy engine</td><td class="mono">T-08 T-09</td></tr>
+              <tr><td class="mono">I-6</td><td><strong>Fail closed.</strong> Unverifiable ledger, signatures or chain reads block every payment.</td><td class="muted">policy R0 · control</td><td class="mono">T-10</td></tr>
+              <tr><td class="mono">I-7</td><td><strong>Exclusion, not deletion.</strong> Quarantined memories leave context but stay readable as evidence.</td><td class="muted">projection · lint</td><td class="mono">T-15 T-16</td></tr>
+              <tr><td class="mono">I-8</td><td><strong>Quarantine closure is live:</strong> computed at projection time, so later descendants are excluded too.</td><td class="muted">lineage engine</td><td class="mono">T-13</td></tr>
+              <tr><td class="mono">I-9</td><td><strong>Revocation is independent</strong> of quarantine, in both directions.</td><td class="muted">separate commands and records</td><td class="mono">T-14 T-20</td></tr>
+              <tr><td class="mono">I-10</td><td><strong>Restore is deterministic.</strong> A fresh process reading only Walrus and Sui yields the same projection digest.</td><td class="muted">rebuild · digest</td><td class="mono">T-17 T-18</td></tr>
+              <tr><td class="mono">I-11</td><td><strong>The ledger is tamper-evident:</strong> hash chain, contiguous sequence, signer rules, rollback guard.</td><td class="muted">ledger verifier</td><td class="mono">T-10 T-11 T-12</td></tr>
+              <tr><td class="mono">I-12</td><td><strong>Keys are separated:</strong> one role, one key, one OS user.</td><td class="muted">keystore · setup-roles.sh</td><td class="mono">T-19</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <div class="card">
+          <div class="card-title"><div><h3>Lanes</h3><p>Four Walrus Memory delegate keys, labelled on-chain by the owner wallet.</p></div></div>
+          <table class="table">
+            <thead><tr><th>Label</th><th>Writes</th><th>Class</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">antibody:user</td><td>Ada's statements, payees, releases</td><td><span class="tag trusted">trusted</span></td></tr>
+              <tr><td class="mono">antibody:agent</td><td>Steward's notes and summaries</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="mono">antibody:wallet-objects</td><td>Coin and NFT metadata, pasted text</td><td><span class="tag untrusted">untrusted</span></td></tr>
+              <tr><td class="mono">antibody:control</td><td>Ledger, decisions, lessons</td><td><span class="tag record">control</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title"><div><h3>Processes</h3><p>One process per role, one key per process, signed requests between them.</p></div></div>
+          <table class="table">
+            <thead><tr><th>Process</th><th>Holds</th><th>Must never</th></tr></thead>
+            <tbody>
+              <tr><td>Human CLI</td><td class="muted">user key</td><td>run model code</td></tr>
+              <tr><td>Ingest + sentinel</td><td class="muted">wallet-objects key</td><td>write any other lane</td></tr>
+              <tr><td>Steward</td><td class="muted">agent key, LLM key</td><td>sign transactions</td></tr>
+              <tr><td>Control</td><td class="muted">antibody key</td><td>hold owner or wallet key</td></tr>
+              <tr><td>Signer</td><td class="muted">wallet key</td><td>obey anyone but control</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card gold">
+        <div class="card-title"><div><h3>The envelope</h3><p>Every memory carries its own proof of origin, so it survives any relayer, index loss or restore.</p></div></div>
+        <pre class="quote">AB1|base64url(JCS(header))|base64url(Ed25519 signature)
+[lane:wallet-objects kind:observation id:01a1…]
+Observed in Steward wallet: coin object 0x6c2d… “USDC Rewards” …
+
+signed message = "antibody/env/v1\n" ‖ SHA-256(JCS(header))
+header = { v, id, acct, ns, lane, kind, pub, parents, src, turn, ckpt, ts, bodyHash, bodyLen }</pre>
+      </section>
+
+      <section class="card">
+        <div class="card-title"><div><h3>Trust assumptions, stated</h3><p>What Antibody relies on, and what happens when it fails.</p></div></div>
+        <div class="grid-2" style="gap:14px">
+          <div class="item"><strong>Owner wallet</strong><p>The root of trust. If it is compromised, lanes can be re-labelled.</p></div>
+          <div class="item"><strong>Walrus Memory relayer</strong><p>Sees plaintext and reports the inventory. A lying relayer turns into blocked payments, never wrong ones.</p></div>
+          <div class="item"><strong>Tatum gateway</strong><p>Returns correct Sui state. Chain-read failures fail closed.</p></div>
+          <div class="item"><strong>Forward-only revocation</strong><p>A removed key can still decrypt what it saved before. Revocation cuts the writer, not old secrecy.</p></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/static.js"></script>
+</body>
+</html>

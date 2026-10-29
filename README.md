@@ -66,12 +66,22 @@ antibody steward "Pay this month's rent." --execute   # ALLOW, executed
 open http://127.0.0.1:7402                       # lanes, graph, split screen, digests
 ```
 
-![Web view](docs/web-view.png)
+![Antibody](docs/web-view.png)
 
-**Public walkthrough:** the Netlify site replays the same story in the web view,
-recorded at build time by running this code on the offline backend
-(`scripts/build-site.ts` → `site/`, config in `netlify.toml`). It is read-only and
-labelled SIMULATED; for the interactive version run `antibody up` locally.
+The web app (`web/`) is a multi-page site served by the control process:
+**Overview** (landing), **Walkthrough** (the story in 8 chapters), **Console**
+(split screen against the unprotected agent, lanes, restoration digests),
+**Blast radius** (lineage explorer), **Ledger** (records, payees, lessons),
+**Incidents** (sentinel, quarantine, forensic view) and **Security** (invariants,
+lanes, trust assumptions). It talks to the live control API when one is behind it.
+
+**Public site:** <https://antibody-memory.netlify.app> serves the same pages
+against a recorded walkthrough, generated at build time by running this code on
+the offline backend (`scripts/build-site.ts` → `site/`, config in
+`netlify.toml`). It is read-only and labelled SIMULATED; for the interactive
+version run `antibody up` locally.
+
+![Console](docs/console-view.png)
 
 ---
 
@@ -284,7 +294,9 @@ src/signer/     signer (re-simulates, signs, executes)
 src/payments/   x402 (v2 types/headers) · x402-server (resource server + Sui exact facilitator)
 src/user/       human CLI operations (user-signed records)
 src/cli/        antibody CLI · render
-src/web/        web server (control process, 127.0.0.1)          web/   index.html · app.js · styles.css
+src/web/        web server (control process, 127.0.0.1; clean URLs, CSP)
+web/            index · walkthrough · console · graph · ledger · incidents · security · 404 (.html)
+                assets/css (brand, landing, walkthrough) · assets/js (shell, data, ui, pages/*) · assets/img (logo) · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
 test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md

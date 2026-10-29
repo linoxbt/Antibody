@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Antibody">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0DDAE"/>
+      <stop offset=".55" stop-color="#C8A462"/>
+      <stop offset="1" stop-color="#8C6F38"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 3.5 56.7 17.75v28.5L32 60.5 7.3 46.25v-28.5Z" fill="none" stroke="url(#g)" stroke-width="1.6"/>
+  <path d="M32 50.5V34.5M32 34.5 19.5 20M32 34.5 44.5 20" fill="none" stroke="#EEE9DE" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23.4 31.2 14.6 21M40.6 31.2 49.4 21" fill="none" stroke="url(#g)" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="16.6" cy="16.8" r="3.1" fill="url(#g)"/>
+  <circle cx="47.4" cy="16.8" r="3.1" fill="url(#g)"/>
+  <circle cx="32" cy="34.5" r="1.6" fill="#070A10"/>
+</svg>

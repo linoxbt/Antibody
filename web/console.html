@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Console · Antibody</title>
+  <meta name="description" content="Run Steward and an unprotected agent side by side, and watch Antibody decide." />
+  <meta name="theme-color" content="#06080d" />
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+</head>
+<body data-page="console">
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Console</span><h1>Steward, <em>under watch.</em></h1><p>Give Steward an instruction. The same model with the same memories runs unprotected on the right, so you can see exactly what Antibody prevented.</p></div>
+      <div id="modebar"></div>
+    </div>
+    <div class="app-main">
+      <section class="stat-row" id="stats" aria-label="System status"></section>
+      <section class="card gold">
+        <div class="card-title"><div><h3>Split screen</h3><p>Antibody's verdict comes from a pure policy over the signed ledger and an exact dry-run. The unprotected agent only dry-runs; it never signs.</p></div></div>
+        <form id="run-form" style="display:grid;gap:12px;margin-bottom:20px">
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <input id="instruction" aria-label="Instruction to Steward" value="Pay this month's rent." style="flex:1 1 320px" />
+            <label class="small muted" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="execute" style="height:auto" /> execute if allowed</label>
+            <button class="btn btn-gold" id="run-btn" type="submit">Run both agents</button>
+          </div>
+          <div class="chips" id="presets"></div>
+        </form>
+        <div class="split">
+          <div class="pane protected"><div class="pane-head"><span class="kicker">Steward + Antibody</span><span class="pill live plain" id="model-pill"></span></div><div id="pane-p"></div></div>
+          <div class="pane unprotected"><div class="pane-head"><span class="kicker">Unprotected agent</span><span class="pill bad plain">no policy</span></div><div id="pane-u"></div></div>
+        </div>
+      </section>
+      <section class="grid-2">
+        <div class="card"><div class="card-title"><div><h3>Lanes</h3><p>Delegate keys labelled on-chain by the owner wallet. A memory's author is the label of the key that signed it.</p></div></div><div id="lanes"></div></div>
+        <div class="card"><div class="card-title"><div><h3>Restoration</h3><p>Rebuild everything from Walrus and Sui alone in a fresh process. Matching digests mean the quarantine survived.</p></div></div>
+          <dl class="kv" id="digests"></dl>
+          <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn btn-ghost btn-sm" id="rebuild-btn">Rebuild --fresh</button><span id="digest-match"></span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/console.js"></script>
+</body>
+</html>

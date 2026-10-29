@@ -6,7 +6,7 @@
  *
  *   npx tsx scripts/build-site.ts    → site/
  */
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CAST, createWorld, POISON_COIN, seedBaseline, type World } from '../src/dev/world.ts';
@@ -118,7 +118,7 @@ async function main() {
   }
 
   writeFileSync(join(OUT, 'demo.json'), JSON.stringify({ generatedAt: new Date().toISOString(), simulated: true, steps }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
-  for (const f of ['index.html', 'app.js', 'styles.css']) copyFileSync(join('web', f), join(OUT, f));
+  cpSync('web', OUT, { recursive: true });
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));
   console.log(`site/ built: ${steps.length} recorded steps`);
 }

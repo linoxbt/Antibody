@@ -10,9 +10,10 @@ const PAGES = [
   { href: '/', id: 'home', label: 'Overview', hint: '00' },
   { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '01' },
   { href: '/security', id: 'security', label: 'Security', hint: '02' },
-  { href: '/login', id: 'login', label: 'Sign in', hint: '03' },
+  { href: '/install', id: 'install', label: 'Install', hint: '03' },
+  { href: '/login', id: 'login', label: 'Sign in', hint: '04' },
 ];
-const NAV_LINKS = ['walkthrough', 'security'];
+const NAV_LINKS = ['walkthrough', 'security', 'install'];
 
 function brand() {
   return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'));
@@ -76,7 +77,7 @@ export function mountShell(current) {
           'div',
           { class: 'footer-grid' },
           el('div', {}, brand(), el('p', {}, 'An immune system for agent memory.')),
-          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Sign in', '/login'], ['Console', '/app']]),
+          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Install', '/install'], ['Console', '/app']]),
           col('Operate', [['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set', `${REPO}/blob/main/docs/attack-set-results.md`, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true]]),
           col('Project', [['Source', REPO, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
         ),

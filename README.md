@@ -31,12 +31,29 @@ also *Best Walrus Memory* and *Best Use of Agent Payments*.
 
 ---
 
+## Install
+
+**No install:** open <https://antibody-memory.netlify.app/login>, connect a Sui
+wallet and get your own sandbox (a full Antibody owned by your wallet, on the
+simulated backend). It works on phones inside a wallet app's browser.
+
+**On your computer** (macOS, Linux, or Windows through WSL2; Node.js 22+):
+
+```bash
+curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
+antibody setup && antibody up      # prints your console sign-in link
+```
+
+Settings go in `~/.antibody/antibody.env`, read on every command. The full
+guide, with mainnet setup, phones and fixes for every error message, is at
+<https://antibody-memory.netlify.app/install>.
+
 ## Try it in two minutes (offline, no keys)
 
 ```bash
 npm install
 npx tsx scripts/demo-m1.ts           # the whole story, every artefact with its blob id / tx digest
-npm test                             # 58 tests: T-01…T-20 invariants + learning loop + x402
+npm test                             # T-01…T-20 invariants, learning loop, x402, sign-in, sandbox
 npx tsx scripts/attack-set/run.ts    # 20 attack variants vs both agents → docs/attack-set-results.md
 ```
 
@@ -97,6 +114,16 @@ session. Payees and quarantine releases still need the user key on the command
 line: the console shows them and generates the command, but cannot create them.
 For an offline node you can sign in to with a wallet, set `OWNER_SUI_PRIVATE_KEY`
 before `antibody setup` and import that key into the wallet.
+
+**Hosted sandbox.** `antibody cloud serve` runs Antibody behind the public
+site (on Railway; Netlify proxies `/api/*` to it). Any wallet signs a one-time
+challenge and gets its own isolated world whose MemWal account is owned by that
+wallet's address, seeded with the demo household. Every world is on the
+offline backend, so the server holds no real keys or funds. Revoking a lane
+there asks the visitor's wallet to sign, as on a self-hosted install. Real use
+stays self-hosted, where lane keys never leave your machine. Wallets that use
+zkLogin (e.g. Slush accounts made with Google) are verified against a Sui
+fullnode.
 
 **Public site:** <https://antibody-memory.netlify.app> serves the same pages
 against a recorded walkthrough, generated at build time by running this code on
@@ -283,6 +310,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody setup` | control + owner | generate keys, register `antibody:*` labels, write genesis |
 | `antibody up` / `down` | — | start/stop signer, control (+web), agent and sentinel daemons |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
+| `antibody cloud serve` | — | the hosted sandbox: any wallet gets its own simulated Antibody (`$PORT`, `ANTIBODY_CLOUD_DATA`) |
 | `antibody rotate --lane <lane>` | owner | add a fresh key after a revocation; `lane.rotate` record |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
@@ -321,11 +349,11 @@ src/signer/     signer (re-simulates, signs, executes)
 src/payments/   x402 (v2 types/headers) · x402-server (resource server + Sui exact facilitator)
 src/user/       human CLI operations (user-signed records)
 src/cli/        antibody CLI · render
-src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions) · revoke (owner-wallet revocation)
-web/            index · walkthrough · security · login · app (console SPA) · 404 (.html)
+src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions) · revoke (owner-wallet revocation) · cloud (hosted sandbox)
+web/            index · walkthrough · security · install · login · app (console SPA) · 404 (.html) · install.sh
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch, crosscheck, rates)
+test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch, crosscheck, rates, cloud)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 
@@ -333,7 +361,7 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
-| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates | ✅ 76 tests | same code |
+| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox | ✅ 82 tests | same code |
 | Relayer reachable, package/registry IDs match | — | ✅ probe P-1 run on 2026-10-29 |
 | FR-18 checkpoint stream with an affected-address filter | fixture (polling) | ✅ streamed from a mainnet fullnode: busy address matched, random address none |
 | FR-19 delegate set cross-checked against a second RPC (`ANTIBODY_CROSSCHECK_RPC_URL`) | ✅ forged key on one reader → every payment BLOCKed | set the URL to enable |

@@ -1,0 +1,52 @@
+/* Install guide: table of contents, copyable commands, searchable troubleshooting. */
+.choose { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 56px; }
+@media (max-width: 700px) { .choose { grid-template-columns: 1fr; } }
+a.choice { display: grid; gap: 8px; padding: 24px; border-radius: var(--radius); border: 1px solid var(--line); background: linear-gradient(180deg, rgba(var(--fg-rgb), 0.04), rgba(var(--fg-rgb), 0.012)); transition: border-color 0.3s, transform 0.3s var(--ease); }
+a.choice:hover { border-color: var(--line-accent); transform: translateY(-2px); }
+a.choice b { font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
+a.choice span:not(.kicker) { color: var(--muted); font-size: 15px; }
+a.choice em { font-style: normal; color: var(--accent-hi); font-size: 14px; margin-top: 6px; }
+:root[data-theme='light'] a.choice { background: #fff; }
+
+.docs { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px; align-items: start; padding-bottom: 120px; }
+.toc { position: sticky; top: calc(var(--nav-h) + 24px); display: grid; gap: 2px; font-size: 14px; }
+.toc a { padding: 7px 12px; border-radius: 9px; color: var(--muted); border-left: 2px solid transparent; transition: color 0.2s, background 0.2s; }
+.toc a:hover { color: var(--text); }
+.toc a.on { color: var(--text); background: rgba(var(--fg-rgb), 0.05); border-left-color: var(--accent-hi); border-radius: 0 9px 9px 0; }
+
+.doc { min-width: 0; display: grid; gap: 64px; }
+.doc section { display: grid; gap: 16px; scroll-margin-top: calc(var(--nav-h) + 20px); }
+.doc h2 { font-size: clamp(28px, 3.2vw, 38px); letter-spacing: -0.025em; }
+.doc h3 { font-size: 17px; margin-top: 10px; color: var(--text-2); }
+.doc p { margin: 0; color: var(--text-2); line-height: 1.65; max-width: 72ch; }
+.doc a:not(.btn) { color: var(--accent-hi); }
+.doc .note { color: var(--muted); font-size: 14.5px; }
+.doc .warn { color: var(--untrusted); font-size: 14.5px; }
+.facts { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--text-2); line-height: 1.6; }
+.facts b { color: var(--text); font-weight: 500; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 18px; }
+.steps li { counter-increment: s; display: grid; gap: 10px; padding-left: 44px; position: relative; color: var(--text-2); line-height: 1.6; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: -2px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 500 13px var(--mono); color: var(--accent-hi); border: 1px solid var(--line-accent); background: var(--accent-wash); }
+.steps li > span { display: block; }
+.table.cmds td:first-child { white-space: nowrap; }
+@media (max-width: 600px) { .table.cmds td:first-child { white-space: normal; } }
+
+pre.code { position: relative; margin: 0; padding: 16px 52px 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--sunk); font: 400 13px/1.7 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+:root[data-theme='light'] pre.code { background: #f2f1ec; }
+pre.code .copy { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.05); color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+pre.code .copy:hover { color: var(--text); }
+pre.code .copy svg { width: 16px; height: 16px; }
+
+details.howto, details.ts { border: 1px solid var(--line); border-radius: 14px; background: rgba(var(--fg-rgb), 0.02); }
+:root[data-theme='light'] details.howto, :root[data-theme='light'] details.ts { background: #fff; }
+details.howto > summary, details.ts > summary { list-style: none; cursor: pointer; padding: 14px 44px 14px 16px; position: relative; font-size: 14.5px; color: var(--text); line-height: 1.5; }
+details.howto > summary::before, details.ts > summary::before { content: none; }
+details.howto > summary::after, details.ts > summary::after { content: '+'; position: absolute; right: 16px; top: 12px; font: 400 18px var(--sans); color: var(--muted); transition: transform 0.2s; }
+details[open].howto > summary::after, details[open].ts > summary::after { transform: rotate(45deg); }
+details.howto > :not(summary), details.ts > :not(summary) { margin: 0 16px 14px; }
+details.ts > summary code { font-size: 12.5px; }
+.ts-group { display: grid; gap: 8px; }
+.ts-search { width: 100%; max-width: 560px; }
+.ts-none { color: var(--muted); }
+@media (max-width: 900px) { .docs { grid-template-columns: 1fr; gap: 24px; } .toc { display: none; } }
+.ts-group[hidden], details.ts[hidden] { display: none; }

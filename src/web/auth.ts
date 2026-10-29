@@ -14,6 +14,17 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
 import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
+import { parseSerializedSignature } from '@mysten/sui/cryptography';
+import type { SigClient } from '../adapters/zklogin.ts';
+
+/** Whether a serialized signature uses the zkLogin scheme. */
+export function isZkLogin(signature: string): boolean {
+  try {
+    return parseSerializedSignature(signature).signatureScheme === 'ZkLogin';
+  } catch {
+    return false;
+  }
+}
 
 export type AuthMethod = 'wallet' | 'operator';
 export interface Session {
@@ -51,9 +62,9 @@ export class Auth {
    * null on the hosted sandbox, where any wallet may sign in to its own world.
    */
   private owner: (() => Promise<string>) | null;
-  private opts: { operatorToken?: string; now?: () => number; statement?: string };
+  private opts: { operatorToken?: string; now?: () => number; statement?: string; client?: () => SigClient };
 
-  constructor(owner: (() => Promise<string>) | null, opts: { operatorToken?: string; now?: () => number; statement?: string } = {}) {
+  constructor(owner: (() => Promise<string>) | null, opts: { operatorToken?: string; now?: () => number; statement?: string; client?: () => SigClient } = {}) {
     this.owner = owner;
     this.opts = opts;
     this.operatorToken = opts.operatorToken ?? randomBytes(24).toString('base64url');
@@ -116,7 +127,8 @@ export class Auth {
     const address = normalizeSuiAddress(addressIn);
     if (address !== c.address) this.fail(401, 'challenge was issued to a different address', client);
     try {
-      await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, { address });
+      // zkLogin signatures (e.g. Slush accounts made with Google) are checked against the chain.
+      await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, { address, ...(this.opts.client && isZkLogin(signature) ? { client: this.opts.client() } : {}) });
     } catch {
       this.fail(401, 'signature does not verify for this address', client);
     }

@@ -25,7 +25,10 @@ import { SdkChainReader } from '../adapters/chain-sdk.ts';
 import { primaryOf } from '../adapters/chain-crosscheck.ts';
 import type { Control } from '../control/control.ts';
 import type { Runtime } from '../runtime.ts';
-import { AuthError } from './auth.ts';
+import { AuthError, isZkLogin } from './auth.ts';
+import { zkLoginClient } from '../adapters/zklogin.ts';
+
+const zk = zkLoginClient();
 
 const TTL = 5 * 60_000;
 
@@ -91,7 +94,7 @@ export class RevokeFlow {
     let digest: string;
     if (p.mode === 'message') {
       try {
-        await verifyPersonalMessageSignature(new TextEncoder().encode(p.message), signed.signature, { address: p.owner });
+        await verifyPersonalMessageSignature(new TextEncoder().encode(p.message), signed.signature, { address: p.owner, ...(isZkLogin(signed.signature) ? { client: zk() } : {}) });
       } catch {
         throw new AuthError(403, 'the signature is not the account owner’s');
       }

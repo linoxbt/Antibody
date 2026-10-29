@@ -134,3 +134,10 @@ test('HTTP: /api is gated, sign-in sets a cookie that opens it, moved pages redi
     server.close();
   }
 });
+
+test('only zkLogin signatures are sent to the chain for verification', async () => {
+  const { isZkLogin } = await import('../src/web/auth.ts');
+  const { signature } = await owner.signPersonalMessage(new TextEncoder().encode('x'));
+  assert.equal(isZkLogin(signature), false);
+  assert.equal(isZkLogin('not-a-signature'), false);
+});

@@ -21,6 +21,7 @@ import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
 import { RevokeFlow } from './revoke.ts';
+import { zkLoginClient } from '../adapters/zklogin.ts';
 import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
 import { symbolOf } from '../adapters/rates.ts';
 
@@ -146,7 +147,7 @@ export function tokenPath(rt: Runtime): string {
 }
 
 export async function startWeb(rt: Runtime, control: Control, port: number, auth?: Auth): Promise<{ server: Server; auth: Auth }> {
-  const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined });
+  const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined, client: zkLoginClient() });
   const revoke = new RevokeFlow(rt, control);
   mkdirSync(join(rt.cfg.home, 'run'), { recursive: true, mode: 0o700 });
   writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600 });

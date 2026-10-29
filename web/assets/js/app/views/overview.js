@@ -1,5 +1,5 @@
 import { el } from '../../ui.js';
-import { icon, stat, card, navLink, shortAddr, decisionVerdict } from '../kit.js';
+import { icon, stat, card, navLink, shortAddr, decisionVerdict, usd } from '../kit.js';
 
 /** The proposal a decision memory recorded: amount, coin symbol, recipient, label. */
 export function proposal(n) {
@@ -69,6 +69,7 @@ export default {
                     { class: 'row-i', href: `/app/memory?node=${encodeURIComponent(n.id)}`, 'data-nav': '' },
                     el('span', { class: `dot ${ok ? 'g' : 'r'}` }),
                     el('span', { class: 'grow' }, p ? `${p.amount} ${p.symbol} → ${p.label} ` : 'payment ', p ? el('span', { class: 'muted' }, shortAddr(p.to)) : null),
+                    p ? usd(p.amount, p.symbol, s.rates) : null,
                     p?.x402 ? el('span', { class: 'tag record' }, 'x402') : null,
                     el('span', { class: `pill plain ${ok ? 'ok' : 'bad'}` }, ok ? 'allowed' : v.replace('BLOCK ', '').toLowerCase().replaceAll('_', ' ')),
                   );

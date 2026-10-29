@@ -22,6 +22,7 @@ import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
 import { RevokeFlow } from './revoke.ts';
 import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
+import { symbolOf } from '../adapters/rates.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WEB = join(ROOT, 'web');
@@ -96,6 +97,9 @@ export async function stateJson(rt: Runtime, control: Control) {
       notes: n.notes,
     };
   });
+  // Display only: USD for the coins payees are paid in (and SUI for gas).
+  const symbols = [...new Set([...(ledger.ok ? ledger.payees.map((p) => symbolOf(p.coinType)) : []), 'SUI'].filter((x): x is string => !!x))];
+  const rates = await rt.rates.usd(symbols).catch(() => ({}));
   return {
     simulated: rt.simulated,
     banners: rt.banners,
@@ -124,6 +128,7 @@ export async function stateJson(rt: Runtime, control: Control) {
     coverage: p.coverage,
     incidents: control.incidents.list().slice(-20).reverse(),
     crossCheck: rt.chain instanceof CrossCheckedChain ? rt.chain.status() : null,
+    rates,
     reports: control.reportLog.list(),
   };
 }

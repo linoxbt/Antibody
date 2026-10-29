@@ -1,5 +1,5 @@
 import { el } from '../../ui.js';
-import { head, card, command, amount, shortAddr, avatar } from '../kit.js';
+import { head, card, command, amount, shortAddr, avatar, usd } from '../kit.js';
 
 const CANONICAL = /^0x[0-9a-f]{64}$/;
 let draft = { label: '', address: '', coin: 'USDC', cap: '' };
@@ -61,7 +61,7 @@ export default {
                           {},
                           el('td', { class: 'nowrap' }, el('span', { style: 'display:inline-flex;align-items:center;gap:10px;color:var(--text)' }, avatar(p.address, true), p.label)),
                           el('td', { class: 'nowrap' }, el('code', { title: p.address }, shortAddr(p.address))),
-                          el('td', { class: 'nowrap' }, amount(p.capPerTx, p.coinType)),
+                          el('td', { class: 'nowrap' }, amount(p.capPerTx, p.coinType), ' ', usd(amount(p.capPerTx, p.coinType).split(' ')[0], p.coinType.split('::').at(-1), s.rates)),
                           el('td', { class: 'mono nowrap' }, `ledger #${p.seq}`),
                           el('td', { class: 'nowrap' }, el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: (e) => (e.currentTarget.replaceWith(command(`antibody payee remove ${p.payeeId}`)), undefined) }, 'Remove…')),
                         ),

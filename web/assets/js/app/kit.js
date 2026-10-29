@@ -77,6 +77,16 @@ export function amount(base, coinType = '') {
   return `${b / d}${frac ? '.' + frac : ''} ${coinType.split('::').at(-1)}`;
 }
 
+/** "≈ $450.00" from the node's display rates (Tatum Data API), or nothing when the coin isn't priced. */
+export function usd(amountDisplay, symbol, rates) {
+  const r = rates?.[symbol];
+  const n = Number(amountDisplay);
+  if (!r || !Number.isFinite(n)) return null;
+  const v = n * r.usd;
+  const text = `≈ $${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return el('span', { class: 'muted small', title: `${r.source} · 1 ${symbol} = $${r.usd}${r.simulated ? ' · simulated' : ''}` }, text);
+}
+
 export const shortAddr = (a) => (a && a.length > 14 ? `${a.slice(0, 8)}…${a.slice(-4)}` : a ?? '');
 
 /** The verdict a decision memory recorded, e.g. "ALLOW" or "BLOCK LABEL_MISMATCH". */

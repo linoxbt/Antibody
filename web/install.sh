@@ -5,7 +5,7 @@
 #   curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
 #
 # Settings (optional): ANTIBODY_APP_DIR (default ~/.antibody-app),
-# ANTIBODY_BIN_DIR (default ~/.local/bin), ANTIBODY_REPO, ANTIBODY_REF.
+# ANTIBODY_BIN_DIR (default ~/.local/bin), ANTIBODY_REPO, ANTIBODY_REF, ANTIBODY_NO_SHORTCUTS.
 # Your data and keys live in ~/.antibody (ANTIBODY_HOME); this script never touches them.
 set -euo pipefail
 
@@ -74,6 +74,42 @@ SH
 chmod +x "$BIN/antibody"
 ok "command installed at $BIN/antibody"
 
+# An app launcher entry: opens the console signed in, starting Antibody first if needed.
+if [ -z "${ANTIBODY_NO_SHORTCUTS:-}" ] && [ "$WINDOWS" = 0 ]; then
+  case "$(uname -s)" in
+    Linux)
+      APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+      if mkdir -p "$APPS" 2>/dev/null; then
+        cat >"$APPS/antibody.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Antibody
+Comment=Open the Antibody console
+Exec="$BIN/antibody" open
+Icon=$DIR/web/assets/img/icon-512.png
+Terminal=false
+Categories=Utility;Security;
+DESKTOP
+        ok "app launcher entry added (Antibody in your applications menu)"
+      fi
+      ;;
+    Darwin)
+      APP="$HOME/Applications/Antibody.app"
+      if command -v osacompile >/dev/null 2>&1 && mkdir -p "$HOME/Applications"; then
+        rm -rf "$APP"
+        if osacompile -o "$APP" -e "do shell script quoted form of \"$BIN/antibody\" & \" open >/dev/null 2>&1 &\"" >/dev/null 2>&1; then
+          # The Antibody icon instead of the generic script one (best effort).
+          if command -v sips >/dev/null 2>&1; then
+            sips -s format icns "$DIR/web/assets/img/icon-512.png" --out "$APP/Contents/Resources/applet.icns" >/dev/null 2>&1 || true
+            touch "$APP"
+          fi
+          ok "Antibody.app added to ~/Applications"
+        fi
+      fi
+      ;;
+  esac
+fi
+
 "$BIN/antibody" --help >/dev/null 2>&1 || fail "The antibody command did not start." "Run it directly to see why: node $DIR/bin/antibody.mjs --help"
 
 echo
@@ -91,5 +127,6 @@ esac
 echo "  Try it (simulated, no keys needed):"
 echo "    antibody setup     # keys and a practice account"
 echo "    antibody up        # starts Antibody and prints your sign-in link"
+echo "  Then open it any time with: antibody open (or the Antibody app icon)"
 echo
 echo "  Guide: https://antibody-memory.netlify.app/install"

@@ -4,7 +4,7 @@
 #   irm https://antibody-memory.netlify.app/install.ps1 | iex
 #
 # Settings (optional): $env:ANTIBODY_APP_DIR (default %LOCALAPPDATA%\Antibody\app),
-# $env:ANTIBODY_REPO, $env:ANTIBODY_REF. Your data and keys live in %USERPROFILE%\.antibody
+# $env:ANTIBODY_REPO, $env:ANTIBODY_REF, $env:ANTIBODY_NO_SHORTCUTS. Your data and keys live in %USERPROFILE%\.antibody
 # (ANTIBODY_HOME); this script never touches them.
 
 & {
@@ -84,6 +84,28 @@
   }
   if (-not (($env:Path -split ';') -contains $Bin)) { $env:Path = "$env:Path;$Bin" }
 
+  # Start menu and desktop shortcuts: open the console signed in (starting Antibody first if needed), no console window.
+  if (-not $env:ANTIBODY_NO_SHORTCUTS) {
+    try {
+      $vbs = Join-Path $Root 'antibody-open.vbs'
+      $vbsText = 'Set sh = CreateObject("WScript.Shell")' + "`r`n" + 'sh.Run """' + $cmd + '"" open", 0, False' + "`r`n"
+      Set-Content -Path $vbs -Encoding ASCII -Value $vbsText
+      $ws = New-Object -ComObject WScript.Shell
+      foreach ($where in @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('Desktop'))) {
+        $l = $ws.CreateShortcut((Join-Path $where 'Antibody.lnk'))
+        $l.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'
+        $l.Arguments = '"' + $vbs + '"'
+        $l.IconLocation = Join-Path $Dir 'web\assets\img\antibody.ico'
+        $l.Description = 'Open the Antibody console'
+        $l.WorkingDirectory = $env:USERPROFILE
+        $l.Save()
+      }
+      Ok 'Start menu and desktop shortcuts added'
+    } catch {
+      Write-Host "  (shortcuts skipped: $($_.Exception.Message))"
+    }
+  }
+
   & $cmd --help | Out-Null
   if ($LASTEXITCODE -ne 0) { Fail 'The antibody command did not start.' @("Run it directly to see why: node `"$Dir\bin\antibody.mjs`" --help") }
 
@@ -92,6 +114,7 @@
   Write-Host '  Try it (simulated, no keys needed):'
   Write-Host '    antibody setup     # keys and a practice account'
   Write-Host '    antibody up        # starts Antibody and prints your sign-in link'
+  Write-Host '  Then open it any time from the Antibody icon (Start menu or desktop).'
   Write-Host ''
   Write-Host '  Guide: https://antibody-memory.netlify.app/install'
 }

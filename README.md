@@ -48,6 +48,12 @@ curl -fsSL https://antibody-memory.netlify.app/install.sh | bash   # macOS, Linu
 antibody setup && antibody up      # prints your console sign-in link
 ```
 
+After that, open it from the **Antibody** icon the installer adds (Start menu
+and desktop on Windows, the applications menu on Linux, `~/Applications` on
+macOS) or with `antibody open`. `antibody doctor` checks the whole install and
+prints a fix for every problem; `antibody service install` starts it at login
+and restarts it after a crash. Installer checksums: `/SHA256SUMS` on the site.
+
 On Windows the processes talk over named pipes instead of Unix sockets. Full
 key separation between roles needs separate OS users, so on native Windows live
 mode runs with `ANTIBODY_KEY_ISOLATION=simulated`; use WSL2 for enforced
@@ -156,7 +162,7 @@ version run `antibody up` locally.
 | Learning over time (blog post + Best Walrus Memory) | Lessons in the ledger tighten the sentinel; payment records give Steward its history; both survive rebuild — see [The learning loop](#the-learning-loop) |
 | Agent payments (x402 / MPP settled on Sui) | `src/payments/` — x402 v2 HTTP transport, `exact` scheme on Sui, policy-gated, signer signs, facilitator settles |
 | Working demo + public repo | `scripts/demo-m1.ts`, `antibody up` + web view, this repo |
-| Technical quality (30%) | Pure core (`src/core`, no I/O), 58 tests incl. every invariant, strict TypeScript, separate processes and keys |
+| Technical quality (30%) | Pure core (`src/core`, no I/O), 104 unit tests incl. every invariant and seeded fuzzing, browser e2e with axe accessibility checks, CI on Linux/macOS/Windows, strict TypeScript, separate processes and keys |
 | Presentation (20%) | Web view, terminal demo, [blog draft](docs/blog.md), [attack-set table](docs/attack-set-results.md) |
 
 Submission form fields worth preparing: Tatum dashboard account ID, SUI address,
@@ -316,11 +322,17 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 
 | Command | Role | Does |
 | --- | --- | --- |
-| `antibody setup` | control + owner | generate keys, register `antibody:*` labels, write genesis |
+| `antibody setup [--wallet]` | control + owner | generate keys, register `antibody:*` labels, write genesis; `--wallet`: the owner's browser wallet signs (one transaction, owner key never on this machine) |
 | `antibody up` / `down` | — | start/stop signer, control (+web), agent and sentinel daemons |
+| `antibody up --foreground` | — | the same, supervised: a crashed daemon restarts with backoff |
+| `antibody open` | — | start if needed and open the console, signed in |
+| `antibody doctor [--json]` | — | check the whole install (keys, state, RPC, relayer, ledger, daemons, alerts); a fix for each problem |
+| `antibody service install\|uninstall\|status` | — | run at login, restart on crash: systemd user unit, launchd agent or Task Scheduler |
+| `antibody alert test` | — | send a test alert (`ANTIBODY_ALERT_WEBHOOK`, or Telegram bot token + chat id) |
+| `antibody keys encrypt` | — | encrypt key files at rest (scrypt + AES-256-GCM) with `ANTIBODY_KEY_PASSPHRASE` |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
 | `antibody cloud serve` | — | the hosted sandbox: any wallet gets its own simulated Antibody (`$PORT`, `ANTIBODY_CLOUD_DATA`) |
-| `antibody rotate --lane <lane>` | owner | add a fresh key after a revocation; `lane.rotate` record |
+| `antibody rotate --lane <lane> [--wallet]` | owner | add a fresh key after a revocation; `lane.rotate` record |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
 | `antibody release <seq> --reason …` | user | `quarantine.release` (human decision) |
@@ -331,7 +343,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody compare "<instruction>"` | agent | unprotected agent, dry-run only |
 | `antibody show [--forensic] [--graph <seq>]` | control | ledger, payees, projection by class, blast-radius tree |
 | `antibody quarantine --source\|--memory\|--turn\|--signer-window …` | control | closure preview → ledger record → lesson |
-| `antibody revoke --lane <lane> [--rotate]` | control + owner | on-chain removal, verification, `lane.revoke` (+ `lane.rotate`) |
+| `antibody revoke --lane <lane> [--rotate] [--wallet]` | control + owner | on-chain removal, verification, `lane.revoke` (+ `lane.rotate`) |
 | `antibody rebuild --fresh` | control | reconstruction from Walrus + Sui; projection digest |
 | `antibody verify-ledger` | control | completeness, integrity, rollback |
 | `antibody report <seq>` | control | incident JSON via Tatum Storage API |
@@ -343,8 +355,12 @@ See [`.env.example`](.env.example). Key variables: `ANTIBODY_BACKEND`
 (`live`|`offline`), `ANTIBODY_HOME`, `MEMWAL_ACCOUNT_ID`, `TATUM_API_KEY`,
 `ANTIBODY_CHAIN_TRANSPORT` (`grpc` default), `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`
 (any OpenAI-compatible model; unset → deterministic scripted model, SIMULATED),
-`OWNER_SUI_PRIVATE_KEY` (setup/revoke/probe only, throwaway owner),
-`ANTIBODY_KEY_ISOLATION` (`enforce` default on live).
+`OWNER_SUI_PRIVATE_KEY` (optional throwaway owner for scripts; otherwise the
+owner signs in the browser with `--wallet`), `ANTIBODY_KEY_ISOLATION`
+(`enforce` default on live), `ANTIBODY_KEY_PASSPHRASE[_FILE]` (encrypted key
+files), `ANTIBODY_ALERT_WEBHOOK`, `ANTIBODY_TELEGRAM_BOT_TOKEN` +
+`ANTIBODY_TELEGRAM_CHAT_ID` (alerts). Hosted sandbox: `ANTIBODY_CLOUD_*`
+limits, `ANTIBODY_METRICS_TOKEN` for `GET /metrics`.
 
 ## Repository layout
 
@@ -358,11 +374,13 @@ src/signer/     signer (re-simulates, signs, executes)
 src/payments/   x402 (v2 types/headers) · x402-server (resource server + Sui exact facilitator)
 src/user/       human CLI operations (user-signed records)
 src/cli/        antibody CLI · render
-src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions) · revoke (owner-wallet revocation) · cloud (hosted sandbox)
-web/            index · walkthrough · security · install · login · app (console SPA) · 404 (.html) · install.sh
+src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions) · revoke (owner-wallet revocation) · owner-sign (CLI owner approval page) · cloud (hosted sandbox, metrics)
+src/ops/        doctor · service (systemd/launchd/Task Scheduler) · resilience (retries, health) · alerts (webhook/Telegram) · state (format version, migrations)
+web/            index · walkthrough · security · install · privacy · login · app (console SPA) · owner · offline · 404 (.html) · install.sh · install.ps1 · manifest + sw.js (installable app)
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
-scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch, crosscheck, rates, cloud)
+scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh (Linux + macOS) · load-sandbox.ts · build-site.ts
+test/           node:test suites (envelope, lineage, ledger, ledger-scale, policy, system, keys, lint, auth, revoke, owner-sign, watch, crosscheck, rates, cloud, cloud-ops, ops, fuzz)
+e2e/            Chromium end-to-end: public pages, console views, wallet sign-in, attack → quarantine, owner approval page, PWA; axe-core WCAG 2.1 AA
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 
@@ -370,7 +388,12 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
-| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox | ✅ 82 tests | same code |
+| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox | ✅ 104 unit tests (`npm test`) | same code |
+| Fuzzing: mutated envelopes, ledger bodies and whole ledgers never verify or crash | ✅ seeded, 90k cases checked; CI runs 20k per push | — |
+| Ledger past 90 records (cap now 5000) | ✅ 260-record cold rebuild through 100-hit recall | same code |
+| Operability: doctor, supervisor restart, service files, state migration, retries, alerts, encrypted keys | ✅ unit tests; supervisor restart checked by hand | — |
+| Browser: every page and console view, both themes, desktop + phone; wallet sign-in → attack → quarantine; owner approval page | ✅ `npm run e2e` (Chromium, axe: no serious/critical issues) | — |
+| Installers on Linux, macOS, Windows | ✅ CI installs from the commit and runs setup → up → doctor → down | — |
 | Relayer reachable, package/registry IDs match | — | ✅ probe P-1 run on 2026-10-29 |
 | FR-18 checkpoint stream with an affected-address filter | fixture (polling) | ✅ streamed from a mainnet fullnode: busy address matched, random address none |
 | FR-19 delegate set cross-checked against a second RPC (`ANTIBODY_CROSSCHECK_RPC_URL`) | ✅ forged key on one reader → every payment BLOCKed | set the URL to enable |

@@ -6,6 +6,7 @@
  *
  *   npx tsx scripts/build-site.ts    → site/
  */
+import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -130,6 +131,9 @@ async function main() {
   // owner.html is served only by the CLI's one-off owner approval page (src/web/owner-sign.ts).
   cpSync('web', OUT, { recursive: true, filter: (p) => !/[\\/]owner\.(html|js)$/.test(p) });
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));
+  // Checksums for the installers, so a download can be verified before it runs (see /install).
+  const sums = ['install.sh', 'install.ps1'].map((f) => `${createHash('sha256').update(readFileSync(join(OUT, f))).digest('hex')}  ${f}`);
+  writeFileSync(join(OUT, 'SHA256SUMS'), sums.join('\n') + '\n');
   console.log(`site/ built: ${steps.length} recorded steps`);
 }
 

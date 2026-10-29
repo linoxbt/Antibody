@@ -16,7 +16,8 @@ for (const pre of document.querySelectorAll('pre[data-copy]')) {
   b.append(icon(COPY));
   b.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(text.replace(/\s+#[^\n]*$/gm, '').trim());
+      // Comments stripped, and nothing but plain ASCII-safe text: no stray invisible characters.
+      await navigator.clipboard.writeText(text.replace(/\s+#[^\n]*$/gm, '').replace(/[\u0080-\u009f\u200b-\u200f\u2060\ufeff]/g, '').trim());
       b.replaceChildren(icon(DONE));
       setTimeout(() => b.replaceChildren(icon(COPY)), 1400);
     } catch {

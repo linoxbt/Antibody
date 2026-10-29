@@ -26,20 +26,22 @@ fail() {
 
 bold "Antibody installer"
 
+WINDOWS=0
 case "$(uname -s)" in
   Linux | Darwin) ok "$(uname -s) detected" ;;
-  MINGW* | MSYS* | CYGWIN*) fail "Windows shells are not supported." "Install WSL2 (PowerShell as admin: wsl --install), open Ubuntu, and run this command there." ;;
-  *) fail "Unsupported system: $(uname -s)." "Antibody runs on macOS and Linux (and Windows through WSL2)." ;;
+  MINGW* | MSYS* | CYGWIN*) WINDOWS=1; ok "Windows (Git Bash) detected" ;;
+  *) fail "Unsupported system: $(uname -s)." "Antibody runs on macOS, Linux and Windows." ;;
 esac
 
-command -v git >/dev/null 2>&1 || fail "git is not installed." "macOS: xcode-select --install" "Ubuntu/Debian: sudo apt update && sudo apt install -y git" "Fedora: sudo dnf install -y git"
+command -v git >/dev/null 2>&1 || fail "git is not installed." "macOS: xcode-select --install" "Ubuntu/Debian: sudo apt update && sudo apt install -y git" "Fedora: sudo dnf install -y git" "Windows: winget install --id Git.Git -e"
 ok "git $(git --version | awk '{print $3}')"
 
+if [ "$WINDOWS" = 1 ]; then NODE_HINT="Windows: winget install OpenJS.NodeJS.LTS (then open a new Git Bash window)"; else NODE_HINT="Easiest: install nvm (https://github.com/nvm-sh/nvm), then: nvm install 22"; fi
 command -v node >/dev/null 2>&1 || fail "Node.js is not installed (Antibody needs version 22 or newer)." \
-  "Easiest: install nvm (https://github.com/nvm-sh/nvm), then: nvm install 22" \
+  "$NODE_HINT" \
   "Or download the LTS installer from https://nodejs.org"
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 22 ] || fail "Node.js $(node -v) is too old; Antibody needs 22 or newer." "With nvm: nvm install 22 && nvm alias default 22" "Then open a new terminal and run this installer again."
+[ "$NODE_MAJOR" -ge 22 ] || fail "Node.js $(node -v) is too old; Antibody needs 22 or newer." "$NODE_HINT" "Then open a new terminal and run this installer again."
 ok "Node.js $(node -v)"
 command -v npm >/dev/null 2>&1 || fail "npm is missing." "npm ships with Node.js: reinstall Node 22 (nvm install 22)."
 ok "npm $(npm -v)"

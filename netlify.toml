@@ -58,3 +58,9 @@
   [headers.values]
     Content-Type = "text/plain; charset=utf-8"
     Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/install.ps1"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "no-cache"

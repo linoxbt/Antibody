@@ -69,7 +69,8 @@ function assertRole(cfg: Config, role: Role): void {
     );
   }
   const own = keyPath(cfg.home, role);
-  if (existsSync(own) && (statSync(own).mode & 0o077) !== 0) {
+  // Windows has no POSIX modes (access is by ACL), so this check only means something elsewhere.
+  if (process.platform !== 'win32' && existsSync(own) && (statSync(own).mode & 0o077) !== 0) {
     throw new KeyIsolationError(`${own} must be mode 0600`);
   }
 }

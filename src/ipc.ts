@@ -10,6 +10,7 @@
  */
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { isPipe } from './config.ts';
 import { dirname } from 'node:path';
 import { randomBytes } from '@noble/hashes/utils.js';
 import { bytesToHex, fromBase64Url, sha256Bytes, sha256Hex, toBase64Url, utf8 } from './core/encoding.ts';
@@ -128,8 +129,12 @@ export function createIpcHandler(routes: Record<string, Route>, laneOf: (pub: st
 
 /** Serve a handler on a Unix socket (mode 0660 inside a 0700 run dir). */
 export function serveUnix(socketPath: string, handler: Transport): Promise<Server> {
-  mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 });
-  if (existsSync(socketPath)) unlinkSync(socketPath);
+  // Windows named pipes are not files: nothing to create, clean up or chmod.
+  const pipe = isPipe(socketPath);
+  if (!pipe) {
+    mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 });
+    if (existsSync(socketPath)) unlinkSync(socketPath);
+  }
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -144,7 +149,7 @@ export function serveUnix(socketPath: string, handler: Transport): Promise<Serve
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(socketPath, () => {
-      chmodSync(socketPath, 0o660);
+      if (!pipe) chmodSync(socketPath, 0o660);
       resolve(server);
     });
   });

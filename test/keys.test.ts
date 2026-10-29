@@ -59,3 +59,20 @@ test('key files are 0600 and are never overwritten', () => {
     rmSync(h, { recursive: true, force: true });
   }
 });
+
+test('IPC endpoints: Unix sockets in the run directory, named pipes on Windows (one set per ANTIBODY_HOME)', async () => {
+  const { ipcPath, isPipe, loadConfig } = await import('../src/config.ts');
+  const cfg = loadConfig({ ANTIBODY_HOME: '/tmp/ab-home-a' } as NodeJS.ProcessEnv);
+  assert.equal(ipcPath(cfg, 'control'), '/tmp/ab-home-a/run/control.sock');
+  assert.equal(isPipe(ipcPath(cfg, 'control')), false);
+  const real = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    const p = ipcPath(cfg, 'agent');
+    assert.match(p, /^\\\\\.\\pipe\\antibody-[0-9a-f]{12}-agent$/);
+    assert.ok(isPipe(p));
+    assert.notEqual(ipcPath(loadConfig({ ANTIBODY_HOME: '/tmp/ab-home-b' } as NodeJS.ProcessEnv), 'agent'), p, 'two installs never share a pipe');
+  } finally {
+    Object.defineProperty(process, 'platform', real);
+  }
+});

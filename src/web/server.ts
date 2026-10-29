@@ -20,6 +20,7 @@ import type { Runtime } from '../runtime.ts';
 import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
+import { ipcPath } from '../config.ts';
 import { RevokeFlow } from './revoke.ts';
 import { zkLoginClient } from '../adapters/zklogin.ts';
 import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
@@ -217,7 +218,7 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         const instruction = String(body.instruction ?? '');
         const execute = body.execute === true;
         // Protected: the agent daemon runs the real Steward turn (agent key + LLM key live there).
-        const agent = new IpcClient(control.d.key, unixTransport(join(rt.cfg.home, 'run', 'agent.sock'), 300_000));
+        const agent = new IpcClient(control.d.key, unixTransport(ipcPath(rt.cfg, 'agent'), 300_000));
         const [prot, unprot] = await Promise.allSettled([
           agent.call('/turn', { instruction, execute }),
           runUnprotectedTurn({ mem: control.d.mem, chain: rt.chain, wallet: rt.cfg.stewardWallet ?? '', model: createModel(rt.cfg) }, instruction),

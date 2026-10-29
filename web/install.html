@@ -64,7 +64,7 @@
           <h2>Requirements</h2>
           <div class="table-wrap"><table class="table">
             <tbody>
-              <tr><td>System</td><td>macOS 12+ or Linux. On Windows, use <a href="https://learn.microsoft.com/windows/wsl/install" target="_blank" rel="noopener">WSL2</a> (Ubuntu).</td></tr>
+              <tr><td>System</td><td>Windows 10/11 (PowerShell or Git Bash), macOS 12+, or Linux.</td></tr>
               <tr><td>Node.js</td><td>Version 22 or newer. Check with <code>node -v</code>.</td></tr>
               <tr><td>git</td><td>Any recent version. Check with <code>git --version</code>.</td></tr>
               <tr><td>Disk</td><td>About 300 MB.</td></tr>
@@ -82,15 +82,21 @@ nvm alias default 22</pre>
           </details>
           <details class="howto">
             <summary>I'm on Windows</summary>
-            <p>Open PowerShell as administrator and run <code>wsl --install</code>. Restart, open <b>Ubuntu</b> from the Start menu, then follow this guide inside it. The console still opens in your normal Windows browser.</p>
+            <p>Install the two prerequisites from PowerShell, then open a <b>new</b> window:</p>
+            <pre class="code" data-copy>winget install --id Git.Git -e
+winget install OpenJS.NodeJS.LTS</pre>
+            <p>Use the PowerShell installer below. Git Bash works too. For live mainnet use with full key separation, WSL2 is better: Windows can't stop one Antibody process reading another's key file.</p>
           </details>
         </section>
 
         <section id="install">
           <h2>Install</h2>
-          <p>Paste this into a terminal. It checks your system, downloads Antibody into <code>~/.antibody-app</code> and adds the <code>antibody</code> command.</p>
+          <p>It checks your system, downloads Antibody and adds the <code>antibody</code> command. Use the copy button rather than selecting the text.</p>
+          <h3>Windows (PowerShell)</h3>
+          <pre class="code" data-copy>irm https://antibody-memory.netlify.app/install.ps1 | iex</pre>
+          <h3>macOS, Linux, or Git Bash on Windows</h3>
           <pre class="code" data-copy>curl -fsSL https://antibody-memory.netlify.app/install.sh | bash</pre>
-          <p>If it says the folder is not on your PATH, run the one line it prints, then open a new terminal. Check it worked:</p>
+          <p>Then open a <b>new</b> terminal window (on macOS/Linux, if it printed a PATH line, run that first) and check it worked:</p>
           <pre class="code" data-copy>antibody --help</pre>
           <details class="howto">
             <summary>Install by hand instead</summary>
@@ -128,7 +134,7 @@ antibody statement "Rent is 450 USDC (coin type 0xdba34672e30cb065b1f93e3ab55318
             <li><span>Create your Walrus Memory account at <a href="https://memory.walrus.xyz" target="_blank" rel="noopener">memory.walrus.xyz</a> with a wallet you control. That wallet is the <b>owner</b>. Copy the account ID (<code>0x…</code>).</span></li>
             <li><span>Get a mainnet API key at <a href="https://dashboard.tatum.io" target="_blank" rel="noopener">dashboard.tatum.io</a>.</span></li>
             <li><span>Export the owner wallet's private key from your wallet's account settings (it starts with <code>suiprivkey1</code>). Antibody uses it only during setup, revoke and rotate. Use a dedicated owner wallet, not your main one.</span></li>
-            <li><span>Put your settings in <code>~/.antibody/antibody.env</code>. Antibody reads this file on every command.</span>
+            <li><span>Put your settings in <code>~/.antibody/antibody.env</code> (on Windows: <code>%USERPROFILE%\.antibody\antibody.env</code>, created with Notepad). Antibody reads this file on every command.</span>
               <pre class="code" data-copy>mkdir -p ~/.antibody && cat > ~/.antibody/antibody.env &lt;&lt;'EOF'
 ANTIBODY_BACKEND=live
 MEMWAL_ACCOUNT_ID=0xYOUR_ACCOUNT_ID
@@ -197,7 +203,11 @@ rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
             <h3>Installing</h3>
             <details class="ts"><summary><code>Node.js v18… is too old</code> or <code>Unknown file extension ".ts"</code></summary><p>Antibody needs Node.js 22 or newer. Run <code>nvm install 22 &amp;&amp; nvm alias default 22</code>, open a new terminal, and install again.</p></details>
             <details class="ts"><summary><code>antibody: command not found</code></summary><p>The command folder isn't on your PATH. Run the <code>echo 'export PATH=…'</code> line the installer printed, or add <code>export PATH="$HOME/.local/bin:$PATH"</code> to <code>~/.bashrc</code> or <code>~/.zshrc</code>. Then open a new terminal.</p></details>
-            <details class="ts"><summary><code>Windows shells are not supported</code></summary><p>Run the installer inside WSL2 (Ubuntu), not in PowerShell, CMD or Git Bash. See <a href="#requirements">I'm on Windows</a>.</p></details>
+            <details class="ts"><summary><code>bash: $'\302\226curl': command not found</code> (or <code>'\342\200\213curl'</code>)</summary><p>An invisible character came along when you copied the command, usually from selecting text in a chat app, PDF or document. Use the copy button on this page, or type the command by hand. On Windows, the PowerShell command avoids Git Bash altogether.</p></details>
+            <details class="ts"><summary><code>irm : The term 'irm' is not recognized</code> / <code>iex</code> errors</summary><p>You're in CMD or Git Bash, not PowerShell. Open <b>Windows PowerShell</b> from the Start menu and paste it there. In Git Bash, use the <code>curl … | bash</code> command instead.</p></details>
+            <details class="ts"><summary><code>running scripts is disabled on this system</code></summary><p>PowerShell's execution policy blocks scripts. The <code>irm … | iex</code> command normally isn't affected; if it is, run <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> once and try again.</p></details>
+            <details class="ts"><summary><code>'antibody' is not recognized as an internal or external command</code></summary><p>Windows only updates PATH for new windows. Close PowerShell, open a new one, and try again. Still missing? The command is at <code>%LOCALAPPDATA%\Antibody\bin\antibody.cmd</code>.</p></details>
+            <details class="ts"><summary><code>winget : The term 'winget' is not recognized</code></summary><p>Install <b>App Installer</b> from the Microsoft Store, or download Git from <a href="https://git-scm.com/download/win" target="_blank" rel="noopener">git-scm.com</a> and Node.js from <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a>.</p></details>
             <details class="ts"><summary><code>git is not installed</code></summary><p>macOS: <code>xcode-select --install</code>. Ubuntu/Debian: <code>sudo apt install -y git</code>.</p></details>
             <details class="ts"><summary><code>npm ERR! code EACCES</code> or permission denied</summary><p>Don't use <code>sudo</code> with npm. Install Node with nvm so it lives in your home folder, then run the installer again.</p></details>
             <details class="ts"><summary><code>npm ci can only install packages when your package.json and package-lock.json are in sync</code></summary><p>Your copy is half-updated. Run <code>git -C ~/.antibody-app fetch origin main &amp;&amp; git -C ~/.antibody-app reset --hard origin/main</code>, then the installer again.</p></details>
@@ -221,9 +231,10 @@ rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
             <h3>Starting</h3>
             <details class="ts"><summary><code>timed out waiting for …/control.sock</code> (or <code>signer.sock</code>, <code>agent.sock</code>)</summary><p>That process failed to start. Its reason is in <code>~/.antibody/logs/control.out</code> (or <code>signer.out</code>, <code>agent.out</code>). The causes below are the usual ones.</p></details>
             <details class="ts"><summary><code>listen EADDRINUSE: address already in use 127.0.0.1:7402</code></summary><p>Antibody (or another program) already uses that port. Run <code>antibody down</code> first. To use another port, add <code>ANTIBODY_WEB_PORT=7410</code> to <code>antibody.env</code>.</p></details>
-            <details class="ts"><summary><code>role control can read key files of user, agent, … run each role as its own OS user</code></summary><p>Live mode enforces key separation. Run <code>scripts/setup-roles.sh</code> (see <a href="#mainnet">Go live</a>). For a test machine only, add <code>ANTIBODY_KEY_ISOLATION=simulated</code>.</p></details>
+            <details class="ts"><summary><code>role control can read key files of user, agent, … run each role as its own OS user</code></summary><p>Live mode enforces key separation. Run <code>scripts/setup-roles.sh</code> (see <a href="#mainnet">Go live</a>). For a test machine only, add <code>ANTIBODY_KEY_ISOLATION=simulated</code>. On Windows, separation needs WSL2; native Windows runs with <code>ANTIBODY_KEY_ISOLATION=simulated</code>.</p></details>
             <details class="ts"><summary><code>… .key must be mode 0600</code></summary><p>A key file is readable by others. Fix it with <code>chmod 600 ~/.antibody/keys/*/*.key</code>.</p></details>
             <details class="ts"><summary><code>no control key at …: run `antibody setup` first</code></summary><p>Run <code>antibody setup</code>. If you moved <code>~/.antibody</code>, set <code>ANTIBODY_HOME</code> to its new location.</p></details>
+            <details class="ts"><summary><code>timed out waiting for \\.\pipe\antibody-…</code> (Windows)</summary><p>A process didn't start. Read <code>%USERPROFILE%\.antibody\logs\control.out</code> (or <code>signer.out</code>, <code>agent.out</code>). If another Antibody is still running, run <code>antibody down</code> first.</p></details>
             <details class="ts"><summary><code>listen EINVAL</code> or <code>ENAMETOOLONG</code> on a <code>.sock</code> path</summary><p>The folder path is too long for a socket (macOS allows about 100 characters). Use a shorter <code>ANTIBODY_HOME</code>, e.g. <code>~/.antibody</code>.</p></details>
             <details class="ts"><summary><code>this command runs as role "x" but ANTIBODY_ROLE=y</code></summary><p>An <code>ANTIBODY_ROLE</code> variable is left over in your shell. Run <code>unset ANTIBODY_ROLE</code>; <code>antibody up</code> sets it per process.</p></details>
           </div>

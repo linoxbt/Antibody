@@ -37,12 +37,21 @@ also *Best Walrus Memory* and *Best Use of Agent Payments*.
 wallet and get your own sandbox (a full Antibody owned by your wallet, on the
 simulated backend). It works on phones inside a wallet app's browser.
 
-**On your computer** (macOS, Linux, or Windows through WSL2; Node.js 22+):
+**On your computer** (Windows 10/11, macOS or Linux; Node.js 22+ and git):
+
+```powershell
+irm https://antibody-memory.netlify.app/install.ps1 | iex           # Windows PowerShell
+```
 
 ```bash
-curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
+curl -fsSL https://antibody-memory.netlify.app/install.sh | bash   # macOS, Linux, Git Bash
 antibody setup && antibody up      # prints your console sign-in link
 ```
+
+On Windows the processes talk over named pipes instead of Unix sockets. Full
+key separation between roles needs separate OS users, so on native Windows live
+mode runs with `ANTIBODY_KEY_ISOLATION=simulated`; use WSL2 for enforced
+separation.
 
 Settings go in `~/.antibody/antibody.env`, read on every command. The full
 guide, with mainnet setup, phones and fixes for every error message, is at

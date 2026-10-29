@@ -8,7 +8,7 @@
  *   signer   (wallet key)     ← antibody: /sign
  *   agent    (agent + LLM key) ← antibody: /turn   (the web UI's "run" button)
  */
-import { socketPath, cacheDir, requireAccount, requireWallet, type Config } from './config.ts';
+import { ipcPath, socketPath, cacheDir, requireAccount, requireWallet, type Config } from './config.ts';
 import { assertOwnLane, bindLanes } from './core/lanes.ts';
 import { LABEL_LANE, type Lane } from './core/types.ts';
 import { Control } from './control/control.ts';
@@ -160,7 +160,7 @@ export async function serveAgent(rt: Runtime) {
     },
     chainLaneOf(rt),
   );
-  return serveUnix(`${rt.cfg.home}/run/agent.sock`, handler);
+  return serveUnix(ipcPath(rt.cfg, 'agent'), handler);
 }
 
 // ---- ingest ------------------------------------------------------------------

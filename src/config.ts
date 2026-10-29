@@ -2,6 +2,7 @@
  * Configuration (spec §13). One TypeScript package, one process per role;
  * each process starts with ANTIBODY_ROLE set and loads only its own key.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -124,7 +125,17 @@ export function requireWallet(cfg: Config): string {
 }
 
 export const runDir = (cfg: Config) => join(cfg.home, 'run');
-export const socketPath = (cfg: Config, role: 'control' | 'signer') => join(runDir(cfg), `${role}.sock`);
+/**
+ * Where a daemon listens for signed IPC: a Unix socket in the run directory on
+ * macOS and Linux, a named pipe on Windows (one per ANTIBODY_HOME, so two
+ * installs on one machine never collide).
+ */
+export function ipcPath(cfg: Config, name: 'control' | 'signer' | 'agent'): string {
+  if (process.platform === 'win32') return `\\\\.\\pipe\\antibody-${createHash('sha256').update(resolve(cfg.home)).digest('hex').slice(0, 12)}-${name}`;
+  return join(runDir(cfg), `${name}.sock`);
+}
+export const isPipe = (p: string) => p.startsWith('\\\\.\\pipe\\');
+export const socketPath = (cfg: Config, role: 'control' | 'signer') => ipcPath(cfg, role);
 export const cacheDir = (cfg: Config) => join(cfg.home, 'cache');
 export const offlineDir = (cfg: Config) => join(cfg.home, 'offline');
 export const logDir = (cfg: Config) => join(cfg.home, 'logs');

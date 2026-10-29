@@ -5,13 +5,14 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { connect as netConnect } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { loadConfig, requireAccount, runDir, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
+import { ipcPath, isPipe, loadConfig, requireAccount, runDir, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
 import { isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, sha256Hex, SUI_COIN_TYPE } from '../core/encoding.ts';
 import { generateSeedHex, laneKeyFromSeedHex } from '../core/keys.ts';
 import type { LedgerState } from '../core/ledger.ts';
@@ -507,14 +508,14 @@ async function main(argv: string[]): Promise<void> {
         ['ingest', ['ingest', 'watch'], 'ingest'],
       ];
       // Stale sockets from a previous run would satisfy the readiness check before the daemon serves.
-      for (const s of ['signer.sock', 'control.sock', 'agent.sock']) rmSync(join(runDir(cfg), s), { force: true });
+      for (const n of ['signer', 'control', 'agent'] as const) if (!isPipe(ipcPath(cfg, n))) rmSync(ipcPath(cfg, n), { force: true });
       for (const [name, args, role] of procs) {
         const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
-        const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
+        const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, windowsHide: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
         child.unref();
         writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
         if (name === 'ingest') await new Promise((res) => setTimeout(res, 300)); // no socket: it only talks to control
-        else await waitFor(name === 'agent' ? join(runDir(cfg), 'agent.sock') : socketPath(cfg, name as 'control' | 'signer'), 30_000);
+        else await waitFor(ipcPath(cfg, name as 'control' | 'signer' | 'agent'), 30_000);
         if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/auth/status`, 30_000);
         console.log(green(`${name} up`) + dim(` pid ${child.pid}, log ${join(cfg.home, 'logs', `${name}.out`)}`));
       }
@@ -552,7 +553,7 @@ async function main(argv: string[]): Promise<void> {
           console.log(dim(`${name} was not running`));
         }
         rmSync(p, { force: true });
-        rmSync(join(runDir(cfg), `${name}.sock`), { force: true });
+        if (name !== 'ingest' && !isPipe(ipcPath(cfg, name as 'control' | 'signer' | 'agent'))) rmSync(ipcPath(cfg, name as 'control' | 'signer' | 'agent'), { force: true });
       }
       return;
     }
@@ -627,11 +628,18 @@ async function waitForHttp(url: string, ms: number) {
   }
 }
 
+/** Wait until a daemon accepts connections on its socket or named pipe. */
 async function waitFor(path: string, ms: number) {
   const t = Date.now() + ms;
-  while (!existsSync(path)) {
+  const accepts = () =>
+    new Promise<boolean>((res) => {
+      const s = netConnect(path);
+      s.once('connect', () => (s.end(), res(true)));
+      s.once('error', () => res(false));
+    });
+  while (!(await accepts())) {
     if (Date.now() > t) throw new Error(`timed out waiting for ${path}`);
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 

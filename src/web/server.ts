@@ -8,7 +8,7 @@
 import { execFile } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { bodyContent } from '../core/envelope.ts';
@@ -43,6 +43,15 @@ export const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-sr
 /** Pages that moved into the signed-in app. */
 export const MOVED: Record<string, string> = { '/console': '/app/steward', '/graph': '/app/memory', '/ledger': '/app/ledger', '/incidents': '/app/incidents' };
 
+/**
+ * Whether `p` is inside `root`, with the platform's own separators (Windows
+ * paths use backslashes, so a '/' prefix check would reject every file there).
+ */
+export function isInside(root: string, p: string, paths: Pick<typeof import('node:path'), 'relative' | 'isAbsolute'> = { relative, isAbsolute }): boolean {
+  const r = paths.relative(root, p);
+  return r !== '' && !r.startsWith('..') && !paths.isAbsolute(r);
+}
+
 /** Resolve a URL path to a file under web/ (clean URLs: /login → login.html). Never escapes web/. */
 export function staticFile(pathname: string): string | null {
   let rel: string;
@@ -55,7 +64,7 @@ export function staticFile(pathname: string): string | null {
   const candidates = rel.endsWith('/') ? [`${rel}index.html`] : [rel, `${rel}.html`];
   for (const c of candidates) {
     const p = resolve(WEB, `.${c}`);
-    if (!p.startsWith(WEB + '/')) return null;
+    if (!isInside(WEB, p)) return null;
     if (existsSync(p) && statSync(p).isFile() && TYPES[extname(p)]) return p;
   }
   // The app is a single page; its client-side routes all load app.html.

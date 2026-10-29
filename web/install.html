@@ -183,13 +183,21 @@ echo 'ANTIBODY_KEY_ISOLATION=simulated' >> ~/.antibody/antibody.env</pre></li>
 
         <section id="update">
           <h2>Update or remove</h2>
-          <p>Update: run the installer again. Your keys and data in <code>~/.antibody</code> are never touched.</p>
+          <p>Update: stop Antibody, run the installer again, start it. Your keys and data in <code>~/.antibody</code> are never touched.</p>
+          <h3>Windows (PowerShell)</h3>
+          <pre class="code" data-copy>antibody down
+irm https://antibody-memory.netlify.app/install.ps1 | iex
+antibody up</pre>
+          <h3>macOS, Linux, Git Bash</h3>
           <pre class="code" data-copy>antibody down
 curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
 antibody up</pre>
           <p>Remove the program (keeps your keys and data):</p>
           <pre class="code" data-copy>antibody down
 rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
+          <p>On Windows (PowerShell):</p>
+          <pre class="code" data-copy>antibody down
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Antibody"</pre>
           <p class="warn">Deleting <code>~/.antibody</code> also deletes your lane keys. Back up <code>~/.antibody/keys</code> first, or revoke the keys on-chain.</p>
         </section>
 
@@ -241,6 +249,7 @@ rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
 
           <div class="ts-group" data-group="Signing in">
             <h3>Signing in</h3>
+            <details class="ts"><summary>Every console page says <code>404 · No verified parent</code> with no styling (Windows)</summary><p>Fixed in the current version: older builds rejected Windows file paths. Update (see <a href="#update">Update or remove</a>), then open the new sign-in link that <code>antibody up</code> prints.</p></details>
             <details class="ts"><summary><code>no operator token yet: start the console with antibody up</code></summary><p>The console isn't running. Run <code>antibody up</code>, then <code>antibody login</code>.</p></details>
             <details class="ts"><summary><code>operator link is invalid or from an earlier run</code></summary><p>Links change every time Antibody restarts. Get a fresh one with <code>antibody login</code>.</p></details>
             <details class="ts"><summary><code>this wallet is not the account owner (0x12ab…cd34)</code></summary><p>Your wallet is on another account. Switch to the account shown in the message, or import the owner key into your wallet. The hosted sandbox accepts any wallet.</p></details>

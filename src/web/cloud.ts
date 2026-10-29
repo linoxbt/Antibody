@@ -15,7 +15,7 @@
  * user's machine. This server exists so anyone can try the full console from
  * a browser, including on a phone inside a wallet's in-app browser.
  */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -38,7 +38,48 @@ export interface CloudOptions {
   maxOpen?: number;
   /** Mutating requests per wallet per minute. */
   ratePerMinute?: number;
+  /** Mutating requests per minute across every wallet (protects the one shared machine). */
+  globalRatePerMinute?: number;
+  /** New worlds per hour, across everyone. */
+  newTenantsPerHour?: number;
+  /** Worlds untouched this long are deleted (default 14 days). */
+  idleDays?: number;
+  /** Bearer token for GET /metrics; unset serves it openly (it holds counts only, nothing per visitor). */
+  metricsToken?: string;
 }
+
+/** Counters and gauges for GET /metrics (Prometheus text format). Nothing per visitor. */
+export class Metrics {
+  readonly started = Date.now();
+  private counters = new Map<string, number>();
+
+  inc(name: string, labels: Record<string, string> = {}, by = 1) {
+    const k = name + (Object.keys(labels).length ? `{${Object.entries(labels).map(([a, b]) => `${a}="${b.replace(/["\\\n]/g, '_')}"`).join(',')}}` : '');
+    this.counters.set(k, (this.counters.get(k) ?? 0) + by);
+  }
+
+  get(name: string): number {
+    let n = 0;
+    for (const [k, v] of this.counters) if (k === name || k.startsWith(name + '{')) n += v;
+    return n;
+  }
+
+  render(gauges: Record<string, number>): string {
+    const lines: string[] = [];
+    const seen = new Set<string>();
+    for (const [k, v] of [...this.counters].sort()) {
+      const base = k.split('{')[0]!;
+      if (!seen.has(base)) (seen.add(base), lines.push(`# TYPE ${base} counter`));
+      lines.push(`${k} ${v}`);
+    }
+    for (const [k, v] of Object.entries(gauges)) lines.push(`# TYPE ${k} gauge`, `${k} ${v}`);
+    return lines.join('\n') + '\n';
+  }
+}
+
+/** Fixed route names for metrics labels (never raw paths). */
+const ROUTES = new Set(['/healthz', '/metrics', '/api/auth/status', '/api/auth/challenge', '/api/auth/wallet', '/api/auth/logout', '/api/state', '/api/blast', '/api/preview', '/api/quarantine', '/api/report', '/api/run', '/api/rebuild', '/api/revoke/prepare', '/api/revoke/submit', '/api/sandbox/attack', '/api/sandbox/payee', '/api/sandbox/reset']);
+const routeOf = (p: string) => (ROUTES.has(p) ? p : p.startsWith('/api/') ? '/api/other' : 'static');
 
 const CANONICAL = /^0x[0-9a-f]{64}$/;
 
@@ -64,13 +105,66 @@ export class Tenants {
   private readonly maxTenants: number;
   private readonly maxOpen: number;
   private readonly rate: number;
+  private readonly globalRate: number;
+  private readonly newPerHour: number;
+  private readonly idleMs: number;
+  private globalHits: number[] = [];
+  private created: number[] = [];
+  readonly metrics: Metrics;
 
-  constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute'>) {
+  constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute' | 'globalRatePerMinute' | 'newTenantsPerHour' | 'idleDays'>, metrics = new Metrics()) {
     this.dir = join(o.dataDir, 'tenants');
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     this.maxTenants = o.maxTenants ?? 500;
     this.maxOpen = o.maxOpen ?? 40;
     this.rate = o.ratePerMinute ?? 40;
+    this.globalRate = o.globalRatePerMinute ?? 1200;
+    this.newPerHour = o.newTenantsPerHour ?? 200;
+    this.idleMs = (o.idleDays ?? 14) * 24 * 60 * 60_000;
+    this.metrics = metrics;
+  }
+
+  get openCount(): number {
+    return this.open.size;
+  }
+
+  /** Mark a world as used (its directory's mtime is the idle clock). */
+  private touch(home: string) {
+    const f = join(home, 'last-seen');
+    try {
+      const now = new Date();
+      if (existsSync(f)) utimesSync(f, now, now);
+      else writeFileSync(f, '');
+    } catch {
+      /* best effort */
+    }
+  }
+
+  private lastSeen(home: string): number {
+    for (const f of ['last-seen', 'antibody.json']) {
+      try {
+        return statSync(join(home, f)).mtimeMs;
+      } catch {
+        /* try the next */
+      }
+    }
+    return 0;
+  }
+
+  /** Delete worlds nobody opened for idleDays. Open worlds are never touched. Returns how many went. */
+  sweep(now = Date.now()): number {
+    let n = 0;
+    const openHomes = new Set([...this.open.keys()].map((k) => this.home(k)));
+    for (const name of readdirSync(this.dir)) {
+      const home = join(this.dir, name);
+      if (openHomes.has(home) || this.opening.has(name)) continue;
+      if (now - this.lastSeen(home) > this.idleMs) {
+        rmSync(home, { recursive: true, force: true });
+        n++;
+      }
+    }
+    if (n) this.metrics.inc('antibody_sandbox_worlds_swept_total', {}, n);
+    return n;
   }
 
   private home(address: string) {
@@ -87,18 +181,30 @@ export class Tenants {
   async get(address: string): Promise<Tenant> {
     const key = normalizeSuiAddress(address);
     const t = this.open.get(key);
-    if (t) return (t.last = Date.now()), t;
+    if (t) {
+      if (Date.now() - t.last > 10 * 60_000) this.touch(this.home(key));
+      t.last = Date.now();
+      return t;
+    }
     const pending = this.opening.get(key);
     if (pending) return pending;
     const p = (async () => {
       const home = this.home(key);
       const exists = existsSync(join(home, 'antibody.json'));
-      if (!exists && this.count() >= this.maxTenants) throw new AuthError(503, 'the sandbox is full right now; try again later or install Antibody yourself');
+      if (!exists) {
+        if (this.count() >= this.maxTenants) throw new AuthError(503, 'the sandbox is full right now; try again later or install Antibody yourself');
+        const now = Date.now();
+        this.created = this.created.filter((c) => now - c < 60 * 60_000);
+        if (this.created.length >= this.newPerHour) throw new AuthError(503, 'the sandbox is busy creating worlds; try again in a few minutes');
+        this.created.push(now);
+      }
       const world = exists ? await createWorld({ home, keep: true, open: true }) : await createWorld({ home, keep: true, ownerAddress: key });
       if (!exists) {
         await seedBaseline(world);
         await world.addPayee({ payeeId: 'utility', label: 'utility', address: CAST.utility, capDisplay: '150' });
+        this.metrics.inc('antibody_sandbox_worlds_created_total');
       }
+      this.touch(home);
       const tenant: Tenant = { world, revoke: new RevokeFlow(world.rt, world.control), last: Date.now(), queue: Promise.resolve(), hits: [] };
       this.open.set(key, tenant);
       this.evict();
@@ -124,7 +230,10 @@ export class Tenants {
       const now = Date.now();
       t.hits = t.hits.filter((h) => now - h < 60_000);
       if (t.hits.length >= this.rate) throw new AuthError(429, 'slow down: too many actions this minute');
+      this.globalHits = this.globalHits.filter((h) => now - h < 60_000);
+      if (this.globalHits.length >= this.globalRate) throw new AuthError(503, 'the sandbox is very busy right now; try again in a minute');
       t.hits.push(now);
+      this.globalHits.push(now);
     }
     const next = t.queue.then(() => fn(t));
     t.queue = next.catch(() => undefined);
@@ -153,19 +262,33 @@ function clientOf(req: IncomingMessage): string {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-export async function startCloud(o: CloudOptions): Promise<{ server: Server; tenants: Tenants; auth: Auth }> {
-  const tenants = new Tenants(o);
-  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.', client: zkLoginClient() });
+export async function startCloud(o: CloudOptions): Promise<{ server: Server; tenants: Tenants; auth: Auth; metrics: Metrics }> {
+  const metrics = new Metrics();
+  const tenants = new Tenants(o, metrics);
+  mkdirSync(o.dataDir, { recursive: true, mode: 0o700 });
+  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.', client: zkLoginClient(), sessionFile: join(o.dataDir, 'sessions.json') });
+  // Idle worlds go away on a timer (and once at start); open ones are never swept.
+  tenants.sweep();
+  const sweeper = setInterval(() => tenants.sweep(), 60 * 60_000);
+  sweeper.unref();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://sandbox');
     const secure = req.headers['x-forwarded-proto'] === 'https';
+    const route = routeOf(url.pathname);
+    res.once('finish', () => metrics.inc('antibody_sandbox_requests_total', { route, status: String(res.statusCode) }));
     const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
       res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });
       res.end(JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     };
     try {
       if (req.method === 'GET' && url.pathname === '/healthz') return send(200, { ok: true, tenants: tenants.count() });
+      if (req.method === 'GET' && url.pathname === '/metrics') {
+        if (o.metricsToken && req.headers.authorization !== `Bearer ${o.metricsToken}`) return send(401, { error: 'metrics token required' });
+        const mem = process.memoryUsage();
+        res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', 'cache-control': 'no-store' });
+        return res.end(metrics.render({ antibody_sandbox_worlds: tenants.count(), antibody_sandbox_worlds_open: tenants.openCount, antibody_sandbox_sessions: auth.sessionCount, antibody_sandbox_uptime_seconds: Math.round((Date.now() - metrics.started) / 1000), process_resident_memory_bytes: mem.rss, nodejs_heap_used_bytes: mem.heapUsed }));
+      }
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         const file = staticFile(url.pathname);
         const path = file ?? join(WEB, '404.html');
@@ -191,6 +314,7 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         }
         if (url.pathname === '/api/auth/wallet') {
           const s = await auth.signInWithWallet(String(body.address ?? ''), String(body.message ?? ''), String(body.signature ?? ''), client);
+          metrics.inc('antibody_sandbox_sign_ins_total');
           await tenants.get(s.address!); // create or open the visitor's world now, so the console loads at once
           return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': Auth.setCookie(s, secure) });
         }
@@ -259,6 +383,7 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
             const seen = new Set((await world.rt.chain.listOwnedObjects(world.setup.wallet)).map((o) => o.type));
             const coin = ATTACKS.find((c) => ![...seen].some((t) => t.includes(c.type))) ?? { ...ATTACKS[0]!, type: `0x${Date.now().toString(16).padStart(64, '0')}::bonus::BONUS`, name: 'Bonus' };
             const drop = world.airdrop(coin);
+            metrics.inc('antibody_sandbox_attacks_total');
             const scan = await world.scan();
             return { coin: { name: coin.name, objectId: drop.objectId }, items: scan.items.map((i) => ({ objectId: i.objectId, score: i.score, rules: i.rules, incident: i.incident ? { id: i.incident.id, status: i.incident.status, quarantineSeq: i.incident.quarantineSeq } : null })) };
           }));
@@ -284,9 +409,11 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
     } catch (e) {
       if (e instanceof AuthError) return send(e.status, { error: e.message });
       if (e instanceof SyntaxError) return send(400, { error: e.message.includes('too large') ? 'request body too large' : 'malformed JSON body' });
+      metrics.inc('antibody_sandbox_errors_total', { route });
       return send(500, { error: (e as Error).message });
     }
   });
+  server.on('close', () => (clearInterval(sweeper), auth.flush()));
   await new Promise<void>((r) => server.listen(o.port, o.host ?? '0.0.0.0', () => r()));
-  return { server, tenants, auth };
+  return { server, tenants, auth, metrics };
 }

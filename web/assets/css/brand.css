@@ -216,6 +216,7 @@ input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px;
 .footer a:hover { color: var(--text); }
 .footer a.brand { display: inline-flex; padding: 0; }
 .footer .legal { margin-top: 64px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; color: var(--faint); font-size: 13px; }
+.footer .legal a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .footer .giant { margin-top: 40px; padding-bottom: 0.08em; font: 500 clamp(64px, 17vw, 240px)/1 var(--sans); letter-spacing: -0.06em; text-align: center; background: linear-gradient(180deg, rgba(var(--fg-rgb), 0.10), rgba(var(--fg-rgb), 0)); -webkit-background-clip: text; background-clip: text; color: transparent; user-select: none; }
 @media (max-width: 760px) { .footer-grid { grid-template-columns: 1fr 1fr; } .footer-grid > :first-child { grid-column: 1 / -1; } }
 

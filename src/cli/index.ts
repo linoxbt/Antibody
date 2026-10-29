@@ -698,7 +698,20 @@ async function main(argv: string[]): Promise<void> {
       const port = Number(process.env.PORT ?? 8080);
       const dataDir = process.env.ANTIBODY_CLOUD_DATA ?? join(process.env.ANTIBODY_HOME ?? join(homedir(), '.antibody'), 'cloud');
       const { startCloud } = await import('../web/cloud.ts');
-      await startCloud({ dataDir, port, maxTenants: Number(process.env.ANTIBODY_CLOUD_MAX_TENANTS ?? 500), maxOpen: Number(process.env.ANTIBODY_CLOUD_MAX_OPEN ?? 40) });
+      const env = process.env;
+      const num = (k: string) => (env[k] ? Number(env[k]) : undefined);
+      const { server, auth, tenants } = await startCloud({
+        dataDir,
+        port,
+        maxTenants: num('ANTIBODY_CLOUD_MAX_TENANTS') ?? 500,
+        maxOpen: num('ANTIBODY_CLOUD_MAX_OPEN') ?? 40,
+        globalRatePerMinute: num('ANTIBODY_CLOUD_GLOBAL_RATE'),
+        newTenantsPerHour: num('ANTIBODY_CLOUD_NEW_PER_HOUR'),
+        idleDays: num('ANTIBODY_CLOUD_IDLE_DAYS'),
+        ...(env.ANTIBODY_METRICS_TOKEN ? { metricsToken: env.ANTIBODY_METRICS_TOKEN } : {}),
+      });
+      // Redeploys send SIGTERM: keep sessions, close worlds cleanly.
+      for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => (auth.flush(), tenants.close(), server.close(), process.exit(0)));
       console.log(green(`hosted sandbox on :${port}`) + dim(` (data ${dataDir}; every world is SIMULATED)`));
       return;
     }

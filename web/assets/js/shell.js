@@ -2,6 +2,7 @@
 // starfield and motion. The signed-in console has its own shell (app/main.js).
 import { el } from './ui.js';
 import { sky, armReveals } from './motion.js';
+import { themeButton } from './theme.js';
 
 export const REPO = 'https://github.com/linoxbt/Antibody';
 
@@ -36,6 +37,7 @@ export function mountShell(current) {
       brand(),
       el('nav', { class: 'nav-links', 'aria-label': 'Primary' }, ...PAGES.filter((p) => NAV_LINKS.includes(p.id)).map((p) => el('a', { href: p.href, ...here(p) }, p.label))),
       el('nav', { class: 'nav-links', 'aria-label': 'Resources' }, el('a', { href: REPO, target: '_blank', rel: 'noopener' }, 'GitHub')),
+      themeButton(),
       el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: '/login' }, 'Sign in'), el('a', { class: 'btn btn-primary btn-sm', href: '/app' }, 'Open console')),
       burger,
     ),

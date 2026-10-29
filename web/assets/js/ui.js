@@ -91,9 +91,16 @@ export function unprotectedPane(u) {
 // ---- lineage graph -----------------------------------------------------------
 
 const CLASS_VAR = { trusted: '--trusted', derived: '--derived', untrusted: '--untrusted', unverified: '--unverified' };
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-export function renderGraph(host, nodes, { highlightSeq = null, quarantines = [], selected = null, onSelect = () => {}, nodeW = 214, colW = 262 } = {}) {
+/**
+ * The lineage graph. Two layouts:
+ *   columns  sources → observations → notes → decisions left to right (wide screens)
+ *   column   one node per row in lineage order, edges as arcs in a left gutter;
+ *            the SVG scales to its container, so nothing is cut off on a phone
+ * Colours come from CSS variables, so the graph follows the theme without a redraw.
+ */
+export function renderGraph(host, nodes, { highlightSeq = null, quarantines = [], selected = null, onSelect = () => {}, nodeW = 214, colW = 262, layout = 'auto' } = {}) {
+  const column = layout === 'column' || (layout === 'auto' && window.innerWidth < 760);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const depth = new Map();
   const d = (id, seen = new Set()) => {
@@ -121,52 +128,71 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
     if (!cols.has(c)) cols.set(c, []);
     cols.get(c).push(n);
   }
-  const H = 62, PX = 28, PY = 24, NH = 40;
+  for (const list of cols.values()) list.sort((a, b) => a.ckpt - b.ckpt || a.lane.localeCompare(b.lane));
+
   const pos = new Map();
-  // Column 0 holds source objects when there are any; memories start after them.
-  const off = sources.length ? 0 : -1;
-  sources.forEach((s, i) => pos.set(`src:${s.id}`, { x: PX, y: PY + i * H }));
-  for (const [c, list] of cols) {
-    list.sort((a, b) => a.ckpt - b.ckpt || a.lane.localeCompare(b.lane));
-    list.forEach((n, i) => pos.set(n.id, { x: PX + (c + off) * colW, y: PY + i * H }));
+  let width, height, NH, edgePath;
+  if (column) {
+    // One row each: sources first, then memories by depth. Arcs bulge into the left gutter.
+    const G = 46, PY = 12, H = 56;
+    NH = 42;
+    width = 340;
+    nodeW = width - G - 4;
+    const order = [...sources.map((s) => `src:${s.id}`), ...[...cols.keys()].sort((a, b) => a - b).flatMap((c) => cols.get(c).map((n) => n.id))];
+    order.forEach((k, i) => pos.set(k, { x: G, y: PY + i * H, row: i }));
+    height = PY * 2 + Math.max(order.length - 1, 0) * H + NH;
+    edgePath = (p, r) => {
+      const y1 = p.y + NH / 2, y2 = r.y + NH / 2, bulge = Math.min(G - 6, 10 + Math.abs(r.row - p.row) * 6);
+      return `M${G},${y1} C${G - bulge},${y1} ${G - bulge},${y2} ${G},${y2}`;
+    };
+  } else {
+    const H = 62, PX = 28, PY = 24;
+    NH = 40;
+    // Column 0 holds source objects when there are any; memories start after them.
+    const off = sources.length ? 0 : -1;
+    sources.forEach((s, i) => pos.set(`src:${s.id}`, { x: PX, y: PY + i * H }));
+    for (const [c, list] of cols) list.forEach((n, i) => pos.set(n.id, { x: PX + (c + off) * colW, y: PY + i * H }));
+    const maxCol = Math.max(1, ...cols.keys()) + off;
+    const rows = Math.max(sources.length, ...[...cols.values()].map((l) => l.length), 1);
+    width = PX * 2 + maxCol * colW + nodeW;
+    height = PY * 2 + (rows - 1) * H + NH;
+    edgePath = (p, r) => {
+      const x1 = p.x + nodeW, y1 = p.y + NH / 2, x2 = r.x, y2 = r.y + NH / 2, mx = (x1 + x2) / 2;
+      return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    };
   }
-  const maxCol = Math.max(1, ...cols.keys()) + off;
-  const rows = Math.max(sources.length, ...[...cols.values()].map((l) => l.length), 1);
-  const width = PX * 2 + maxCol * colW + nodeW;
-  const height = PY * 2 + (rows - 1) * H + NH;
 
   const hot = new Set(highlightSeq === null ? [] : nodes.filter((n) => n.seedHits.includes(highlightSeq)).map((n) => n.id));
   const q = quarantines.find((x) => x.seq === highlightSeq);
   const hotSrc = q?.seed?.type === 'source' ? `src:${q.seed.value}` : null;
 
-  const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', 'aria-label': 'Memory lineage graph' });
+  const root = svg('svg', column ? { viewBox: `0 0 ${width} ${height}`, class: 'col', role: 'img', 'aria-label': 'Memory lineage graph' } : { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', 'aria-label': 'Memory lineage graph' });
   const edge = (a, b, isHot) => {
     const p = pos.get(a), r = pos.get(b);
-    if (!p || !r) return;
-    const x1 = p.x + nodeW, y1 = p.y + NH / 2, x2 = r.x, y2 = r.y + NH / 2, mx = (x1 + x2) / 2;
-    root.append(svg('path', { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, class: `g-edge${isHot ? ' hot' : ''}` }));
+    if (p && r) root.append(svg('path', { d: edgePath(p, r), class: `g-edge${isHot ? ' hot' : ''}` }));
   };
   for (const s of sources) for (const o of s.obs) edge(`src:${s.id}`, o, hotSrc === `src:${s.id}` && hot.has(o));
   for (const n of nodes) for (const p of n.parents) edge(p, n.id, hot.has(p) && hot.has(n.id));
 
+  const chars = column ? 34 : 30;
   for (const s of sources) {
     const p = pos.get(`src:${s.id}`);
     const g = svg('g', { class: `g-node${highlightSeq !== null && hotSrc !== `src:${s.id}` ? ' dim' : ''}`, transform: `translate(${p.x},${p.y})` });
-    g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: NH / 2, fill: 'transparent', stroke: css('--accent-hi'), 'stroke-dasharray': '3 4' }));
-    g.append(svg('text', { x: 16, y: 17 }, `◆ ${short(s.id, 18)}`), svg('text', { x: 16, y: 31, class: 'sub' }, short(String(s.type).split('::').slice(-1)[0], 30)));
+    g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: NH / 2, style: 'fill:transparent;stroke:var(--accent-hi)', 'stroke-dasharray': '3 4' }));
+    g.append(svg('text', { x: 16, y: 17 }, `◆ ${short(s.id, 18)}`), svg('text', { x: 16, y: 31, class: 'sub' }, short(String(s.type).split('::').slice(-1)[0], chars)));
     root.append(g);
   }
   for (const n of nodes) {
     const p = pos.get(n.id);
-    const stroke = n.quarantined ? css('--garnet') : css(CLASS_VAR[n.cls]);
+    const color = n.quarantined ? 'var(--garnet)' : `var(${CLASS_VAR[n.cls]})`;
     const g = svg('g', { class: `g-node${highlightSeq !== null && !hot.has(n.id) ? ' dim' : ''}${selected === n.id ? ' sel' : ''}`, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: 'button', 'aria-label': `${n.kind} ${n.cls}` });
-    const fill = `color-mix(in srgb, ${stroke} 12%, ${css('--bg-2')})`;
+    const style = `fill:color-mix(in srgb, ${color} 12%, var(--bg-2));stroke:${color};color:${color}`;
     const dash = n.quarantined ? '5 4' : null;
-    if (n.kind === 'decision') g.append(svg('polygon', { class: 'shape', points: `0,${NH / 2} 14,0 ${nodeW - 14},0 ${nodeW},${NH / 2} ${nodeW - 14},${NH} 14,${NH}`, fill, stroke, 'stroke-width': 1.4, 'stroke-dasharray': dash }));
-    else g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: 9, fill, stroke, 'stroke-width': 1.4, 'stroke-dasharray': dash }));
+    if (n.kind === 'decision') g.append(svg('polygon', { class: 'shape', points: `0,${NH / 2} 14,0 ${nodeW - 14},0 ${nodeW},${NH / 2} ${nodeW - 14},${NH} 14,${NH}`, style, 'stroke-width': 1.4, 'stroke-dasharray': dash }));
+    else g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: 9, style, 'stroke-width': 1.4, 'stroke-dasharray': dash }));
     const verdict = n.kind === 'decision' ? (/Payment decision: (\w+)( \w+)?/.exec(n.text)?.slice(1).join('').trim() ?? '') : '';
     g.append(
-      svg('text', { x: 14, y: 17 }, short(`${n.kind}${verdict ? ' · ' + verdict : ''}`, 30)),
+      svg('text', { x: 14, y: 17 }, short(`${n.kind}${verdict ? ' · ' + verdict : ''}`, chars)),
       svg('text', { x: 14, y: 31, class: 'sub' }, `${n.lane} · ${n.cls}${n.quarantined ? ' · excluded' : n.unresolved ? ' · unresolved' : ''}`),
     );
     const pick = () => onSelect(n);
@@ -174,6 +200,7 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
     g.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), pick()));
     root.append(g);
   }
+  host.classList.toggle('is-col', column);
   host.replaceChildren(root);
 }
 

@@ -1,5 +1,5 @@
-// Site shell: navigation (with mobile drawer), footer, toast, starfield and
-// motion, and the live/recorded mode bar used by the console pages.
+// Public site shell: navigation (with mobile drawer), footer, toast,
+// starfield and motion. The signed-in console has its own shell (app/main.js).
 import { el } from './ui.js';
 import { sky, armReveals } from './motion.js';
 
@@ -8,13 +8,10 @@ export const REPO = 'https://github.com/linoxbt/Antibody';
 const PAGES = [
   { href: '/', id: 'home', label: 'Overview', hint: '00' },
   { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '01' },
-  { href: '/console', id: 'console', label: 'Console', hint: '02' },
-  { href: '/graph', id: 'graph', label: 'Blast radius', hint: '03' },
-  { href: '/ledger', id: 'ledger', label: 'Ledger', hint: '04' },
-  { href: '/incidents', id: 'incidents', label: 'Incidents', hint: '05' },
-  { href: '/security', id: 'security', label: 'Security', hint: '06' },
+  { href: '/security', id: 'security', label: 'Security', hint: '02' },
+  { href: '/login', id: 'login', label: 'Sign in', hint: '03' },
 ];
-const NAV_LINKS = ['walkthrough', 'graph', 'ledger', 'incidents', 'security'];
+const NAV_LINKS = ['walkthrough', 'security'];
 
 function brand() {
   return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'));
@@ -27,7 +24,8 @@ export function mountShell(current) {
     'nav',
     { class: 'drawer', id: 'drawer', 'aria-label': 'Site', 'aria-hidden': 'true' },
     ...PAGES.map((p) => el('a', { href: p.href, ...here(p) }, p.label, el('span', {}, p.hint))),
-    el('a', { class: 'btn btn-primary', href: REPO, target: '_blank', rel: 'noopener' }, 'View on GitHub'),
+    el('a', { class: 'btn btn-primary', href: '/app' }, 'Open console'),
+    el('a', { class: 'btn btn-ghost', href: REPO, target: '_blank', rel: 'noopener', style: 'margin-top:10px' }, 'View on GitHub'),
   );
   const header = el(
     'header',
@@ -37,7 +35,8 @@ export function mountShell(current) {
       { class: 'wrap' },
       brand(),
       el('nav', { class: 'nav-links', 'aria-label': 'Primary' }, ...PAGES.filter((p) => NAV_LINKS.includes(p.id)).map((p) => el('a', { href: p.href, ...here(p) }, p.label))),
-      el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: REPO, target: '_blank', rel: 'noopener' }, 'GitHub'), el('a', { class: 'btn btn-primary btn-sm', href: '/console' }, 'Open console')),
+      el('nav', { class: 'nav-links', 'aria-label': 'Resources' }, el('a', { href: REPO, target: '_blank', rel: 'noopener' }, 'GitHub')),
+      el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: '/login' }, 'Sign in'), el('a', { class: 'btn btn-primary btn-sm', href: '/app' }, 'Open console')),
       burger,
     ),
   );
@@ -75,9 +74,9 @@ export function mountShell(current) {
           'div',
           { class: 'footer-grid' },
           el('div', {}, brand(), el('p', {}, 'An immune system for agent memory.')),
-          col('Product', [['Walkthrough', '/walkthrough'], ['Console', '/console'], ['Blast radius', '/graph'], ['Security', '/security']]),
-          col('Operate', [['Ledger', '/ledger'], ['Incidents', '/incidents'], ['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set', `${REPO}/blob/main/docs/attack-set-results.md`, true]]),
-          col('Project', [['Source', REPO, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
+          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Sign in', '/login'], ['Console', '/app']]),
+          col('Operate', [['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set', `${REPO}/blob/main/docs/attack-set-results.md`, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true]]),
+          col('Project', [['Source', REPO, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
         ),
         el('div', { class: 'giant', 'aria-hidden': 'true' }, 'antibody'),
         el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT`), el('span', {}, 'Demo data is simulated.')),
@@ -96,18 +95,4 @@ export function toast(msg, ms = 4200) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
-}
-
-/** Live/recorded indicator; in recorded mode a step selector drives the page. */
-export function modeBar(src, onChange) {
-  if (src.mode === 'live') {
-    const s = src.state;
-    return el('div', { class: 'modebar' }, el('span', { class: 'pill live' }, 'Live'), el('span', { class: 'muted small' }, s.backend === 'offline' ? 'simulated' : 'mainnet'));
-  }
-  const sel = el('select', { 'aria-label': 'Recorded moment' }, ...src.steps.map((s, i) => el('option', { value: String(i), ...(i === src.index ? { selected: true } : {}) }, `${i + 1} · ${s.time} · ${s.title}`)));
-  sel.addEventListener('change', () => {
-    src.setIndex(Number(sel.value));
-    onChange();
-  });
-  return el('div', { class: 'modebar' }, el('span', { class: 'pill rec' }, 'Recorded'), sel);
 }

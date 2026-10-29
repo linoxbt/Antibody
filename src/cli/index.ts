@@ -121,7 +121,7 @@ async function main(argv: string[]): Promise<void> {
       const cfg = loadConfig();
       if (cfg.backend === 'offline') banner(['━━ SIMULATED ━━ offline backend: fixture chain + local relayer ━━']);
       const read = (role: Role) => readFileSync(keyPath(cfg.home, role), 'utf8').trim();
-      const res = cfg.backend === 'offline' ? await setupOffline(cfg, { readKeyFile: read }) : await setupLive(cfg, { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY ?? '', readKeyFile: read });
+      const res = cfg.backend === 'offline' ? await setupOffline(cfg, { readKeyFile: read, ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY || undefined }) : await setupLive(cfg, { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY ?? '', readKeyFile: read });
       console.log(bold('Antibody set up'));
       console.log(`  account ${res.accountId}\n  owner   ${res.owner}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
       for (const l of res.lanes) console.log(`  ${l.label.padEnd(24)} ${l.pub}  ${dim('tx ' + l.digest)}`);
@@ -440,7 +440,7 @@ async function main(argv: string[]): Promise<void> {
       console.log(green(`control listening on ${socketPath(r.cfg, 'control')}`));
       if (values.web) {
         await startWeb(r, control, r.cfg.webPort);
-        console.log(green(`web view on http://127.0.0.1:${r.cfg.webPort}`));
+        console.log(green(`web view on http://127.0.0.1:${r.cfg.webPort}`) + dim(' (sign in with the owner wallet, or run `antibody login` for an operator link)'));
       }
       return;
     }
@@ -479,10 +479,17 @@ async function main(argv: string[]): Promise<void> {
         child.unref();
         writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
         await waitFor(name === 'agent' ? join(runDir(cfg), 'agent.sock') : socketPath(cfg, name as 'control' | 'signer'), 30_000);
-        if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/state`, 30_000);
+        if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/auth/status`, 30_000);
         console.log(green(`${name} up`) + dim(` pid ${child.pid}, log ${join(cfg.home, 'logs', `${name}.out`)}`));
       }
       console.log(`web view: http://127.0.0.1:${cfg.webPort}`);
+      console.log(`sign in:  ${loginLink(cfg)}` + dim('  (operator link, this run only)'));
+      return;
+    }
+
+    case 'login': {
+      const cfg = loadConfig();
+      console.log(loginLink(cfg));
       return;
     }
 
@@ -553,6 +560,13 @@ async function main(argv: string[]): Promise<void> {
   }
 }
 
+/** One-click console sign-in for whoever can read the run directory. The token rides in the fragment, never in a request line. */
+function loginLink(cfg: ReturnType<typeof loadConfig>): string {
+  const p = join(runDir(cfg), 'web-token');
+  if (!existsSync(p)) throw new Error('no operator token yet: start the console with antibody up');
+  return `http://127.0.0.1:${cfg.webPort}/login#token=${readFileSync(p, 'utf8').trim()}`;
+}
+
 async function waitForHttp(url: string, ms: number) {
   const t = Date.now() + ms;
   for (;;) {
@@ -580,6 +594,7 @@ Setup and status
   antibody setup                              keys, on-chain lane labels, ledger genesis
   antibody status                             account, lane keys, checkpoint, wallet
   antibody up | down                          start/stop control (+web), signer and agent daemons
+  antibody login                              print a one-click sign-in link for the web console
 
 Human (user key)
   antibody payee add --label L --address 0x… --coin USDC --cap N

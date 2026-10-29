@@ -1,11 +1,12 @@
 /**
  * Web view (FR-16, M3): lanes panel, blast-radius graph, split screen against
  * the unprotected agent, quarantine and revoke, both digests. Served by the
- * control process on 127.0.0.1 only; state-changing calls require the
+ * control process on 127.0.0.1 only. Every /api route except sign-in needs a
+ * console session (see auth.ts); state-changing calls also require the
  * x-antibody-ui header so a cross-site form post cannot trigger them.
  */
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ import { IpcClient, unixTransport } from '../ipc.ts';
 import type { Runtime } from '../runtime.ts';
 import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
+import { Auth, AuthError } from './auth.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WEB = join(ROOT, 'web');
@@ -33,7 +35,10 @@ const TYPES: Record<string, string> = {
 };
 const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
 
-/** Resolve a URL path to a file under web/ (clean URLs: /console → console.html). Never escapes web/. */
+/** Pages that moved into the signed-in app. */
+export const MOVED: Record<string, string> = { '/console': '/app/steward', '/graph': '/app/memory', '/ledger': '/app/ledger', '/incidents': '/app/incidents' };
+
+/** Resolve a URL path to a file under web/ (clean URLs: /login → login.html). Never escapes web/. */
 function staticFile(pathname: string): string | null {
   let rel: string;
   try {
@@ -48,6 +53,8 @@ function staticFile(pathname: string): string | null {
     if (!p.startsWith(WEB + '/')) return null;
     if (existsSync(p) && statSync(p).isFile() && TYPES[extname(p)]) return p;
   }
+  // The app is a single page; its client-side routes all load app.html.
+  if (rel === '/app' || rel.startsWith('/app/')) return join(WEB, 'app.html');
   // The recorded walkthrough lives in site/ once `scripts/build-site.ts` has run.
   if (rel === '/demo.json' && existsSync(join(ROOT, 'site', 'demo.json'))) return join(ROOT, 'site', 'demo.json');
   return null;
@@ -117,22 +124,59 @@ export async function stateJson(rt: Runtime, control: Control) {
   };
 }
 
-export function startWeb(rt: Runtime, control: Control, port: number): Promise<Server> {
+/** Where the operator link token is written (0600) for `antibody up` and `antibody login` to print. */
+export function tokenPath(rt: Runtime): string {
+  return join(rt.cfg.home, 'run', 'web-token');
+}
+
+export async function startWeb(rt: Runtime, control: Control, port: number, auth?: Auth): Promise<{ server: Server; auth: Auth }> {
+  const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined });
+  mkdirSync(join(rt.cfg.home, 'run'), { recursive: true, mode: 0o700 });
+  writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600 });
+  chmodSync(tokenPath(rt), 0o600);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-    const send = (status: number, body: unknown) => {
-      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers });
       res.end(JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     };
     try {
+      if (req.method === 'GET' && MOVED[url.pathname]) {
+        res.writeHead(301, { location: MOVED[url.pathname] + url.search, 'cache-control': 'no-store' });
+        res.end();
+        return;
+      }
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         const file = staticFile(url.pathname);
         const status = file ? 200 : 404;
         const path = file ?? join(WEB, '404.html');
+        const bytes = readFileSync(path); // before writeHead, so a read error still gets a clean 500
         res.writeHead(status, { 'content-type': TYPES[extname(path)]!, 'cache-control': 'no-store', 'content-security-policy': CSP, 'x-content-type-options': 'nosniff' });
-        res.end(readFileSync(path));
+        res.end(bytes);
         return;
       }
+      const session = a.fromCookie(req.headers.cookie);
+      if (req.method === 'GET' && url.pathname === '/api/auth/status') {
+        return send(200, { node: true, authenticated: !!session, method: session?.method ?? null, address: session?.address ?? null, expiresAt: session?.expiresAt ?? null });
+      }
+      if (req.method === 'POST' && url.pathname.startsWith('/api/auth/')) {
+        if (req.headers['x-antibody-ui'] !== '1') return send(403, { error: 'missing x-antibody-ui header' });
+        const body = (await readBody(req)) as Record<string, unknown>;
+        if (url.pathname === '/api/auth/challenge') return send(200, a.challenge(String(body.address ?? ''), `http://${req.headers.host ?? `127.0.0.1:${port}`}`));
+        if (url.pathname === '/api/auth/logout') {
+          if (session) a.end(session.id);
+          return send(200, { ok: true }, { 'set-cookie': Auth.clearCookie() });
+        }
+        const s =
+          url.pathname === '/api/auth/wallet'
+            ? await a.signInWithWallet(String(body.address ?? ''), String(body.message ?? ''), String(body.signature ?? ''))
+            : url.pathname === '/api/auth/operator'
+              ? a.signInWithOperatorToken(String(body.token ?? ''))
+              : null;
+        if (!s) return send(404, { error: 'not found' });
+        return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': Auth.setCookie(s) });
+      }
+      if (url.pathname.startsWith('/api/') && !session) return send(401, { error: 'sign in required' });
       if (req.method === 'GET' && url.pathname === '/api/state') return send(200, await stateJson(rt, control));
       if (req.method === 'GET' && url.pathname === '/api/blast') {
         const r = await control.blast(Number(url.searchParams.get('seq')));
@@ -177,8 +221,10 @@ export function startWeb(rt: Runtime, control: Control, port: number): Promise<S
       }
       return send(404, { error: 'not found' });
     } catch (e) {
+      if (e instanceof AuthError) return send(e.status, { error: e.message });
+      if (e instanceof SyntaxError) return send(400, { error: 'malformed JSON body' });
       return send(500, { error: (e as Error).message });
     }
   });
-  return new Promise((resolveP) => server.listen(port, '127.0.0.1', () => resolveP(server)));
+  return new Promise((resolveP) => server.listen(port, '127.0.0.1', () => resolveP({ server, auth: a })));
 }

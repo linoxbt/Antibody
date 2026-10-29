@@ -1,5 +1,6 @@
-// Sign-in: Sui wallets found through the Wallet Standard (no SDK, no CDN),
-// the operator link from `antibody login`, or the read-only recorded demo.
+// Sign-in. With an Antibody install behind the page: the owner's Sui wallet
+// (Wallet Standard, no SDK) or an operator token. On the public site there is
+// nothing to sign in to, so it offers the recorded demo.
 import { sky, armReveals } from '../motion.js';
 import { api, authStatus, setDemo } from '../data.js';
 import { $, el } from '../ui.js';
@@ -15,70 +16,61 @@ const next = (() => {
   const n = params.get('next') ?? '';
   return n.startsWith('/app') && !n.startsWith('//') ? n : '/app';
 })();
-let node = null;
 
 const say = (text, kind = '') => {
-  const m = $('msg');
-  m.textContent = text;
-  m.className = `auth-msg ${kind}`;
+  $('msg').textContent = text;
+  $('msg').className = `auth-msg ${kind}`;
 };
 const done = () => {
   setDemo(false);
-  say('Signed in.', 'ok');
   location.replace(next);
 };
 
 // ---- wallets ---------------------------------------------------------------------
 const wallets = [];
+
 async function signInWith(w, btn) {
-  if (!node) return say('Wallet sign-in needs a running Antibody node: run antibody up, then open its console.', 'err');
   btn.disabled = true;
-  btn.classList.add('busy');
   const hint = btn.querySelector('small');
   try {
-    hint.textContent = 'connecting';
+    hint.textContent = 'connecting…';
     const account = await connect(w);
-    hint.textContent = 'sign in wallet';
+    hint.textContent = 'approve in wallet…';
     const ch = await api('/api/auth/challenge', { address: account.address });
     const signature = await signMessage(w, account, ch.message);
-    hint.textContent = 'verifying';
+    hint.textContent = 'checking…';
     await api('/api/auth/wallet', { address: account.address, message: ch.message, signature });
     done();
   } catch (e) {
-    say(cancelled(e) ? 'Request cancelled in the wallet.' : e.message, 'err');
-    hint.textContent = 'detected';
+    say(cancelled(e) ? 'Cancelled.' : e.message, 'err');
+    hint.textContent = '';
     btn.disabled = false;
-    btn.classList.remove('busy');
   }
 }
 
 function renderWallets() {
-  if (node === false && wallets.length) $('wallet-seen').replaceChildren(el('span', { class: 'seen' }, `${wallets.map((w) => w.name).join(', ')} detected, ready for your node.`));
   const host = $('wallets');
   if (!wallets.length) {
-    host.replaceChildren(el('div', { class: 'wallet-empty' }, 'No Sui wallet detected. Install ', el('a', { href: 'https://slush.app', target: '_blank', rel: 'noopener' }, 'Slush'), ' or another Sui wallet, then reload.'));
+    host.replaceChildren(el('div', { class: 'wallet-empty' }, 'No Sui wallet found. ', el('a', { href: 'https://slush.app', target: '_blank', rel: 'noopener' }, 'Get Slush')));
     return;
   }
   host.replaceChildren(
     ...wallets.map((w) => {
-      const b = el('button', { class: 'wallet-btn', type: 'button' }, w.icon ? el('img', { src: w.icon, alt: '', width: 32, height: 32 }) : el('span', { class: 'wi' }, w.name[0] ?? '?'), `Continue with ${w.name}`, el('small', {}, 'detected'));
+      const b = el('button', { class: 'wallet-btn', type: 'button' }, w.icon ? el('img', { src: w.icon, alt: '', width: 32, height: 32 }) : el('span', { class: 'wi' }, w.name[0] ?? '?'), w.name, el('small', {}));
       b.addEventListener('click', () => signInWith(w, b));
       return b;
     }),
   );
 }
+
 discoverWallets((ws) => {
   wallets.splice(0, wallets.length, ...ws.filter((w) => w.features['sui:signPersonalMessage']));
   if (wallets.length) renderWallets();
 });
-// Wallets register within a tick of app-ready; show the empty state only after that.
-setTimeout(renderWallets, 600);
 
-// ---- operator link ----------------------------------------------------------------
+// ---- operator token ----------------------------------------------------------------
 async function operator(token) {
-  if (!node) return say('The operator link works on the machine running antibody up.', 'err');
   try {
-    say('Signing in…');
     await api('/api/auth/operator', { token });
     done();
   } catch (e) {
@@ -88,25 +80,24 @@ async function operator(token) {
 $('op-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const t = $('op-token').value.trim();
-  if (!t) return $('op-token').focus();
-  operator(t);
+  if (t) operator(t);
+  else $('op-token').focus();
 });
 
-// ---- demo -------------------------------------------------------------------------
-$('demo').href = next;
 $('demo').addEventListener('click', () => setDemo(true));
 
-// ---- boot -------------------------------------------------------------------------
+// ---- boot ----------------------------------------------------------------------------
 (async () => {
   const fromHash = /(?:^|[#&])token=([^&]+)/.exec(location.hash)?.[1];
   if (fromHash) history.replaceState(null, '', location.pathname + location.search); // keep the token out of history
   const st = await authStatus();
-  node = !!st;
   document.body.dataset.node = st ? 'on' : 'off';
-  $('node-state').textContent = st ? 'Node online · signing is free and moves no funds' : 'Public demo site';
-  renderWallets();
-  if (st?.authenticated) return location.replace(next);
-  if (params.has('signedout')) say('Signed out.');
-  if (params.has('expired')) say('Your session ended. Sign in again.', 'err');
-  if (fromHash && st) operator(decodeURIComponent(fromHash));
+  if (!st) return;
+  if (st.authenticated) return location.replace(next);
+  $('demo').href = next;
+  $('demo').replaceChildren('or enter the demo');
+  // Wallets register within a tick of app-ready; show the empty state only after that.
+  setTimeout(renderWallets, 600);
+  if (params.has('expired')) say('Session ended. Sign in again.', 'err');
+  if (fromHash) operator(decodeURIComponent(fromHash));
 })();

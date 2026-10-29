@@ -1,0 +1,15 @@
+# Public demo site: the web view replaying a recorded SIMULATED walkthrough,
+# generated at build time by running the real code on the offline backend.
+[build]
+  command = "npx tsx scripts/build-site.ts"
+  publish = "site"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"

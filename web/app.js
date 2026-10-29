@@ -31,6 +31,10 @@ async function api(path, body) {
 }
 
 let state = null;
+// Static demo mode (e.g. the public Netlify site): no control daemon behind the
+// page, so it replays a recorded SIMULATED walkthrough from demo.json.
+let demo = null;
+let demoIdx = 0;
 let selected = null;
 let highlightSeq = null;
 let rebuildDigest = null;
@@ -317,7 +321,14 @@ function renderForensic() {
 
 // ---- actions ----------------------------------------------------------------
 
+function demoOnly() {
+  const n = $('demo-note');
+  n.textContent = 'This public page replays a recorded walkthrough, so actions are read-only. Run it yourself: npm install && npx tsx scripts/demo-m1.ts, or antibody up for the live web view.';
+  n.classList.remove('hidden');
+}
+
 async function quarantine(type, value) {
+  if (demo) return demoOnly();
   try {
     const pv = await api('/api/preview', { type, value });
     if (!confirm(`Quarantine ${type} ${value}?\n\n${pv.memories - pv.decisions} memories and ${pv.decisions} decisions leave Steward's context. They stay on Walrus as evidence.`)) return;
@@ -331,6 +342,7 @@ async function quarantine(type, value) {
 }
 
 async function report(seq) {
+  if (demo) return demoOnly();
   try {
     const r = await api('/api/report', { seq });
     alert(`Incident report ${r.simulated ? '(SIMULATED, local) ' : ''}published\nblob ${r.blobId}\n${r.url}`);
@@ -340,8 +352,41 @@ async function report(seq) {
   }
 }
 
+function renderDemoBar() {
+  const step = demo.steps[demoIdx];
+  $('demo-bar').classList.remove('hidden');
+  $('demo-step').textContent = `Step ${demoIdx + 1} of ${demo.steps.length} · ${step.time}`;
+  $('demo-title').textContent = step.title;
+  $('demo-text').textContent = step.text;
+  $('demo-prev').disabled = demoIdx === 0;
+  $('demo-next').disabled = demoIdx === demo.steps.length - 1;
+  $('demo-dots').replaceChildren(
+    ...demo.steps.map((s, i) => el('button', { class: `dot-btn${i === demoIdx ? ' on' : ''}`, title: s.title, 'aria-label': `Step ${i + 1}: ${s.title}`, onclick: () => goStep(i) })),
+  );
+  $('demo-meta').textContent = `Recorded ${demo.generatedAt.slice(0, 10)} by running the real code on the offline backend (SIMULATED).`;
+}
+
+function goStep(i) {
+  demoIdx = Math.max(0, Math.min(demo.steps.length - 1, i));
+  const step = demo.steps[demoIdx];
+  highlightSeq = step.highlight ?? null;
+  rebuildDigest = step.rebuildDigest ?? null;
+  selected = null;
+  const lastRun = demo.steps.slice(0, demoIdx + 1).reverse().find((s) => s.run);
+  if (lastRun) {
+    $('instruction').value = lastRun.run.instruction;
+    renderRun(lastRun.run);
+  }
+  $('demo-note').classList.add('hidden');
+  renderDemoBar();
+  refresh().then(() => {
+    const sel = $('seed-select');
+    sel.value = highlightSeq === null ? '' : String(highlightSeq);
+  });
+}
+
 async function refresh() {
-  state = await api('/api/state');
+  state = demo ? demo.steps[demoIdx].state : await api('/api/state');
   renderBanners();
   renderDigests();
   renderLanes();
@@ -355,6 +400,11 @@ async function refresh() {
 
 $('run-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (demo) {
+    // Jump to the next recorded run.
+    const next = demo.steps.findIndex((s, i) => i > demoIdx && s.run);
+    return next >= 0 ? goStep(next) : demoOnly();
+  }
   const b = $('btn-run');
   b.disabled = true;
   b.textContent = 'Running…';
@@ -370,6 +420,10 @@ $('run-form').addEventListener('submit', async (e) => {
 });
 
 $('btn-rebuild').addEventListener('click', async () => {
+  if (demo) {
+    const next = demo.steps.findIndex((s) => s.rebuildDigest);
+    return next >= 0 ? goStep(next) : demoOnly();
+  }
   const b = $('btn-rebuild');
   b.disabled = true;
   b.textContent = 'Rebuilding…';
@@ -398,7 +452,27 @@ $('seed-select').addEventListener('change', (e) => {
 
 $('btn-revoke').addEventListener('click', () => $('revoke-help').classList.toggle('hidden'));
 
-refresh().catch((e) => {
-  document.body.prepend(el('div', { class: 'err' }, `Cannot load state: ${e.message}`));
+$('demo-prev').addEventListener('click', () => goStep(demoIdx - 1));
+$('demo-next').addEventListener('click', () => goStep(demoIdx + 1));
+document.addEventListener('keydown', (e) => {
+  if (!demo || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  if (e.key === 'ArrowRight') goStep(demoIdx + 1);
+  if (e.key === 'ArrowLeft') goStep(demoIdx - 1);
 });
-setInterval(() => refresh().catch(() => {}), 15000);
+
+async function boot() {
+  try {
+    await refresh();
+    setInterval(() => refresh().catch(() => {}), 15000);
+  } catch (e) {
+    // No control daemon: fall back to the recorded walkthrough if one is published.
+    const res = await fetch('demo.json').catch(() => null);
+    if (!res || !res.ok) {
+      document.body.prepend(el('div', { class: 'err' }, `Cannot load state: ${e.message}`));
+      return;
+    }
+    demo = await res.json();
+    goStep(0);
+  }
+}
+boot();

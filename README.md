@@ -68,6 +68,11 @@ open http://127.0.0.1:7402                       # lanes, graph, split screen, d
 
 ![Web view](docs/web-view.png)
 
+**Public walkthrough:** the Netlify site replays the same story in the web view,
+recorded at build time by running this code on the offline backend
+(`scripts/build-site.ts` → `site/`, config in `netlify.toml`). It is read-only and
+labelled SIMULATED; for the interactive version run `antibody up` locally.
+
 ---
 
 ## How it fits Total Recall

@@ -95,6 +95,9 @@ export default {
         card(
           'Lanes',
           el('span', { class: 'pill plain' }, `${s.lanes.filter((x) => x.status === 'active').length} / ${s.lanes.length} active`),
+          s.crossCheck
+            ? el('p', { class: 'hint', style: 'margin:-6px 0 12px;display:flex;gap:8px;align-items:center' }, el('span', { class: `dot ${s.crossCheck.agreed ? 'g' : 'r'}` }), s.crossCheck.agreed ? `Delegate set confirmed by a second RPC (${s.crossCheck.secondary})` : `Second RPC disagrees: ${s.crossCheck.detail ?? 'unknown'}`)
+            : null,
           ...s.lanes.map((x) => el('div', { class: 'lane' }, el('span', { class: 'name' }, x.label), el('span', { class: `pill plain ${x.status === 'active' ? 'ok' : 'bad'}` }, x.status), el('span', { class: 'key' }, x.pub))),
         ),
         el(

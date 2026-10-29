@@ -40,7 +40,7 @@ export default {
         card(
           'Node',
           el('span', { class: `pill ${s.simulated ? 'rec' : 'live'}` }, s.simulated ? 'simulated' : 'mainnet'),
-          kv(['Backend', s.backend], ['Chain reads', s.chain], ['Account', code(s.account.id)], ['Owner', code(s.account.owner)], ['Steward wallet', code(s.wallet)], ['Checkpoint', String(s.checkpoint)]),
+          kv(['Backend', s.backend], ['Chain reads', s.chain], ['Delegate set', s.crossCheck ? `cross-checked with ${s.crossCheck.secondary}${s.crossCheck.agreed === false ? ' (DISAGREES: payments blocked)' : ''}` : 'single reader (set ANTIBODY_CROSSCHECK_RPC_URL for a second)'], ['Account', code(s.account.id)], ['Owner', code(s.account.owner)], ['Steward wallet', code(s.wallet)], ['Checkpoint', String(s.checkpoint)]),
         ),
       ),
       s.banners?.length ? card('Notices', null, ...s.banners.map((b) => el('p', { class: 'hint', style: 'font-size:14px' }, b.replace(/━+/g, '').trim()))) : null,

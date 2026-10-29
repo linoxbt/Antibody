@@ -22,6 +22,7 @@ import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
 import { normalizeSuiAddress } from '@mysten/sui/utils';
 import { LANE_LABEL, LANES, type Lane } from '../core/types.ts';
 import { SdkChainReader } from '../adapters/chain-sdk.ts';
+import { primaryOf } from '../adapters/chain-crosscheck.ts';
 import type { Control } from '../control/control.ts';
 import type { Runtime } from '../runtime.ts';
 import { AuthError } from './auth.ts';
@@ -71,8 +72,8 @@ export class RevokeFlow {
         `Expiration Time: ${new Date(expiresAt).toISOString()}`,
       ].join('\n');
       p = { id, mode: 'message', lane, pub: key.publicKeyHex, owner, message, simulated: true, expiresAt };
-    } else if (this.rt.chain instanceof SdkChainReader) {
-      const bytes = await this.rt.chain.buildRemoveDelegateKey({ sender: owner, accountId: account.accountId, packageId: this.rt.cfg.packageId, registryId: this.rt.cfg.registryId, publicKeyHex: key.publicKeyHex });
+    } else if (primaryOf(this.rt.chain) instanceof SdkChainReader) {
+      const bytes = await (primaryOf(this.rt.chain) as SdkChainReader).buildRemoveDelegateKey({ sender: owner, accountId: account.accountId, packageId: this.rt.cfg.packageId, registryId: this.rt.cfg.registryId, publicKeyHex: key.publicKeyHex });
       p = { id, mode: 'transaction', lane, pub: key.publicKeyHex, owner, txBytes: Buffer.from(bytes).toString('base64'), chain: `sui:${this.rt.cfg.network}`, simulated: false, expiresAt };
     } else {
       throw new AuthError(501, 'this chain reader cannot build owner transactions');

@@ -127,7 +127,8 @@ async function main() {
     for (const r of (st.state as { reports?: { url: string; filename: string }[] }).reports ?? []) if (reportFiles.has(r.filename)) r.url = `/reports/${r.filename}`;
   }
   writeFileSync(join(OUT, 'demo.json'), JSON.stringify({ generatedAt: new Date().toISOString(), simulated: true, steps }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
-  cpSync('web', OUT, { recursive: true });
+  // owner.html is served only by the CLI's one-off owner approval page (src/web/owner-sign.ts).
+  cpSync('web', OUT, { recursive: true, filter: (p) => !/[\\/]owner\.(html|js)$/.test(p) });
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));
   console.log(`site/ built: ${steps.length} recorded steps`);
 }

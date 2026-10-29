@@ -17,6 +17,7 @@ import { SdkChainReader } from './adapters/chain-sdk.ts';
 import { hasKey, writeKeyFile } from './keystore.ts';
 import { createRuntime } from './runtime.ts';
 import { buildControl } from './services.ts';
+import { STATE_VERSION } from './ops/state.ts';
 
 export interface SetupResult {
   accountId: string;
@@ -29,7 +30,7 @@ export interface SetupResult {
 
 function persist(cfg: Config, v: { accountId: string; stewardWallet: string; network: string }) {
   mkdirSync(cfg.home, { recursive: true, mode: 0o700 });
-  writeFileSync(persistedPath(cfg.home), JSON.stringify(v, null, 2) + '\n', { mode: 0o600 });
+  writeFileSync(persistedPath(cfg.home), JSON.stringify({ ...v, stateVersion: STATE_VERSION }, null, 2) + '\n', { mode: 0o600 });
 }
 
 /** Generate any missing role keys (one file per role, mode 0600). */

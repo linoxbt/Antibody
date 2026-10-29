@@ -11,7 +11,7 @@ import { loadConfig, USDC_MAINNET, type Config, type Role } from '../config.ts';
 import { laneKeyFromSeedHex } from '../core/keys.ts';
 import { normalizeSuiAddress, sha256Hex } from '../core/encoding.ts';
 import { LABEL_LANE, type QuarantineSeed } from '../core/types.ts';
-import { keyPath } from '../keystore.ts';
+import { keyPath, readKeyText } from '../keystore.ts';
 import { IpcClient, type Transport } from '../ipc.ts';
 import { createRuntime, type Runtime } from '../runtime.ts';
 import { setupOffline, type SetupResult } from '../setup.ts';
@@ -80,7 +80,7 @@ export async function createWorld(opts: { home?: string; model?: ChatModel; keep
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'antibody-'));
   const env = { ...process.env, ANTIBODY_HOME: home, ANTIBODY_BACKEND: 'offline', ANTIBODY_KEY_ISOLATION: 'simulated', ANTIBODY_ROLE: '' };
   delete (env as Record<string, string | undefined>).ANTIBODY_ROLE;
-  const readKey = (role: Role) => readFileSync(keyPath(home, role), 'utf8').trim();
+  const readKey = (role: Role) => readKeyText(keyPath(home, role));
   // open: reattach to a world set up earlier in `home` (the hosted sandbox reopens visitors' worlds).
   const setup = opts.open ? await reopen(loadConfig(env)) : await setupOffline(loadConfig(env), { readKeyFile: readKey, ownerSecret: opts.ownerSecret, ownerAddress: opts.ownerAddress });
   const cfg = loadConfig(env);

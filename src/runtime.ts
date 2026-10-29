@@ -16,6 +16,8 @@ import { OfflineRelayer } from './adapters/memwal-offline.ts';
 import { LocalReportStore, TatumStorage, type ReportStore } from './adapters/storage-tatum.ts';
 import { createLogger, type Logger } from './log.ts';
 import { checkIsolation } from './keystore.ts';
+import { resilient } from './ops/resilience.ts';
+import { ensureState } from './ops/state.ts';
 
 export const SIMULATED_BANNER = '━━ SIMULATED ━━ offline backend: fixture chain + local relayer, nothing touches Sui or Walrus ━━';
 
@@ -37,6 +39,7 @@ export interface Runtime {
 }
 
 export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
+  ensureState(cfg.home);
   const offline = cfg.backend === 'offline';
   const banners: string[] = [];
   if (offline) banners.push(SIMULATED_BANNER);
@@ -64,15 +67,17 @@ export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
     };
   }
 
-  const tatum = new SdkChainReader({
+  // Retries with backoff for transient RPC/relayer failures; anything that still fails throws and fails closed.
+  const chainOpts = { writes: ['execute'], skip: ['watchCheckpoints'] } as const;
+  const tatum = resilient(new SdkChainReader({
     transport: cfg.chainTransport,
     network: cfg.network,
     url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl,
     apiKey: cfg.tatumApiKey,
     packageId: cfg.packageId,
-  });
+  }), 'chain', chainOpts);
   const chain = cfg.crossCheck
-    ? new CrossCheckedChain(tatum, new SdkChainReader({ transport: cfg.crossCheck.transport, network: cfg.network, url: cfg.crossCheck.url, apiKey: cfg.crossCheck.apiKey, packageId: cfg.packageId }), { label: new URL(cfg.crossCheck.url).host })
+    ? new CrossCheckedChain(tatum, resilient(new SdkChainReader({ transport: cfg.crossCheck.transport, network: cfg.network, url: cfg.crossCheck.url, apiKey: cfg.crossCheck.apiKey, packageId: cfg.packageId }), 'chain-crosscheck', chainOpts), { label: new URL(cfg.crossCheck.url).host })
     : tatum;
   const accountId = cfg.accountId;
   return {
@@ -83,7 +88,8 @@ export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
     chain,
     memory: (key) => {
       if (!accountId) throw new Error('MEMWAL_ACCOUNT_ID is not set');
-      return new LiveMemoryClient({ seedHex: key.seedHex, publicKeyHex: key.publicKeyHex, accountId, serverUrl: cfg.memwalServerUrl });
+      // remember() carries the envelope id as its idempotency key, so a retried write cannot duplicate.
+      return resilient(new LiveMemoryClient({ seedHex: key.seedHex, publicKeyHex: key.publicKeyHex, accountId, serverUrl: cfg.memwalServerUrl }), 'relayer');
     },
     reports: cfg.tatumApiKey ? new TatumStorage(cfg.tatumApiUrl, cfg.tatumApiKey) : new LocalReportStore(join(cacheDir(cfg), 'reports')),
     rates: cfg.tatumApiKey ? new TatumRates(cfg.tatumApiUrl, cfg.tatumApiKey) : { usd: async () => ({}) },

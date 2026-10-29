@@ -50,12 +50,14 @@ export async function retrieveAll(
   namespace: string,
   baseQueries: string[],
   followUps: (found: StoredMemory[], missing: string[]) => string[] = () => [],
-  maxQueries = 200,
+  /** Query budget, fixed or derived from the inventory size. */
+  maxQueries: number | ((inventorySize: number) => number) = 200,
   /** Texts already known by blob id (a disposable cache; blobs are immutable). */
   known: ReadonlyMap<string, StoredMemory> = new Map(),
 ): Promise<CoverageResult> {
   const inventory = await client.inventory(namespace);
   const want = new Set(inventory.map((e) => e.blobId));
+  const budget = typeof maxQueries === 'number' ? maxQueries : maxQueries(want.size);
   const got = new Map<string, StoredMemory>();
   for (const b of want) {
     const k = known.get(b);
@@ -66,9 +68,9 @@ export async function retrieveAll(
   let queue = [...baseQueries];
   let queries = 0;
   const missing = () => [...want].filter((b) => !got.has(b));
-  while (queries < maxQueries) {
+  let have = got.size;
+  while (queries < budget && have < want.size) {
     if (queue.length === 0) {
-      if (missing().length === 0) break;
       queue = followUps([...got.values()], missing()).filter((q) => !tried.has(q));
       if (queue.length === 0) break;
     }
@@ -77,9 +79,11 @@ export async function retrieveAll(
     tried.add(q);
     queries++;
     for (const m of await client.recall(q, namespace, RECALL_MAX)) {
-      if (m.namespace === namespace && !got.has(m.blobId)) got.set(m.blobId, m);
+      if (m.namespace === namespace && !got.has(m.blobId)) {
+        got.set(m.blobId, m);
+        if (want.has(m.blobId)) have++;
+      }
     }
-    if (missing().length === 0 && queue.length === 0) break;
   }
   return { memories: [...got.values()], inventory, missing: missing(), queries };
 }

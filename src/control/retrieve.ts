@@ -26,7 +26,8 @@ function ledgerFollowUps(found: StoredMemory[], missing: string[]): string[] {
 }
 
 export function retrieveLedger(mem: MemoryClient, known?: ReadonlyMap<string, StoredMemory>): Promise<CoverageResult> {
-  return retrieveAll(mem, NS_LEDGER, ledgerQueries(), ledgerFollowUps, 150, known);
+  // One base query covers up to 100 records; beyond that, one follow-up per missing seq, plus slack.
+  return retrieveAll(mem, NS_LEDGER, ledgerQueries(), ledgerFollowUps, (n) => Math.max(150, n + 50), known);
 }
 
 export function contentQueries(): string[] {

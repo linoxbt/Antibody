@@ -154,8 +154,13 @@ function renderTop() {
     parts.push(r);
   }
   tbRight.replaceChildren(...parts);
-  demoBar.classList.toggle('hidden', src.mode !== 'recorded');
+  // A dependency still failing after retries: say so plainly (payments that depend on it are blocked, fail closed).
+  const down = Object.entries(s.health?.deps ?? {}).filter(([, d]) => !d.ok);
+  const NAMES = { relayer: 'Walrus Memory relayer', chain: 'Sui RPC', 'chain-crosscheck': 'second Sui RPC' };
+  demoBar.classList.toggle('hidden', src.mode !== 'recorded' && down.length === 0);
+  demoBar.classList.toggle('degraded', src.mode !== 'recorded' && down.length > 0);
   if (src.mode === 'recorded') demoBar.replaceChildren(el('span', { class: 'dot b' }), 'Recorded demo · read-only', el('span', { class: 'long' }, ' · simulated data from the offline run.'), el('a', { href: '/login' }, 'Sign in live →'));
+  else if (down.length) demoBar.replaceChildren(el('span', { class: 'dot r' }), `Degraded: ${down.map(([k]) => NAMES[k] ?? k).join(' and ')} not answering`, el('span', { class: 'long' }, ` · ${down[0][1].lastError ?? ''} · payments that need it are blocked until it recovers.`), el('a', { href: '/app/settings' }, 'Details →'));
 }
 
 async function route({ keepScroll = false } = {}) {

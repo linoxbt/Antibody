@@ -3,7 +3,7 @@
  * antibody CLI (spec §13). Each command runs as one role and loads only that
  * role's key; commands that need another role talk to its daemon over IPC.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { connect as netConnect } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
@@ -19,7 +19,7 @@ import type { LedgerState } from '../core/ledger.ts';
 import { toBaseUnits, formatUnits } from '../core/units.ts';
 import { LANES, LANE_LABEL, type Lane, type QuarantineSeed } from '../core/types.ts';
 import { IpcClient, unixTransport } from '../ipc.ts';
-import { keyPath, loadLaneKey } from '../keystore.ts';
+import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, readKeyText, sealKeyText } from '../keystore.ts';
 import { createRuntime, type Runtime } from '../runtime.ts';
 import { setupLive, setupOffline } from '../setup.ts';
 import {
@@ -45,6 +45,11 @@ import { retrieveAll } from '../adapters/memory.ts';
 import { startBillServer } from '../payments/x402-server.ts';
 import { suiNetworkId } from '../payments/x402.ts';
 import { startWeb } from '../web/server.ts';
+import { doctorExitCode, runDoctor, type Check } from '../ops/doctor.ts';
+import { installService, serviceStatus, servicePlan, uninstallService } from '../ops/service.ts';
+import { Alerter, alertConfigFrom } from '../ops/alerts.ts';
+import { ensureState } from '../ops/state.ts';
+import { LiveMemoryClient } from '../adapters/memwal-live.ts';
 import { banner, bold, cyan, dim, green, red, renderBlast, renderProjection, rulesTable, short, verdictLine, yellow } from './render.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -109,7 +114,7 @@ async function rotateLane(r: Runtime, control: ReturnType<typeof buildControl>, 
   const add = await admin.addDelegateKey(pub, LANE_LABEL[lane]);
   if (existsSync(p)) renameSync(p, `${p}.revoked-${Date.now()}`);
   mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
-  writeFileSync(p, seed + '\n', { mode: 0o600, flag: 'wx' });
+  writeFileSync(p, sealKeyText(seed), { mode: 0o600, flag: 'wx' });
   const rot = await control.recordRotate(pub, lane, add.digest);
   console.log(green(`lane.rotate written as ledger #${rot.seq}`) + dim(` new key ${pub} (add_delegate_key ${add.digest})`));
 }
@@ -137,7 +142,7 @@ async function main(argv: string[]): Promise<void> {
     case 'setup': {
       const cfg = loadConfig();
       if (cfg.backend === 'offline') banner(['━━ SIMULATED ━━ offline backend: fixture chain + local relayer ━━']);
-      const read = (role: Role) => readFileSync(keyPath(cfg.home, role), 'utf8').trim();
+      const read = (role: Role) => readKeyText(keyPath(cfg.home, role));
       const res = cfg.backend === 'offline' ? await setupOffline(cfg, { readKeyFile: read, ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY || undefined }) : await setupLive(cfg, { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY ?? '', readKeyFile: read });
       console.log(bold('Antibody set up'));
       console.log(`  account ${res.accountId}\n  owner   ${res.owner}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
@@ -498,18 +503,15 @@ async function main(argv: string[]): Promise<void> {
     }
 
     case 'up': {
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { foreground: { type: 'boolean', default: false } });
       const cfg = loadConfig();
+      ensureState(cfg.home);
       mkdirSync(runDir(cfg), { recursive: true, mode: 0o700 });
       mkdirSync(join(cfg.home, 'logs'), { recursive: true, mode: 0o700 });
-      const procs: [string, string[], Role][] = [
-        ['signer', ['signer', 'serve'], 'signer'],
-        ['control', ['control', 'serve', '--web'], 'control'],
-        ['agent', ['agent', 'serve'], 'agent'],
-        ['ingest', ['ingest', 'watch'], 'ingest'],
-      ];
       // Stale sockets from a previous run would satisfy the readiness check before the daemon serves.
       for (const n of ['signer', 'control', 'agent'] as const) if (!isPipe(ipcPath(cfg, n))) rmSync(ipcPath(cfg, n), { force: true });
-      for (const [name, args, role] of procs) {
+      if (values.foreground) return supervise(cfg);
+      for (const [name, args, role] of DAEMONS) {
         const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
         const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, windowsHide: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
         child.unref();
@@ -521,6 +523,106 @@ async function main(argv: string[]): Promise<void> {
       }
       console.log(`web view: http://127.0.0.1:${cfg.webPort}`);
       console.log(`sign in:  ${loginLink(cfg)}` + dim('  (operator link, this run only)'));
+      return;
+    }
+
+    case 'doctor': {
+      const cfg = loadConfig();
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { json: { type: 'boolean', default: false }, offline: { type: 'boolean', default: false } });
+      const deps: Parameters<typeof runDoctor>[1] = {};
+      const setUp = existsSync(join(cfg.home, 'antibody.json')) && existsSync(keyPath(cfg.home, 'control'));
+      if (!values.offline && cfg.backend === 'live') {
+        const r = createRuntime({ ...cfg, role: null }, 'cli');
+        deps.chain = r.chain;
+        if (cfg.accountId && setUp) {
+          deps.relayerHealth = async () => {
+            const c = new LiveMemoryClient({ ...loadLaneKey({ ...cfg, keyIsolation: 'simulated' }, 'control'), accountId: cfg.accountId!, serverUrl: cfg.memwalServerUrl });
+            try {
+              return await c.health();
+            } finally {
+              c.destroy();
+            }
+          };
+        }
+      }
+      if (setUp && cfg.accountId && cfg.stewardWallet) {
+        deps.ledger = async () => {
+          const r = createRuntime({ ...cfg, role: null, keyIsolation: 'simulated' }, 'cli');
+          const snap = await buildControl(r, { signer: null }).snapshot();
+          return snap.ledger.ok ? { ok: true, head: snap.ledger.head.seq } : { ok: false, code: snap.ledger.code, detail: snap.ledger.detail };
+        };
+      }
+      const checks = await runDoctor(cfg, deps);
+      if (values.json) console.log(JSON.stringify(checks, null, 2));
+      else printChecks(checks);
+      process.exitCode = doctorExitCode(checks);
+      return;
+    }
+
+    case 'service': {
+      const cfg = loadConfig();
+      const plan = servicePlan({ platform: process.platform, node: process.execPath, entry: join(ROOT, 'bin', 'antibody.mjs'), home: cfg.home, localAppData: process.env.LOCALAPPDATA });
+      const { values } = opts(rest, { print: { type: 'boolean', default: false } });
+      if (sub === 'install') {
+        if (values.print) {
+          if (plan.file) console.log(dim(`# ${plan.file.path}`) + '\n' + plan.file.content);
+          for (const c of plan.install) console.log(c.join(' '));
+          return;
+        }
+        if (!existsSync(join(cfg.home, 'antibody.json'))) throw new Error('run antibody setup first');
+        // One manager owns the daemons: stop any copy started by hand.
+        spawnSync(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), 'down'], { stdio: 'ignore', windowsHide: true });
+        installService(plan);
+        console.log(green(`Antibody now starts at login and restarts if it stops (${plan.manager})`) + (plan.file ? dim(`\n  ${plan.file.path}`) : ''));
+        for (const n of plan.notes) console.log(dim('  ' + n));
+        console.log(dim('  Sign-in link: antibody login (or antibody open)'));
+        return;
+      }
+      if (sub === 'uninstall') {
+        uninstallService(plan);
+        console.log(green('service removed') + dim(' (Antibody will no longer start at login; antibody up still works)'));
+        return;
+      }
+      if (sub === 'status') {
+        console.log(serviceStatus(plan));
+        return;
+      }
+      throw new Error('usage: antibody service install [--print] | uninstall | status');
+    }
+
+    case 'alert': {
+      if (sub !== 'test') throw new Error('usage: antibody alert test');
+      const cfg = loadConfig();
+      const a = new Alerter(alertConfigFrom(), { simulated: cfg.backend === 'offline' });
+      if (!a.enabled) throw new Error('no alert channel configured: set ANTIBODY_ALERT_WEBHOOK, or ANTIBODY_TELEGRAM_BOT_TOKEN and ANTIBODY_TELEGRAM_CHAT_ID (in ~/.antibody/antibody.env)');
+      const ok = await a.send({ kind: 'test', severity: 'info', key: `test:${Date.now()}`, title: 'test alert', text: `Alerts from ${cfg.home} reach you. Incidents, quarantines and ledger failures will arrive here.` });
+      if (!ok.length) throw new Error('every alert channel refused the test alert: check the URL, bot token and chat id (set ANTIBODY_LOG=stderr for details)');
+      console.log(green(`test alert delivered via ${ok.join(' and ')}`));
+      return;
+    }
+
+    case 'keys': {
+      if (sub !== 'encrypt') throw new Error('usage: antibody keys encrypt   (with ANTIBODY_KEY_PASSPHRASE or ANTIBODY_KEY_PASSPHRASE_FILE set)');
+      const cfg = loadConfig();
+      const pass = keyPassphrase();
+      if (!pass || pass.length < 12) throw new Error('set ANTIBODY_KEY_PASSPHRASE (or ANTIBODY_KEY_PASSPHRASE_FILE) to a passphrase of at least 12 characters first');
+      const done = encryptKeysInPlace(cfg.home, pass);
+      console.log(done.length ? green(`encrypted ${done.length} key file(s)`) + dim('\n  ' + done.join('\n  ')) : dim('every key file is already encrypted'));
+      console.log(dim('Every daemon now needs the same passphrase in its environment (antibody.env or the service manager). Losing it means losing the keys.'));
+      return;
+    }
+
+    case 'open': {
+      // One click from a desktop shortcut: start Antibody if needed, then open the console signed in.
+      const cfg = loadConfig();
+      if (!(await accepts(ipcPath(cfg, 'control')))) {
+        console.log(dim('starting Antibody…'));
+        const r = spawnSync(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), 'up'], { stdio: 'inherit', windowsHide: true });
+        if (r.status !== 0) throw new Error('antibody up failed: run antibody doctor');
+      }
+      const url = loginLink(cfg);
+      openBrowser(url);
+      console.log(`opened ${url.split('#')[0]}`);
       return;
     }
 
@@ -543,6 +645,18 @@ async function main(argv: string[]): Promise<void> {
 
     case 'down': {
       const cfg = loadConfig();
+      // The supervisor (up --foreground, the OS service) first, or it would restart what we stop.
+      const sup = join(runDir(cfg), 'supervisor.pid');
+      if (existsSync(sup)) {
+        try {
+          process.kill(Number(readFileSync(sup, 'utf8')));
+          for (let i = 0; i < 40 && existsSync(sup); i++) await new Promise((r) => setTimeout(r, 100));
+          console.log('supervisor stopped' + dim(' (if Antibody runs as a service, the service manager may start it again: antibody service uninstall)'));
+        } catch {
+          /* not running */
+        }
+        rmSync(sup, { force: true });
+      }
       for (const name of ['ingest', 'agent', 'control', 'signer']) {
         const p = join(runDir(cfg), `${name}.pid`);
         if (!existsSync(p)) continue;
@@ -628,16 +742,96 @@ async function waitForHttp(url: string, ms: number) {
   }
 }
 
+const DAEMONS: [string, string[], Role][] = [
+  ['signer', ['signer', 'serve'], 'signer'],
+  ['control', ['control', 'serve', '--web'], 'control'],
+  ['agent', ['agent', 'serve'], 'agent'],
+  ['ingest', ['ingest', 'watch'], 'ingest'],
+];
+
+/**
+ * `antibody up --foreground`: run the four daemons as children and restart any
+ * that exits (1 s doubling to 30 s; reset after a minute of uptime). This is
+ * what the OS service runs. SIGINT/SIGTERM stops everything.
+ */
+async function supervise(cfg: Config): Promise<void> {
+  const supPid = join(runDir(cfg), 'supervisor.pid');
+  writeFileSync(supPid, String(process.pid));
+  const children = new Map<string, ChildProcess>();
+  let stopping = false;
+  const start = (name: string, args: string[], role: Role, attempt: number) => {
+    const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
+    const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { windowsHide: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
+    children.set(name, child);
+    writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
+    const t0 = Date.now();
+    child.once('exit', (code, signal) => {
+      children.delete(name);
+      if (stopping) return;
+      const next = Date.now() - t0 > 60_000 ? 0 : attempt + 1;
+      const delay = Math.min(30_000, 1000 * 2 ** Math.max(0, next - 1));
+      console.log(yellow(`${new Date().toISOString()} ${name} exited (${code ?? signal}); restarting in ${delay / 1000}s`) + dim(` log ${join(cfg.home, 'logs', `${name}.out`)}`));
+      setTimeout(() => !stopping && start(name, args, role, next), delay);
+    });
+    return child;
+  };
+  const stop = (code: number) => {
+    if (stopping) return;
+    stopping = true;
+    for (const c of children.values()) c.kill('SIGTERM');
+    rmSync(supPid, { force: true });
+    const t = setInterval(() => children.size === 0 && (clearInterval(t), process.exit(code)), 100);
+    setTimeout(() => process.exit(code), 8000).unref();
+  };
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => stop(0));
+  try {
+    for (const [name, args, role] of DAEMONS) {
+      const child = start(name, args, role, 0);
+      if (name === 'ingest') await new Promise((res) => setTimeout(res, 300));
+      else await waitFor(ipcPath(cfg, name as 'control' | 'signer' | 'agent'), 30_000);
+      if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/auth/status`, 30_000);
+      console.log(green(`${name} up`) + dim(` pid ${child.pid}`));
+    }
+  } catch (e) {
+    console.error(red(`startup failed: ${(e as Error).message}`) + dim(' (antibody doctor shows why)'));
+    stop(1);
+    return;
+  }
+  console.log(`web view: http://127.0.0.1:${cfg.webPort}` + dim('  sign-in link: antibody login'));
+  console.log(dim('supervising: crashed daemons restart automatically; Ctrl+C or antibody down stops everything'));
+  await new Promise(() => {});
+}
+
+function printChecks(checks: Check[]) {
+  const mark = { ok: green('✓'), warn: yellow('!'), fail: red('✗'), skip: dim('-') } as const;
+  console.log(bold('Antibody doctor'));
+  for (const c of checks) {
+    console.log(`  ${mark[c.status]} ${c.name.padEnd(24)} ${c.status === 'ok' ? dim(c.detail) : c.detail}`);
+    if (c.fix && c.status !== 'ok') console.log(dim(`      fix: ${c.fix}`));
+  }
+  const f = checks.filter((c) => c.status === 'fail').length;
+  const w = checks.filter((c) => c.status === 'warn').length;
+  console.log(f ? red(bold(`${f} problem(s) to fix`)) + (w ? yellow(`, ${w} warning(s)`) : '') : w ? green('No problems. ') + yellow(`${w} warning(s).`) : green(bold('All good.')));
+}
+
+function openBrowser(url: string) {
+  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url.replace(/&/g, '^&')]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  const c = spawn(cmd as string, args as string[], { stdio: 'ignore', detached: true, windowsHide: true });
+  c.on('error', () => console.log(`open this in your browser: ${url}`));
+  c.unref();
+}
+
+const accepts = (path: string) =>
+  new Promise<boolean>((res) => {
+    const s = netConnect(path);
+    s.once('connect', () => (s.end(), res(true)));
+    s.once('error', () => res(false));
+  });
+
 /** Wait until a daemon accepts connections on its socket or named pipe. */
 async function waitFor(path: string, ms: number) {
   const t = Date.now() + ms;
-  const accepts = () =>
-    new Promise<boolean>((res) => {
-      const s = netConnect(path);
-      s.once('connect', () => (s.end(), res(true)));
-      s.once('error', () => res(false));
-    });
-  while (!(await accepts())) {
+  while (!(await accepts(path))) {
     if (Date.now() > t) throw new Error(`timed out waiting for ${path}`);
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -649,7 +843,13 @@ Setup and status
   antibody setup                              keys, on-chain lane labels, ledger genesis
   antibody status                             account, lane keys, checkpoint, wallet
   antibody up | down                          start/stop control (+web), signer, agent and sentinel daemons
+  antibody up --foreground                    the same, supervised: crashed daemons restart (what the service runs)
+  antibody open                               start if needed and open the console, signed in
   antibody login                              print a one-click sign-in link for the web console
+  antibody doctor [--json]                    check the install end to end and say how to fix problems
+  antibody service install | uninstall | status   start at login, restart on crash (systemd / launchd / Task Scheduler)
+  antibody alert test                         send a test alert (ANTIBODY_ALERT_WEBHOOK or Telegram)
+  antibody keys encrypt                       encrypt key files with ANTIBODY_KEY_PASSPHRASE
   antibody cloud serve                        the hosted sandbox: any wallet gets its own simulated Antibody ($PORT)
 
 Human (user key)

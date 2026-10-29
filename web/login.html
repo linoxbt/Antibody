@@ -17,48 +17,28 @@
     <main class="auth-col">
       <div class="auth-top">
         <a class="brand" href="/" aria-label="Antibody home"><img src="/assets/img/mark.svg" alt="" width="30" height="30" /><span class="wordmark">antibody</span></a>
-        <a class="back" href="/">← Back to site</a>
       </div>
       <div class="auth-body">
-        <div class="node-only">
-          <span class="eyebrow">Console</span>
-          <h1 class="words">Welcome <span class="tail">back.</span></h1>
-          <p class="lede">Sign in with the wallet that owns this Antibody account.</p>
-        </div>
-        <div class="public-only">
-          <span class="eyebrow">Console</span>
-          <h1 class="words">Explore the <span class="tail">console.</span></h1>
-          <p class="lede">This public site replays a recorded run, read-only. Nothing to sign in to here.</p>
-        </div>
+        <h1 class="words">Open the <span class="tail">console.</span></h1>
 
-        <section class="node-only" aria-labelledby="w-h">
-          <h2 id="w-h" class="sr-only">Sui wallets</h2>
-          <div class="wallets" id="wallets"><div class="wallet-empty">Looking for Sui wallets…</div></div>
+        <section class="node-only" aria-label="Sui wallets">
+          <div class="wallets" id="wallets"></div>
         </section>
 
-        <div class="or node-only">or</div>
-
-        <section class="node-only" aria-labelledby="op-h">
-          <h2 id="op-h" class="sr-only">Operator link</h2>
+        <details class="node-only op">
+          <summary>Use an operator token</summary>
           <form class="op-form" id="op-form">
-            <input id="op-token" autocomplete="off" spellcheck="false" placeholder="Operator token" aria-label="Operator token" />
+            <input id="op-token" autocomplete="off" spellcheck="false" placeholder="Token from antibody login" aria-label="Operator token" />
             <button class="btn btn-ghost" type="submit">Sign in</button>
           </form>
-          <p class="auth-note" style="margin-top:10px">Run <code>antibody login</code> for a one-click link.</p>
-        </section>
+        </details>
 
         <p class="auth-msg" id="msg" role="status" aria-live="polite"></p>
 
-        <a class="btn btn-primary btn-lg demo-btn" id="demo" href="/app">Explore the recorded demo <span class="arrow" aria-hidden="true">→</span></a>
-
-        <section class="run-own public-only" aria-labelledby="own-h">
-          <h2 id="own-h">Sign in with your wallet</h2>
-          <p>Wallet sign-in works on a node you run. Start one, open its console, and sign in with the wallet that owns your account.<span id="wallet-seen"></span></p>
-          <pre class="quote">antibody setup &amp;&amp; antibody up</pre>
-          <a class="small" href="https://github.com/linoxbt/Antibody#readme" target="_blank" rel="noopener">How to run a node →</a>
-        </section>
+        <a class="btn btn-primary btn-lg demo-btn" id="demo" href="/app">Enter the demo <span class="arrow" aria-hidden="true">→</span></a>
+        <p class="auth-note public-only">Wallet sign-in is for your own Antibody install. <a href="https://github.com/linoxbt/Antibody#try-it-in-two-minutes-offline-no-keys" target="_blank" rel="noopener">How?</a></p>
       </div>
-      <div class="auth-foot"><span id="node-state"></span><span id="theme-slot"></span></div>
+      <div class="auth-foot"><a class="back" href="/">← Back to site</a><span id="theme-slot"></span></div>
     </main>
 
     <aside class="auth-art" aria-hidden="true">
@@ -75,7 +55,6 @@ Nonce: <b>9f2c…e4d1</b>
 Expiration Time: in 5 minutes</pre>
           <div class="sig-foot"><span class="kicker">owner verified on Sui</span><span class="pill ok">Signed in</span></div>
         </div>
-        <p class="sig-quote">Only the owner's wallet opens <span class="tail">the console.</span></p>
       </div>
     </aside>
   </div>

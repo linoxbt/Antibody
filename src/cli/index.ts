@@ -681,6 +681,12 @@ async function main(argv: string[]): Promise<void> {
     case 'open': {
       // One click from a desktop shortcut: start Antibody if needed, then open the console signed in.
       const cfg = loadConfig();
+      if (!existsSync(join(cfg.home, 'antibody.json'))) {
+        // Launched from an app icon before setup: show how to finish instead of failing silently.
+        const guide = 'https://antibody-memory.netlify.app/install#first-run';
+        openBrowser(guide);
+        throw new Error(`Antibody is not set up yet: run antibody setup (guide: ${guide})`);
+      }
       if (!(await accepts(ipcPath(cfg, 'control')))) {
         console.log(dim('starting Antibody…'));
         const r = spawnSync(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), 'up'], { stdio: 'inherit', windowsHide: true });
@@ -789,6 +795,12 @@ async function main(argv: string[]): Promise<void> {
       console.log(`address ${kp.toSuiAddress()}\nsecret  ${kp.getSecretKey()}\n${dim('Throwaway only. Fund with ~0.5 SUI, create the MemWalAccount on memory.walrus.xyz with it.')}`);
       return;
     }
+
+    case '--version':
+    case '-v':
+    case 'version':
+      console.log((JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }).version);
+      return;
 
     case undefined:
     case 'help':

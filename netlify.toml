@@ -15,6 +15,12 @@
     Referrer-Policy = "no-referrer"
 
 [[headers]]
+  for = "/SHA256SUMS"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache"

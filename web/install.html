@@ -59,7 +59,7 @@
             <li><b>Four background processes</b> started by <code>antibody up</code>: control, signer, Steward the agent, and the sentinel that watches the wallet.</li>
             <li><b>A web console</b> in your browser at <code>http://127.0.0.1:7402</code>. It only answers on your own computer.</li>
           </ul>
-          <p class="note">There is no desktop app icon or app store app. You install it from a terminal, then use it in your browser.</p>
+          <p class="note">You install it from a terminal. After that, open it from the <b>Antibody</b> icon the installer adds (Start menu and desktop on Windows, the applications menu on Linux, <code>~/Applications</code> on macOS), or with <code>antibody open</code>. In the console, Settings → <b>Install app</b> gives it its own window.</p>
         </section>
 
         <section id="requirements">
@@ -101,6 +101,18 @@ winget install OpenJS.NodeJS.LTS</pre>
           <p>Then open a <b>new</b> terminal window (on macOS/Linux, if it printed a PATH line, run that first) and check it worked:</p>
           <pre class="code" data-copy>antibody --help</pre>
           <details class="howto">
+            <summary>Verify the installer before running it</summary>
+            <p>Each release publishes SHA-256 checksums of both installers at <a href="/SHA256SUMS">/SHA256SUMS</a>. Download, compare, then run:</p>
+            <pre class="code" data-copy>curl -fsSLO https://antibody-memory.netlify.app/install.sh
+curl -fsSL https://antibody-memory.netlify.app/SHA256SUMS | grep ' install.sh$' | shasum -a 256 -c -
+bash install.sh</pre>
+            <p>On Windows (PowerShell):</p>
+            <pre class="code" data-copy>irm https://antibody-memory.netlify.app/install.ps1 -OutFile install.ps1
+(Get-FileHash install.ps1 -Algorithm SHA256).Hash.ToLower()
+irm https://antibody-memory.netlify.app/SHA256SUMS</pre>
+            <p class="note">The two hashes must match. Then run <code>.\install.ps1</code>.</p>
+          </details>
+          <details class="howto">
             <summary>Install by hand instead</summary>
             <pre class="code" data-copy>git clone https://github.com/linoxbt/Antibody.git ~/.antibody-app
 cd ~/.antibody-app
@@ -135,13 +147,17 @@ antibody statement "Rent is 450 USDC (coin type 0xdba34672e30cb065b1f93e3ab55318
           <ol class="steps">
             <li><span>Create your Walrus Memory account at <a href="https://memory.walrus.xyz" target="_blank" rel="noopener">memory.walrus.xyz</a> with a wallet you control. That wallet is the <b>owner</b>. Copy the account ID (<code>0x…</code>).</span></li>
             <li><span>Get a mainnet API key at <a href="https://dashboard.tatum.io" target="_blank" rel="noopener">dashboard.tatum.io</a>.</span></li>
-            <li><span>Export the owner wallet's private key from your wallet's account settings (it starts with <code>suiprivkey1</code>). Antibody uses it only during setup, revoke and rotate. Use a dedicated owner wallet, not your main one.</span></li>
+            <li><span>Keep the owner wallet in your browser. Setup, revoke and rotate open a page where that wallet signs; Antibody never sees its private key.</span></li>
             <li><span>Put your settings in <code>~/.antibody/antibody.env</code> (on Windows: <code>%USERPROFILE%\.antibody\antibody.env</code>, created with Notepad). Antibody reads this file on every command.</span>
               <pre class="code" data-copy>mkdir -p ~/.antibody && cat > ~/.antibody/antibody.env &lt;&lt;'EOF'
 ANTIBODY_BACKEND=live
 MEMWAL_ACCOUNT_ID=0xYOUR_ACCOUNT_ID
 TATUM_API_KEY=YOUR_TATUM_KEY
-OWNER_SUI_PRIVATE_KEY=suiprivkey1...
+# Optional: encrypt key files at rest (every daemon needs it to start)
+# ANTIBODY_KEY_PASSPHRASE_FILE=/path/to/passphrase
+# Optional: alerts when something is quarantined or blocked
+# ANTIBODY_ALERT_WEBHOOK=https://hooks.example.com/...
+# ANTIBODY_TELEGRAM_BOT_TOKEN=...   ANTIBODY_TELEGRAM_CHAT_ID=...
 # Optional: a real model for Steward (any OpenAI-compatible API)
 # LLM_BASE_URL=https://api.openai.com/v1
 # LLM_API_KEY=sk-...
@@ -152,9 +168,11 @@ chmod 600 ~/.antibody/antibody.env</pre></li>
               <pre class="code" data-copy>sudo ANTIBODY_HOME=$HOME/.antibody ~/.antibody-app/scripts/setup-roles.sh   # proper isolation
 # or, for a test machine only:
 echo 'ANTIBODY_KEY_ISOLATION=simulated' >> ~/.antibody/antibody.env</pre></li>
-            <li><span>Register the four lane keys on-chain and write the ledger's first record:</span><pre class="code" data-copy>antibody setup</pre></li>
+            <li><span>Register the four lane keys on-chain (one transaction your wallet approves in the browser) and write the ledger's first record:</span><pre class="code" data-copy>antibody setup --wallet</pre></li>
             <li><span>Setup prints Steward's wallet address. Send it a little SUI for gas and the USDC it will pay with.</span></li>
-            <li><span>Start it and sign in:</span><pre class="code" data-copy>antibody up</pre></li>
+            <li><span>Check everything, then start it and keep it running across restarts:</span><pre class="code" data-copy>antibody doctor
+antibody service install
+antibody open</pre></li>
           </ol>
           <p class="note">Optional: add <code>ANTIBODY_CROSSCHECK_RPC_URL=https://fullnode.mainnet.sui.io:443</code> so a second provider must agree on your keys before any payment.</p>
         </section>
@@ -162,13 +180,19 @@ echo 'ANTIBODY_KEY_ISOLATION=simulated' >> ~/.antibody/antibody.env</pre></li>
         <section id="everyday">
           <h2>Everyday commands</h2>
           <div class="table-wrap"><table class="table cmds"><tbody>
+            <tr><td><code>antibody open</code></td><td>Start if needed and open the console, signed in</td></tr>
             <tr><td><code>antibody up</code> / <code>down</code></td><td>Start or stop everything</td></tr>
+            <tr><td><code>antibody doctor</code></td><td>Check the whole install; every problem comes with its fix</td></tr>
+            <tr><td><code>antibody service install</code></td><td>Start at login and restart after a crash (<code>uninstall</code> to undo)</td></tr>
             <tr><td><code>antibody login</code></td><td>Print a console sign-in link</td></tr>
             <tr><td><code>antibody status</code></td><td>Account, lane keys, wallet balances</td></tr>
             <tr><td><code>antibody show --forensic</code></td><td>What Steward can see, and what is excluded and why</td></tr>
             <tr><td><code>antibody payee add|remove</code></td><td>Manage who Steward may pay</td></tr>
             <tr><td><code>antibody quarantine --source 0x… --yes</code></td><td>Cut a poisoned source out of memory</td></tr>
             <tr><td><code>antibody rebuild --fresh</code></td><td>Rebuild from Walrus + Sui alone and compare</td></tr>
+            <tr><td><code>antibody revoke --lane agent --rotate --wallet</code></td><td>Cut off a leaked key and issue a new one, signed by your wallet</td></tr>
+            <tr><td><code>antibody keys encrypt</code></td><td>Encrypt key files with <code>ANTIBODY_KEY_PASSPHRASE</code></td></tr>
+            <tr><td><code>antibody alert test</code></td><td>Send a test alert to your webhook or Telegram</td></tr>
           </tbody></table></div>
           <p>Logs live in <code>~/.antibody/logs/</code>, one file per process.</p>
         </section>
@@ -195,17 +219,18 @@ antibody up</pre>
 curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
 antibody up</pre>
           <p>Remove the program (keeps your keys and data):</p>
-          <pre class="code" data-copy>antibody down
-rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
+          <pre class="code" data-copy>antibody service uninstall; antibody down
+rm -rf ~/.antibody-app ~/.local/bin/antibody ~/.local/share/applications/antibody.desktop ~/Applications/Antibody.app</pre>
           <p>On Windows (PowerShell):</p>
-          <pre class="code" data-copy>antibody down
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Antibody"</pre>
+          <pre class="code" data-copy>antibody service uninstall; antibody down
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Antibody"
+Remove-Item "$([Environment]::GetFolderPath('Programs'))\Antibody.lnk", "$([Environment]::GetFolderPath('Desktop'))\Antibody.lnk" -ErrorAction SilentlyContinue</pre>
           <p class="warn">Deleting <code>~/.antibody</code> also deletes your lane keys. Back up <code>~/.antibody/keys</code> first, or revoke the keys on-chain.</p>
         </section>
 
         <section id="troubleshooting">
           <h2>Troubleshooting</h2>
-          <p>Search for the message you see. Each entry says what it means and how to fix it.</p>
+          <p>Start with <code>antibody doctor</code>: it checks the whole install and prints a fix for each problem. Otherwise, search for the message you see.</p>
           <input class="ts-search" id="ts-search" type="search" placeholder="Search errors, e.g. EADDRINUSE or not the account owner" aria-label="Search troubleshooting" />
           <p class="ts-none hidden" id="ts-none">Nothing matches. Check <code>~/.antibody/logs/</code>, then <a href="https://github.com/linoxbt/Antibody/issues" target="_blank" rel="noopener">open an issue</a> with the message.</p>
 
@@ -278,6 +303,16 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Antibody"</pre>
             <details class="ts"><summary><code>Tatum Storage upload failed: HTTP 401/403</code></summary><p>Incident reports need a mainnet Tatum key. Check <code>TATUM_API_KEY</code>. Without one, reports are saved locally and labelled simulated.</p></details>
           </div>
 
+          <div class="ts-group" data-group="Keys, owner wallet and updates">
+            <h3>Keys, owner wallet and updates</h3>
+            <details class="ts"><summary><code>… is encrypted: set ANTIBODY_KEY_PASSPHRASE</code></summary><p>Your key files are encrypted. Every Antibody process needs the passphrase: put <code>ANTIBODY_KEY_PASSPHRASE_FILE=/path/to/file</code> in <code>antibody.env</code> (the file holds only the passphrase, mode 600). With <code>antibody service install</code>, the service reads the same <code>antibody.env</code>.</p></details>
+            <details class="ts"><summary><code>wrong key passphrase (or the key file was altered)</code></summary><p>The passphrase doesn't open the key. Check for a trailing space or a different file. If the passphrase is lost, the keys are lost: revoke the lanes with your owner wallet and run setup again.</p></details>
+            <details class="ts"><summary><code>was written by a newer Antibody</code></summary><p>Your data folder was used by a newer version. Update Antibody by running the installer again; it never downgrades your data.</p></details>
+            <details class="ts"><summary><code>no wallet signature within 10 minutes</code> or <code>cancelled in the wallet</code></summary><p>The owner approval page waited for your wallet. Run the command again, open the printed link (on the same computer, in the browser where your wallet extension lives), choose the wallet that owns the account, and approve.</p></details>
+            <details class="ts"><summary><code>Connect the account owner …; it shared …</code></summary><p>The wallet connected a different account. Switch to the owner account inside your wallet, then click it again.</p></details>
+            <details class="ts"><summary>Console banner: <code>Degraded: … not answering</code></summary><p>Antibody retried the Walrus Memory relayer or the Sui RPC and it still failed. Payments that need it are blocked until it recovers (fail closed). Check your connection and Tatum key; Settings → Connections shows the last error.</p></details>
+            <details class="ts"><summary><code>antibody service install</code> fails</summary><p>Linux needs a systemd user session (<code>systemctl --user status</code> must work; on a server also run <code>sudo loginctl enable-linger $USER</code>). macOS uses launchd; Windows uses Task Scheduler. <code>antibody service install --print</code> shows exactly what it would install, so you can set it up by hand.</p></details>
+          </div>
           <div class="ts-group" data-group="Hosted sandbox">
             <h3>Hosted sandbox</h3>
             <details class="ts"><summary><code>the sandbox is full right now</code></summary><p>The free sandbox has a limit on worlds. Try later, or install Antibody yourself.</p></details>

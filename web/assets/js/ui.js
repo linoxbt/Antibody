@@ -166,7 +166,7 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
   const q = quarantines.find((x) => x.seq === highlightSeq);
   const hotSrc = q?.seed?.type === 'source' ? `src:${q.seed.value}` : null;
 
-  const root = svg('svg', column ? { viewBox: `0 0 ${width} ${height}`, class: 'col', role: 'img', 'aria-label': 'Memory lineage graph' } : { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', 'aria-label': 'Memory lineage graph' });
+  const root = svg('svg', column ? { viewBox: `0 0 ${width} ${height}`, class: 'col', role: 'group', 'aria-label': 'Memory lineage graph' } : { viewBox: `0 0 ${width} ${height}`, width, height, role: 'group', 'aria-label': 'Memory lineage graph' });
   const edge = (a, b, isHot) => {
     const p = pos.get(a), r = pos.get(b);
     if (p && r) root.append(svg('path', { d: edgePath(p, r), class: `g-edge${isHot ? ' hot' : ''}` }));

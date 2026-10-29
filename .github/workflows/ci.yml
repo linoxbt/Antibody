@@ -2,9 +2,15 @@ name: ci
 on:
   push:
   pull_request:
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,7 +20,96 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm audit --omit=dev
+
+  demos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: M1 demo (offline, SIMULATED)
         run: npx tsx scripts/demo-m1.ts
       - name: Attack set (offline, SIMULATED)
         run: npx tsx scripts/attack-set/run.ts
+      - name: Deep fuzz (more cases than the unit run)
+        run: FUZZ_ITERATIONS=20000 FUZZ_SEED=${{ github.run_number }} node --import tsx --test test/fuzz.test.ts
+      - name: Sandbox load test (in-process)
+        run: npx tsx scripts/load-sandbox.ts --local --users 40 --concurrency 10
+
+  e2e:
+    name: browser e2e + accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx tsx scripts/build-site.ts
+      - run: npm run e2e
+
+  installer-unix:
+    name: installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      ANTIBODY_APP_DIR: ${{ runner.temp }}/antibody-app
+      ANTIBODY_BIN_DIR: ${{ runner.temp }}/bin
+      ANTIBODY_HOME: ${{ runner.temp }}/antibody-home
+      ANTIBODY_NO_BROWSER: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install from this commit with the real installer
+        run: |
+          git branch ci-smoke
+          ANTIBODY_REPO="file://$GITHUB_WORKSPACE" ANTIBODY_REF=ci-smoke bash web/install.sh
+      - name: First run, simulated
+        run: |
+          A="$ANTIBODY_BIN_DIR/antibody"
+          "$A" setup
+          "$A" up
+          curl -fsS http://127.0.0.1:7402/login >/dev/null
+          curl -fsS http://127.0.0.1:7402/api/auth/status
+          "$A" doctor
+          "$A" login | grep -q '#token='
+          "$A" down
+
+  installer-windows:
+    name: installer (windows-latest)
+    runs-on: windows-latest
+    env:
+      ANTIBODY_NO_BROWSER: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install from this commit with the real installer
+        shell: pwsh
+        run: |
+          git branch ci-smoke
+          $env:ANTIBODY_REPO = "file:///$($env:GITHUB_WORKSPACE -replace '\\','/')"
+          $env:ANTIBODY_REF = 'ci-smoke'
+          ./web/install.ps1
+      - name: First run, simulated
+        shell: pwsh
+        run: |
+          $A = Join-Path $env:LOCALAPPDATA 'Antibody\bin\antibody.cmd'
+          & $A setup; if ($LASTEXITCODE) { exit 1 }
+          & $A up; if ($LASTEXITCODE) { exit 1 }
+          $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:7402/login
+          if ($r.StatusCode -ne 200) { exit 1 }
+          & $A doctor; if ($LASTEXITCODE) { exit 1 }
+          & $A down

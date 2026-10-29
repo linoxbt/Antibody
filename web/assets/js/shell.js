@@ -1,5 +1,6 @@
 // Public site shell: navigation (with mobile drawer), footer, toast,
 // starfield and motion. The signed-in console has its own shell (app/main.js).
+import './pwa.js';
 import { el } from './ui.js';
 import { sky, armReveals } from './motion.js';
 import { themeSwitch } from './theme.js';
@@ -24,7 +25,7 @@ export function mountShell(current) {
   const burger = el('button', { class: 'burger', 'aria-label': 'Open menu', 'aria-expanded': 'false', 'aria-controls': 'drawer' }, el('span'), el('span'), el('span'));
   const drawer = el(
     'nav',
-    { class: 'drawer', id: 'drawer', 'aria-label': 'Site', 'aria-hidden': 'true' },
+    { class: 'drawer', id: 'drawer', 'aria-label': 'Site', inert: '' },
     ...PAGES.map((p) => el('a', { href: p.href, ...here(p) }, p.label, el('span', {}, p.hint))),
     el('div', { class: 'drawer-theme' }, el('span', {}, 'Appearance'), themeSwitch()),
     el('a', { class: 'btn btn-primary', href: '/app' }, 'Open console'),
@@ -45,7 +46,7 @@ export function mountShell(current) {
   );
   const setOpen = (open) => {
     drawer.classList.toggle('open', open);
-    drawer.setAttribute('aria-hidden', String(!open));
+    drawer.inert = !open; // closed: out of the tab order and the accessibility tree
     burger.setAttribute('aria-expanded', String(open));
     burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
     document.body.classList.toggle('no-scroll', open);
@@ -64,6 +65,8 @@ export function mountShell(current) {
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
   document.body.prepend(header, drawer);
+  // Code blocks that scroll sideways must be reachable by keyboard.
+  for (const pre of document.querySelectorAll('pre')) if (!pre.hasAttribute('tabindex')) pre.tabIndex = 0;
 
   const col = (title, links) => el('div', {}, el('h4', {}, title), ...links.map(([t, h, ext]) => el('a', { href: h, ...(ext ? { target: '_blank', rel: 'noopener' } : {}) }, t)));
   document.body.append(

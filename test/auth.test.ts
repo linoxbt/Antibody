@@ -95,7 +95,7 @@ test('HTTP: /api is gated, sign-in sets a cookie that opens it, moved pages redi
     fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1', ...headers }, body: JSON.stringify(body) });
   try {
     assert.equal(readFileSync(tokenPath(rt), 'utf8'), 'tok-123');
-    assert.equal(statSync(tokenPath(rt)).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(statSync(tokenPath(rt)).mode & 0o777, 0o600);
 
     const st = await (await fetch(`${base}/api/auth/status`)).json();
     assert.deepEqual([st.node, st.authenticated], [true, false]);

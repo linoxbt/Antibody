@@ -1,6 +1,7 @@
 import { el } from '../../ui.js';
 import { head, card, command, avatar } from '../kit.js';
 import { signOut } from '../../data.js';
+import { canInstall, install, installed, onInstallable } from '../../pwa.js';
 
 function resetBtn(ctx) {
   const b = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, 'Reset sandbox');
@@ -15,6 +16,18 @@ function resetBtn(ctx) {
     }),
   );
   return b;
+}
+
+function appCard(ctx) {
+  if (installed()) return card('App', el('span', { class: 'pill live' }, 'installed'), el('p', { class: 'hint' }, 'You are using Antibody as an installed app.'));
+  const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button', ...(canInstall() ? {} : { hidden: true }) }, 'Install app');
+  b.addEventListener('click', () => ctx.act(async () => (await install()) && ctx.toast('Installed. Open Antibody from your apps.')));
+  onInstallable((ok) => (b.hidden = !ok));
+  return card(
+    'App',
+    b,
+    el('p', { class: 'hint', style: 'font-size:14px' }, 'Install the console as an app: its own window and an icon in your dock, Start menu or home screen. If no button shows, use your browser menu: Install Antibody, or Add to Home Screen.'),
+  );
 }
 
 const DEP_NAMES = { relayer: 'Walrus Memory relayer', chain: 'Sui RPC', 'chain-crosscheck': 'Second Sui RPC' };
@@ -67,6 +80,7 @@ export default {
           kv(['Backend', s.backend], ['Chain reads', s.chain], ['Delegate set', s.crossCheck ? `cross-checked with ${s.crossCheck.secondary}${s.crossCheck.agreed === false ? ' (DISAGREES: payments blocked)' : ''}` : 'single reader (set ANTIBODY_CROSSCHECK_RPC_URL for a second)'], ['Account', code(s.account.id)], ['Owner', code(s.account.owner)], ['Steward wallet', code(s.wallet)], ['Checkpoint', String(s.checkpoint)]),
         ),
       ),
+      appCard(ctx),
       !recorded && s.health ? card('Connections', el('span', { class: `pill ${s.health.degraded ? 'bad' : 'live'}` }, s.health.degraded ? 'degraded' : 'healthy'), healthList(s.health)) : null,
       s.banners?.length ? card('Notices', null, ...s.banners.map((b) => el('p', { class: 'hint', style: 'font-size:14px' }, b.replace(/━+/g, '').trim()))) : null,
       s.sandbox ? card('Sandbox', null, el('div', { style: 'display:grid;gap:12px;justify-items:start' }, el('p', { class: 'hint', style: 'font-size:14px' }, 'Your own simulated Antibody, owned by your wallet. Reset it to start the story again with fresh keys.'), resetBtn(ctx))) : card('Command line', null, el('div', { style: 'display:grid;gap:10px' }, el('p', { class: 'hint' }, 'Everything here is also available from the CLI.'), command('antibody status'), command('antibody login'))),

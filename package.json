@@ -12,12 +12,14 @@
   },
   "scripts": {
     "antibody": "tsx src/cli/index.ts",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "probe": "tsx scripts/probe.ts",
     "demo:m1": "tsx scripts/demo-m1.ts",
     "attack-set": "tsx scripts/attack-set/run.ts",
-    "cloud": "node bin/antibody.mjs cloud serve"
+    "cloud": "node bin/antibody.mjs cloud serve",
+    "e2e": "node --import tsx --test --test-concurrency=1 \"e2e/*.e2e.ts\"",
+    "load-test": "tsx scripts/load-sandbox.ts --local"
   },
   "license": "MIT",
   "dependencies": {
@@ -34,6 +36,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "axe-core": "^4.10.3",
+    "playwright": "^1.63.0",
     "typescript": "^5.9.3"
   }
 }

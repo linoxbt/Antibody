@@ -21,6 +21,7 @@ import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
 import { RevokeFlow } from './revoke.ts';
+import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WEB = join(ROOT, 'web');
@@ -122,6 +123,7 @@ export async function stateJson(rt: Runtime, control: Control) {
     digest: p.digest,
     coverage: p.coverage,
     incidents: control.incidents.list().slice(-20).reverse(),
+    crossCheck: rt.chain instanceof CrossCheckedChain ? rt.chain.status() : null,
     reports: control.reportLog.list(),
   };
 }

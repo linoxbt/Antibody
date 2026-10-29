@@ -60,6 +60,8 @@ export interface Config {
   webPort: number;
   /** Max gas the policy accepts per payment, in MIST. */
   maxGasMist: string;
+  /** FR-19: a second Sui RPC that must agree on the delegate set (unset = no cross-check). */
+  crossCheck: { url: string; transport: ChainTransport; apiKey: string | null } | null;
 }
 
 /** Values `antibody setup` persists so later processes need no extra env. */
@@ -107,6 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     autoQuarantineScore: Number(env.ANTIBODY_AUTO_QUARANTINE_SCORE ?? 0.6),
     webPort: Number(env.ANTIBODY_WEB_PORT ?? 7402),
     maxGasMist: env.ANTIBODY_MAX_GAS_MIST ?? '50000000',
+    crossCheck: env.ANTIBODY_CROSSCHECK_RPC_URL ? { url: env.ANTIBODY_CROSSCHECK_RPC_URL, transport: (env.ANTIBODY_CROSSCHECK_TRANSPORT as ChainTransport) ?? 'grpc', apiKey: env.ANTIBODY_CROSSCHECK_API_KEY ?? null } : null,
   };
 }
 

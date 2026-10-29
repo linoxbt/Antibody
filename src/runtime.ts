@@ -8,6 +8,7 @@ import type { LaneKey } from './core/keys.ts';
 import type { ChainReader } from './adapters/chain.ts';
 import { SdkChainReader } from './adapters/chain-sdk.ts';
 import { FixtureChain } from './adapters/chain-fixture.ts';
+import { CrossCheckedChain } from './adapters/chain-crosscheck.ts';
 import type { MemoryClient } from './adapters/memory.ts';
 import { LiveMemoryClient } from './adapters/memwal-live.ts';
 import { OfflineRelayer } from './adapters/memwal-offline.ts';
@@ -59,13 +60,16 @@ export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
     };
   }
 
-  const chain = new SdkChainReader({
+  const tatum = new SdkChainReader({
     transport: cfg.chainTransport,
     network: cfg.network,
     url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl,
     apiKey: cfg.tatumApiKey,
     packageId: cfg.packageId,
   });
+  const chain = cfg.crossCheck
+    ? new CrossCheckedChain(tatum, new SdkChainReader({ transport: cfg.crossCheck.transport, network: cfg.network, url: cfg.crossCheck.url, apiKey: cfg.crossCheck.apiKey, packageId: cfg.packageId }), { label: new URL(cfg.crossCheck.url).host })
+    : tatum;
   const accountId = cfg.accountId;
   return {
     cfg,

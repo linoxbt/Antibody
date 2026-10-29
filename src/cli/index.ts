@@ -39,6 +39,7 @@ import { submitUserRecord, writeStatement } from '../user/user.ts';
 import { liveAccountAdmin } from '../adapters/account-live.ts';
 import type { AccountAdmin } from '../adapters/chain.ts';
 import { SdkChainReader } from '../adapters/chain-sdk.ts';
+import { primaryOf } from '../adapters/chain-crosscheck.ts';
 import { retrieveAll } from '../adapters/memory.ts';
 import { startBillServer } from '../payments/x402-server.ts';
 import { suiNetworkId } from '../payments/x402.ts';
@@ -95,7 +96,7 @@ function ownerAdmin(r: Runtime): AccountAdmin {
   }
   const secret = process.env.OWNER_SUI_PRIVATE_KEY;
   if (!secret) throw new Error('this step needs the owner wallet: set OWNER_SUI_PRIVATE_KEY (throwaway demo owner only)');
-  return liveAccountAdmin({ ownerSecret: secret, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (r.chain as SdkChainReader).client });
+  return liveAccountAdmin({ ownerSecret: secret, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (primaryOf(r.chain) as SdkChainReader).client });
 }
 
 /** Owner adds a fresh key for the lane; the role's key file is replaced (the old one kept aside); lane.rotate recorded. */

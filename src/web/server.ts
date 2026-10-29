@@ -5,9 +5,9 @@
  * x-antibody-ui header so a cross-site form post cannot trigger them.
  */
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { bodyContent } from '../core/envelope.ts';
@@ -20,11 +20,38 @@ import { createModel } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const STATIC: Record<string, [string, string]> = {
-  '/': ['web/index.html', 'text/html; charset=utf-8'],
-  '/app.js': ['web/app.js', 'text/javascript; charset=utf-8'],
-  '/styles.css': ['web/styles.css', 'text/css; charset=utf-8'],
+const WEB = join(ROOT, 'web');
+const TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+  '.json': 'application/json',
+  '.md': 'text/markdown; charset=utf-8',
 };
+const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
+
+/** Resolve a URL path to a file under web/ (clean URLs: /console → console.html). Never escapes web/. */
+function staticFile(pathname: string): string | null {
+  let rel: string;
+  try {
+    rel = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (rel.includes('\\') || rel.includes('\0')) return null;
+  const candidates = rel.endsWith('/') ? [`${rel}index.html`] : [rel, `${rel}.html`];
+  for (const c of candidates) {
+    const p = resolve(WEB, `.${c}`);
+    if (!p.startsWith(WEB + '/')) return null;
+    if (existsSync(p) && statSync(p).isFile() && TYPES[extname(p)]) return p;
+  }
+  // The recorded walkthrough lives in site/ once `scripts/build-site.ts` has run.
+  if (rel === '/demo.json' && existsSync(join(ROOT, 'site', 'demo.json'))) return join(ROOT, 'site', 'demo.json');
+  return null;
+}
 
 const pexec = promisify(execFile);
 
@@ -98,10 +125,12 @@ export function startWeb(rt: Runtime, control: Control, port: number): Promise<S
       res.end(JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     };
     try {
-      const st = STATIC[url.pathname];
-      if (req.method === 'GET' && st) {
-        res.writeHead(200, { 'content-type': st[1], 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" });
-        res.end(readFileSync(join(ROOT, st[0])));
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+        const file = staticFile(url.pathname);
+        const status = file ? 200 : 404;
+        const path = file ?? join(WEB, '404.html');
+        res.writeHead(status, { 'content-type': TYPES[extname(path)]!, 'cache-control': 'no-store', 'content-security-policy': CSP, 'x-content-type-options': 'nosniff' });
+        res.end(readFileSync(path));
         return;
       }
       if (req.method === 'GET' && url.pathname === '/api/state') return send(200, await stateJson(rt, control));

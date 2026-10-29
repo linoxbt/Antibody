@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Walkthrough · Antibody</title>
+  <meta name="description" content="Poisoned memory, blocked payment, blast radius, quarantine, clean restoration, and the lesson learned." />
+  <meta name="theme-color" content="#06080d" />
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+  <link rel="stylesheet" href="/assets/css/walkthrough.css" />
+</head>
+<body data-page="walkthrough">
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Walkthrough</span><h1>The story, <em>chapter by chapter.</em></h1><p>Recorded by running Antibody's real code on the offline backend. Each chapter shows exactly what the control process saw at that moment.</p></div>
+      <div class="modebar"><span class="pill rec">Recorded · simulated</span><button class="btn btn-ghost btn-sm" id="play">Autoplay</button></div>
+    </div>
+    <div class="app-main" id="wt">
+      <div class="wt-layout">
+        <nav class="wt-rail card" aria-label="Chapters"><ol id="chapters"></ol></nav>
+        <article class="wt-stage">
+          <div class="card gold">
+            <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+            <span class="kicker" id="wt-time"></span>
+            <h2 id="wt-title" style="margin:10px 0 14px"></h2>
+            <p class="lede" id="wt-text" style="margin:0"></p>
+            <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="prev">← Previous</button><button class="btn btn-gold btn-sm" id="next">Next chapter →</button></div>
+          </div>
+          <div id="evidence" style="display:grid;gap:20px;margin-top:20px"></div>
+        </article>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/walkthrough.js"></script>
+</body>
+</html>

@@ -471,12 +471,15 @@ async function main(argv: string[]): Promise<void> {
         ['control', ['control', 'serve', '--web'], 'control'],
         ['agent', ['agent', 'serve'], 'agent'],
       ];
+      // Stale sockets from a previous run would satisfy the readiness check before the daemon serves.
+      for (const s of ['signer.sock', 'control.sock', 'agent.sock']) rmSync(join(runDir(cfg), s), { force: true });
       for (const [name, args, role] of procs) {
         const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
         const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
         child.unref();
         writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
         await waitFor(name === 'agent' ? join(runDir(cfg), 'agent.sock') : socketPath(cfg, name as 'control' | 'signer'), 30_000);
+        if (name === 'control') await waitForHttp(`http://127.0.0.1:${cfg.webPort}/api/state`, 30_000);
         console.log(green(`${name} up`) + dim(` pid ${child.pid}, log ${join(cfg.home, 'logs', `${name}.out`)}`));
       }
       console.log(`web view: http://127.0.0.1:${cfg.webPort}`);
@@ -495,6 +498,7 @@ async function main(argv: string[]): Promise<void> {
           console.log(dim(`${name} was not running`));
         }
         rmSync(p, { force: true });
+        rmSync(join(runDir(cfg), `${name}.sock`), { force: true });
       }
       return;
     }
@@ -546,6 +550,19 @@ async function main(argv: string[]): Promise<void> {
 
     default:
       throw new Error(`unknown command ${cmd}\n${HELP}`);
+  }
+}
+
+async function waitForHttp(url: string, ms: number) {
+  const t = Date.now() + ms;
+  for (;;) {
+    try {
+      if ((await fetch(url)).status < 500) return;
+    } catch {
+      /* not listening yet */
+    }
+    if (Date.now() > t) throw new Error(`timed out waiting for ${url}`);
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 

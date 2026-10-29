@@ -6,12 +6,15 @@
  * token the control process writes to its run directory (0600) for whoever
  * already has a shell on this machine.
  *
- * Sessions live in memory (a control restart signs everyone out) and travel
- * in an HttpOnly, SameSite=Strict cookie. Nothing here can move funds or
+ * Sessions live in memory (a control restart signs everyone out) unless a
+ * session file is given (the hosted sandbox, so a redeploy keeps visitors
+ * signed in); the file stores only SHA-256 hashes of session ids, never the
+ * ids themselves. Sessions travel in an HttpOnly, SameSite=Strict cookie. Nothing here can move funds or
  * write the ledger beyond what the console already could; it only decides
  * who may use the console at all.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
 import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
 import { parseSerializedSignature } from '@mysten/sui/cryptography';
@@ -51,6 +54,17 @@ export class AuthError extends Error {
 
 const sha = (s: string) => createHash('sha256').update(s).digest();
 
+export interface AuthOptions {
+  operatorToken?: string;
+  now?: () => number;
+  statement?: string;
+  client?: () => SigClient;
+  /** Persist sessions here (hashed ids, 0600) so a restart keeps people signed in. */
+  sessionFile?: string;
+}
+
+const idHash = (id: string) => createHash('sha256').update(id).digest('base64url');
+
 export class Auth {
   private sessions = new Map<string, Session>();
   private challenges = new Map<string, { address: string; expiresAt: number }>();
@@ -62,12 +76,22 @@ export class Auth {
    * null on the hosted sandbox, where any wallet may sign in to its own world.
    */
   private owner: (() => Promise<string>) | null;
-  private opts: { operatorToken?: string; now?: () => number; statement?: string; client?: () => SigClient };
+  private opts: AuthOptions;
+  private saveTimer: NodeJS.Timeout | null = null;
+  private dirty = false;
 
-  constructor(owner: (() => Promise<string>) | null, opts: { operatorToken?: string; now?: () => number; statement?: string; client?: () => SigClient } = {}) {
+  constructor(owner: (() => Promise<string>) | null, opts: AuthOptions = {}) {
     this.owner = owner;
     this.opts = opts;
     this.operatorToken = opts.operatorToken ?? randomBytes(24).toString('base64url');
+    if (opts.sessionFile && existsSync(opts.sessionFile)) {
+      try {
+        const saved = JSON.parse(readFileSync(opts.sessionFile, 'utf8')) as Record<string, Omit<Session, 'id'>>;
+        for (const [h, v] of Object.entries(saved)) if (v.expiresAt > this.now()) this.sessions.set(h, { ...v, id: '' });
+      } catch {
+        /* a damaged file just signs everyone out */
+      }
+    }
   }
 
   private now() {
@@ -149,25 +173,62 @@ export class Auth {
   private open(method: AuthMethod, address: string | null): Session {
     const t = this.now();
     const s: Session = { id: randomBytes(32).toString('base64url'), method, address, createdAt: t, expiresAt: t + SESSION_TTL };
-    this.sessions.set(s.id, s);
+    this.sessions.set(idHash(s.id), s);
+    this.save();
     return s;
+  }
+
+  /** Write sessions soon (debounced). */
+  private save() {
+    if (!this.opts.sessionFile) return;
+    this.dirty = true;
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => this.flush(), 200);
+    this.saveTimer.unref();
+  }
+
+  /** Write sessions now, atomically. Only hashes of ids are stored. */
+  flush() {
+    const file = this.opts.sessionFile;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    if (!file || !this.dirty) return;
+    this.dirty = false;
+    const now = this.now();
+    const out: Record<string, Omit<Session, 'id'>> = {};
+    for (const [h, v] of this.sessions) if (v.expiresAt > now) out[h] = { method: v.method, address: v.address, createdAt: v.createdAt, expiresAt: v.expiresAt };
+    const tmp = `${file}.tmp-${process.pid}`;
+    try {
+      writeFileSync(tmp, JSON.stringify(out), { mode: 0o600 });
+      renameSync(tmp, file);
+    } catch {
+      /* best effort: sessions stay valid in memory */
+    }
   }
 
   /** The session named by a Cookie header, if live. */
   fromCookie(header: string | undefined): Session | null {
     const id = parseCookies(header)[SESSION_COOKIE];
     if (!id) return null;
-    const s = this.sessions.get(id);
+    const h = idHash(id);
+    const s = this.sessions.get(h);
     if (!s) return null;
     if (s.expiresAt < this.now()) {
-      this.sessions.delete(id);
+      this.sessions.delete(h);
+      this.save();
       return null;
     }
-    return s;
+    return { ...s, id };
   }
 
   end(id: string) {
-    this.sessions.delete(id);
+    this.sessions.delete(idHash(id));
+    this.save();
+  }
+
+  /** Live sessions (metrics). */
+  get sessionCount(): number {
+    return this.sessions.size;
   }
 
   /** `secure` adds the Secure flag: set it whenever the browser reached us over HTTPS. */

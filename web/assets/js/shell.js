@@ -82,7 +82,7 @@ export function mountShell(current) {
           col('Project', [['Source', REPO, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
         ),
         el('div', { class: 'giant', 'aria-hidden': 'true' }, 'antibody'),
-        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT · demo data is simulated`), themeSwitch()),
+        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT · demo data is simulated · `, el('a', { href: '/privacy' }, 'Privacy & terms')), themeSwitch()),
       ),
     ),
   );

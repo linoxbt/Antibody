@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Install · Antibody</title>
+  <meta name="description" content="Install Antibody on macOS, Linux or Windows (WSL2): requirements, one-line installer, first run, going live on Sui mainnet, phones, and fixes for every error you might meet." />
+  <meta name="theme-color" content="#030407" />
+  <script src="/assets/js/theme-init.js"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+  <link rel="stylesheet" href="/assets/css/docs.css" />
+</head>
+<body data-page="install">
+  <div class="app-bg" aria-hidden="true"></div>
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Install <b>guide</b></span><h1 class="words">Install <span class="tail">Antibody.</span></h1></div>
+    </div>
+
+    <div class="choose">
+      <a class="choice reveal" href="/login">
+        <span class="kicker">No install</span>
+        <b>Try it in your browser</b>
+        <span>Connect a Sui wallet and get your own sandbox. Works on phones too.</span>
+        <em>Open the sandbox →</em>
+      </a>
+      <a class="choice reveal d1" href="#install">
+        <span class="kicker">Your computer</span>
+        <b>Install Antibody</b>
+        <span>The real thing: your agent's keys stay on your machine. About five minutes.</span>
+        <em>Start below ↓</em>
+      </a>
+    </div>
+
+    <div class="docs">
+      <nav class="toc" aria-label="On this page">
+        <a href="#what">What you get</a>
+        <a href="#requirements">Requirements</a>
+        <a href="#install">Install</a>
+        <a href="#first-run">First run</a>
+        <a href="#console">Open the console</a>
+        <a href="#mainnet">Go live on mainnet</a>
+        <a href="#everyday">Everyday commands</a>
+        <a href="#phone">On a phone</a>
+        <a href="#update">Update or remove</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+      </nav>
+
+      <article class="doc">
+        <section id="what">
+          <h2>What you get</h2>
+          <p>Antibody is software you run, not a website account. It sits next to your AI agent and holds the keys that let the agent read and write its memory on Walrus and Sui.</p>
+          <ul class="facts">
+            <li><b>A command-line tool</b> called <code>antibody</code>, for setup, payees and quarantines.</li>
+            <li><b>Four background processes</b> started by <code>antibody up</code>: control, signer, Steward the agent, and the sentinel that watches the wallet.</li>
+            <li><b>A web console</b> in your browser at <code>http://127.0.0.1:7402</code>. It only answers on your own computer.</li>
+          </ul>
+          <p class="note">There is no desktop app icon or app store app. You install it from a terminal, then use it in your browser.</p>
+        </section>
+
+        <section id="requirements">
+          <h2>Requirements</h2>
+          <div class="table-wrap"><table class="table">
+            <tbody>
+              <tr><td>System</td><td>macOS 12+ or Linux. On Windows, use <a href="https://learn.microsoft.com/windows/wsl/install" target="_blank" rel="noopener">WSL2</a> (Ubuntu).</td></tr>
+              <tr><td>Node.js</td><td>Version 22 or newer. Check with <code>node -v</code>.</td></tr>
+              <tr><td>git</td><td>Any recent version. Check with <code>git --version</code>.</td></tr>
+              <tr><td>Disk</td><td>About 300 MB.</td></tr>
+              <tr><td>For mainnet only</td><td>A Sui wallet (e.g. <a href="https://slush.app" target="_blank" rel="noopener">Slush</a>), a Walrus Memory account, a <a href="https://tatum.io" target="_blank" rel="noopener">Tatum</a> API key, and a little SUI and USDC.</td></tr>
+            </tbody>
+          </table></div>
+          <details class="howto">
+            <summary>How do I get Node.js 22?</summary>
+            <p>The simplest way on macOS, Linux and WSL is nvm:</p>
+            <pre class="code" data-copy>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# open a new terminal, then:
+nvm install 22
+nvm alias default 22</pre>
+            <p>Or download the LTS installer from <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a>.</p>
+          </details>
+          <details class="howto">
+            <summary>I'm on Windows</summary>
+            <p>Open PowerShell as administrator and run <code>wsl --install</code>. Restart, open <b>Ubuntu</b> from the Start menu, then follow this guide inside it. The console still opens in your normal Windows browser.</p>
+          </details>
+        </section>
+
+        <section id="install">
+          <h2>Install</h2>
+          <p>Paste this into a terminal. It checks your system, downloads Antibody into <code>~/.antibody-app</code> and adds the <code>antibody</code> command.</p>
+          <pre class="code" data-copy>curl -fsSL https://antibody-memory.netlify.app/install.sh | bash</pre>
+          <p>If it says the folder is not on your PATH, run the one line it prints, then open a new terminal. Check it worked:</p>
+          <pre class="code" data-copy>antibody --help</pre>
+          <details class="howto">
+            <summary>Install by hand instead</summary>
+            <pre class="code" data-copy>git clone https://github.com/linoxbt/Antibody.git ~/.antibody-app
+cd ~/.antibody-app
+npm ci --omit=dev
+mkdir -p ~/.local/bin
+ln -sf ~/.antibody-app/bin/antibody.mjs ~/.local/bin/antibody</pre>
+          </details>
+        </section>
+
+        <section id="first-run">
+          <h2>First run (simulated, no keys)</h2>
+          <p>Antibody starts on a simulated chain, so you can try everything safely before touching mainnet. Output is labelled <b>SIMULATED</b>.</p>
+          <ol class="steps">
+            <li><span>Create keys and a practice account</span><pre class="code" data-copy>antibody setup</pre></li>
+            <li><span>Start Antibody. It prints your sign-in link.</span><pre class="code" data-copy>antibody up</pre></li>
+            <li><span>Give Steward a payee and a fact to remember</span><pre class="code" data-copy>antibody payee add --label landlord --address 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d --coin USDC --cap 500 --confirm 001a2d
+antibody statement "Rent is 450 USDC (coin type 0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC), paid on the 1st to my landlord at 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d."</pre></li>
+            <li><span>Attack it: a stranger sends a coin that tries to change the landlord</span><pre class="code" data-copy>antibody dev airdrop</pre></li>
+            <li><span>Ask Steward to pay. The model is fooled; Antibody blocks it.</span><pre class="code" data-copy>antibody steward "Pay this month's rent."</pre></li>
+          </ol>
+        </section>
+
+        <section id="console">
+          <h2>Open the console</h2>
+          <p><code>antibody up</code> prints a link like <code>http://127.0.0.1:7402/login#token=…</code>. Open it in your browser and you are in. Need it again later?</p>
+          <pre class="code" data-copy>antibody login</pre>
+          <p>On mainnet, you can also sign in with the wallet that owns your Antibody account: open <code>http://127.0.0.1:7402</code> and choose your wallet.</p>
+        </section>
+
+        <section id="mainnet">
+          <h2>Go live on mainnet</h2>
+          <ol class="steps">
+            <li><span>Create your Walrus Memory account at <a href="https://memory.walrus.xyz" target="_blank" rel="noopener">memory.walrus.xyz</a> with a wallet you control. That wallet is the <b>owner</b>. Copy the account ID (<code>0x…</code>).</span></li>
+            <li><span>Get a mainnet API key at <a href="https://dashboard.tatum.io" target="_blank" rel="noopener">dashboard.tatum.io</a>.</span></li>
+            <li><span>Export the owner wallet's private key from your wallet's account settings (it starts with <code>suiprivkey1</code>). Antibody uses it only during setup, revoke and rotate. Use a dedicated owner wallet, not your main one.</span></li>
+            <li><span>Put your settings in <code>~/.antibody/antibody.env</code>. Antibody reads this file on every command.</span>
+              <pre class="code" data-copy>mkdir -p ~/.antibody && cat > ~/.antibody/antibody.env &lt;&lt;'EOF'
+ANTIBODY_BACKEND=live
+MEMWAL_ACCOUNT_ID=0xYOUR_ACCOUNT_ID
+TATUM_API_KEY=YOUR_TATUM_KEY
+OWNER_SUI_PRIVATE_KEY=suiprivkey1...
+# Optional: a real model for Steward (any OpenAI-compatible API)
+# LLM_BASE_URL=https://api.openai.com/v1
+# LLM_API_KEY=sk-...
+# LLM_MODEL=gpt-4o-mini
+EOF
+chmod 600 ~/.antibody/antibody.env</pre></li>
+            <li><span>Separate the keys. Live mode refuses to run if one role can read another's key. On a single-user machine, either give each role its own OS user, or accept the risk for testing:</span>
+              <pre class="code" data-copy>sudo ANTIBODY_HOME=$HOME/.antibody ~/.antibody-app/scripts/setup-roles.sh   # proper isolation
+# or, for a test machine only:
+echo 'ANTIBODY_KEY_ISOLATION=simulated' >> ~/.antibody/antibody.env</pre></li>
+            <li><span>Register the four lane keys on-chain and write the ledger's first record:</span><pre class="code" data-copy>antibody setup</pre></li>
+            <li><span>Setup prints Steward's wallet address. Send it a little SUI for gas and the USDC it will pay with.</span></li>
+            <li><span>Start it and sign in:</span><pre class="code" data-copy>antibody up</pre></li>
+          </ol>
+          <p class="note">Optional: add <code>ANTIBODY_CROSSCHECK_RPC_URL=https://fullnode.mainnet.sui.io:443</code> so a second provider must agree on your keys before any payment.</p>
+        </section>
+
+        <section id="everyday">
+          <h2>Everyday commands</h2>
+          <div class="table-wrap"><table class="table cmds"><tbody>
+            <tr><td><code>antibody up</code> / <code>down</code></td><td>Start or stop everything</td></tr>
+            <tr><td><code>antibody login</code></td><td>Print a console sign-in link</td></tr>
+            <tr><td><code>antibody status</code></td><td>Account, lane keys, wallet balances</td></tr>
+            <tr><td><code>antibody show --forensic</code></td><td>What Steward can see, and what is excluded and why</td></tr>
+            <tr><td><code>antibody payee add|remove</code></td><td>Manage who Steward may pay</td></tr>
+            <tr><td><code>antibody quarantine --source 0x… --yes</code></td><td>Cut a poisoned source out of memory</td></tr>
+            <tr><td><code>antibody rebuild --fresh</code></td><td>Rebuild from Walrus + Sui alone and compare</td></tr>
+          </tbody></table></div>
+          <p>Logs live in <code>~/.antibody/logs/</code>, one file per process.</p>
+        </section>
+
+        <section id="phone">
+          <h2>On a phone</h2>
+          <p>Antibody itself needs a computer: it runs background processes and holds keys. On a phone you can:</p>
+          <ul class="facts">
+            <li><b>Use the sandbox.</b> Open <code>antibody-memory.netlify.app/login</code> inside your wallet app's browser (in Slush: the Apps/browser tab) and connect. You get your own simulated Antibody.</li>
+            <li><b>Watch the demo</b> in any mobile browser.</li>
+            <li><b>Reach your own install</b> (advanced): the console only answers on the computer it runs on, by design. Use an SSH tunnel or a private network such as Tailscale, never a public port.</li>
+          </ul>
+        </section>
+
+        <section id="update">
+          <h2>Update or remove</h2>
+          <p>Update: run the installer again. Your keys and data in <code>~/.antibody</code> are never touched.</p>
+          <pre class="code" data-copy>antibody down
+curl -fsSL https://antibody-memory.netlify.app/install.sh | bash
+antibody up</pre>
+          <p>Remove the program (keeps your keys and data):</p>
+          <pre class="code" data-copy>antibody down
+rm -rf ~/.antibody-app ~/.local/bin/antibody</pre>
+          <p class="warn">Deleting <code>~/.antibody</code> also deletes your lane keys. Back up <code>~/.antibody/keys</code> first, or revoke the keys on-chain.</p>
+        </section>
+
+        <section id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          <p>Search for the message you see. Each entry says what it means and how to fix it.</p>
+          <input class="ts-search" id="ts-search" type="search" placeholder="Search errors, e.g. EADDRINUSE or not the account owner" aria-label="Search troubleshooting" />
+          <p class="ts-none hidden" id="ts-none">Nothing matches. Check <code>~/.antibody/logs/</code>, then <a href="https://github.com/linoxbt/Antibody/issues" target="_blank" rel="noopener">open an issue</a> with the message.</p>
+
+          <div class="ts-group" data-group="Installing">
+            <h3>Installing</h3>
+            <details class="ts"><summary><code>Node.js v18… is too old</code> or <code>Unknown file extension ".ts"</code></summary><p>Antibody needs Node.js 22 or newer. Run <code>nvm install 22 &amp;&amp; nvm alias default 22</code>, open a new terminal, and install again.</p></details>
+            <details class="ts"><summary><code>antibody: command not found</code></summary><p>The command folder isn't on your PATH. Run the <code>echo 'export PATH=…'</code> line the installer printed, or add <code>export PATH="$HOME/.local/bin:$PATH"</code> to <code>~/.bashrc</code> or <code>~/.zshrc</code>. Then open a new terminal.</p></details>
+            <details class="ts"><summary><code>Windows shells are not supported</code></summary><p>Run the installer inside WSL2 (Ubuntu), not in PowerShell, CMD or Git Bash. See <a href="#requirements">I'm on Windows</a>.</p></details>
+            <details class="ts"><summary><code>git is not installed</code></summary><p>macOS: <code>xcode-select --install</code>. Ubuntu/Debian: <code>sudo apt install -y git</code>.</p></details>
+            <details class="ts"><summary><code>npm ERR! code EACCES</code> or permission denied</summary><p>Don't use <code>sudo</code> with npm. Install Node with nvm so it lives in your home folder, then run the installer again.</p></details>
+            <details class="ts"><summary><code>npm ci can only install packages when your package.json and package-lock.json are in sync</code></summary><p>Your copy is half-updated. Run <code>git -C ~/.antibody-app fetch origin main &amp;&amp; git -C ~/.antibody-app reset --hard origin/main</code>, then the installer again.</p></details>
+            <details class="ts"><summary><code>Could not download Antibody</code> or network timeouts</summary><p>Check that <code>github.com</code> and <code>registry.npmjs.org</code> are reachable. Behind a company proxy, set <code>HTTPS_PROXY</code> and <code>npm config set proxy http://host:port</code>.</p></details>
+            <details class="ts"><summary><code>~/.antibody-app exists but is not an Antibody install</code></summary><p>Something else is in that folder. Move it away, or install elsewhere: <code>ANTIBODY_APP_DIR=~/antibody-app bash install.sh</code>.</p></details>
+          </div>
+
+          <div class="ts-group" data-group="Setup">
+            <h3>Setup</h3>
+            <details class="ts"><summary><code>refusing to overwrite existing key …</code></summary><p>You already ran setup, and Antibody never overwrites keys. Keep going with <code>antibody up</code>. To truly start over, stop everything and move <code>~/.antibody</code> aside (this abandons those keys).</p></details>
+            <details class="ts"><summary><code>ledger already has a genesis record</code> / <code>ledger is not empty</code></summary><p>Setup already finished for this account. There's nothing to do; run <code>antibody up</code>.</p></details>
+            <details class="ts"><summary><code>set MEMWAL_ACCOUNT_ID to the account created on memory.walrus.xyz</code></summary><p>Live mode needs your Walrus Memory account ID. Create the account at memory.walrus.xyz, then add <code>MEMWAL_ACCOUNT_ID=0x…</code> to <code>~/.antibody/antibody.env</code>.</p></details>
+            <details class="ts"><summary><code>this step needs the owner wallet: set OWNER_SUI_PRIVATE_KEY</code></summary><p>Setup, revoke and rotate are signed by the account owner. Add the owner's exported key (<code>suiprivkey1…</code>) to <code>antibody.env</code>. Use a dedicated owner wallet.</p></details>
+            <details class="ts"><summary><code>OWNER_SUI_PRIVATE_KEY controls 0xA…, but the account owner is 0xB…</code></summary><p>The key belongs to a different wallet than the one that created the Walrus Memory account. Export the key of the wallet shown as owner.</p></details>
+            <details class="ts"><summary><code>ETooManyDelegateKeys (2)</code></summary><p>The account already has the maximum of 20 delegate keys. Remove unused ones in the memory.walrus.xyz dashboard, then run setup again.</p></details>
+            <details class="ts"><summary><code>lane … key not visible on-chain yet</code></summary><p>The transaction landed but the chain reader hasn't caught up. Wait 20 seconds and run <code>antibody setup</code> again. Keys already registered are reused.</p></details>
+            <details class="ts"><summary><code>ANTIBODY_BACKEND must be live or offline</code></summary><p>Fix the spelling in <code>antibody.env</code> (or your shell). Leave it unset to stay on the simulated backend.</p></details>
+          </div>
+
+          <div class="ts-group" data-group="Starting">
+            <h3>Starting</h3>
+            <details class="ts"><summary><code>timed out waiting for …/control.sock</code> (or <code>signer.sock</code>, <code>agent.sock</code>)</summary><p>That process failed to start. Its reason is in <code>~/.antibody/logs/control.out</code> (or <code>signer.out</code>, <code>agent.out</code>). The causes below are the usual ones.</p></details>
+            <details class="ts"><summary><code>listen EADDRINUSE: address already in use 127.0.0.1:7402</code></summary><p>Antibody (or another program) already uses that port. Run <code>antibody down</code> first. To use another port, add <code>ANTIBODY_WEB_PORT=7410</code> to <code>antibody.env</code>.</p></details>
+            <details class="ts"><summary><code>role control can read key files of user, agent, … run each role as its own OS user</code></summary><p>Live mode enforces key separation. Run <code>scripts/setup-roles.sh</code> (see <a href="#mainnet">Go live</a>). For a test machine only, add <code>ANTIBODY_KEY_ISOLATION=simulated</code>.</p></details>
+            <details class="ts"><summary><code>… .key must be mode 0600</code></summary><p>A key file is readable by others. Fix it with <code>chmod 600 ~/.antibody/keys/*/*.key</code>.</p></details>
+            <details class="ts"><summary><code>no control key at …: run `antibody setup` first</code></summary><p>Run <code>antibody setup</code>. If you moved <code>~/.antibody</code>, set <code>ANTIBODY_HOME</code> to its new location.</p></details>
+            <details class="ts"><summary><code>listen EINVAL</code> or <code>ENAMETOOLONG</code> on a <code>.sock</code> path</summary><p>The folder path is too long for a socket (macOS allows about 100 characters). Use a shorter <code>ANTIBODY_HOME</code>, e.g. <code>~/.antibody</code>.</p></details>
+            <details class="ts"><summary><code>this command runs as role "x" but ANTIBODY_ROLE=y</code></summary><p>An <code>ANTIBODY_ROLE</code> variable is left over in your shell. Run <code>unset ANTIBODY_ROLE</code>; <code>antibody up</code> sets it per process.</p></details>
+          </div>
+
+          <div class="ts-group" data-group="Signing in">
+            <h3>Signing in</h3>
+            <details class="ts"><summary><code>no operator token yet: start the console with antibody up</code></summary><p>The console isn't running. Run <code>antibody up</code>, then <code>antibody login</code>.</p></details>
+            <details class="ts"><summary><code>operator link is invalid or from an earlier run</code></summary><p>Links change every time Antibody restarts. Get a fresh one with <code>antibody login</code>.</p></details>
+            <details class="ts"><summary><code>this wallet is not the account owner (0x12ab…cd34)</code></summary><p>Your wallet is on another account. Switch to the account shown in the message, or import the owner key into your wallet. The hosted sandbox accepts any wallet.</p></details>
+            <details class="ts"><summary>No Sui wallet found</summary><p>Install <a href="https://slush.app" target="_blank" rel="noopener">Slush</a> (or another Sui wallet) in this browser and reload. On a phone, open the page inside your wallet app's browser.</p></details>
+            <details class="ts"><summary><code>signature does not verify for this address</code></summary><p>The wallet signed with a different account than it reported: pick the account again in the wallet. Accounts made with Google (zkLogin) are checked against the chain, so the node needs internet access to <code>fullnode.mainnet.sui.io</code> (or set <code>ANTIBODY_ZKLOGIN_RPC_URL</code>).</p></details>
+            <details class="ts"><summary><code>challenge expired or unknown; try again</code></summary><p>You took longer than 5 minutes, or Antibody restarted. Click your wallet again.</p></details>
+            <details class="ts"><summary><code>too many failed sign-in attempts; wait a minute</code></summary><p>Several failures in a row. Wait one minute, then try once with the right account.</p></details>
+            <details class="ts"><summary>Session ended. Sign in again.</summary><p>Sessions last 12 hours, and restarting Antibody signs everyone out. Sign in again.</p></details>
+          </div>
+
+          <div class="ts-group" data-group="Payments and memory">
+            <h3>Payments and memory</h3>
+            <details class="ts"><summary><code>BLOCK UNKNOWN_RECIPIENT</code></summary><p>Steward tried to pay an address that isn't a signed payee. If it's legitimate, add it with <code>antibody payee add</code>. If not, Antibody just stopped an attack.</p></details>
+            <details class="ts"><summary><code>BLOCK LABEL_MISMATCH</code></summary><p>Steward named a payee ("landlord") but used a different address than the one you signed. This is the classic memory-poisoning attack. Check Incidents and quarantine the source.</p></details>
+            <details class="ts"><summary><code>BLOCK OVER_CAP</code></summary><p>The amount is above that payee's per-payment cap. If intended, remove and re-add the payee with a higher <code>--cap</code>.</p></details>
+            <details class="ts"><summary><code>BLOCK ASSET_MISMATCH</code> or <code>BAD_AMOUNT</code></summary><p>Wrong coin for this payee, or an amount Antibody can't read. Say the coin and amount plainly, e.g. "Pay 450 USDC".</p></details>
+            <details class="ts"><summary><code>BLOCK SIMULATION_MISMATCH</code></summary><p>The dry run did something other than the plain transfer, or needed too much gas. Check Steward's wallet has SUI for gas. Persistent? Treat it as suspicious.</p></details>
+            <details class="ts"><summary><code>BLOCK LEDGER_UNVERIFIED</code></summary><p>Antibody can't prove its ledger is complete and untampered, so it pays nobody. Run <code>antibody verify-ledger</code>. If records are missing from the index, <code>antibody restore-index</code>.</p></details>
+            <details class="ts"><summary><code>BLOCK CHAIN_UNAVAILABLE</code></summary><p>Chain reads failed, so Antibody fails closed. Check internet access and <code>TATUM_API_KEY</code>. With a second RPC set, "chain readers disagree on the delegate set" means the two providers report different keys: investigate before anything else.</p></details>
+            <details class="ts"><summary><code>payee changes need a typed confirmation: pass --confirm &lt;last 6 characters&gt;</code></summary><p>A deliberate speed bump. Add <code>--confirm</code> with the last six characters of the address, e.g. <code>--confirm 001a2d</code>.</p></details>
+            <details class="ts"><summary><code>address must be a canonical Sui address (0x + 64 lowercase hex)</code></summary><p>Use the full address, all lowercase. Names like SuiNS are never resolved, on purpose.</p></details>
+            <details class="ts"><summary>Steward says "I could not find a landlord address in memory"</summary><p>Steward only uses what you told it. Add a fact with <code>antibody statement "Rent is 450 USDC … to my landlord at 0x…"</code>.</p></details>
+            <details class="ts"><summary><code>ledger is at the MVP cap of 90 records</code></summary><p>This version keeps at most 90 control records. Start a fresh account for now; larger ledgers come later.</p></details>
+            <details class="ts"><summary><code>Tatum Storage upload failed: HTTP 401/403</code></summary><p>Incident reports need a mainnet Tatum key. Check <code>TATUM_API_KEY</code>. Without one, reports are saved locally and labelled simulated.</p></details>
+          </div>
+
+          <div class="ts-group" data-group="Hosted sandbox">
+            <h3>Hosted sandbox</h3>
+            <details class="ts"><summary><code>the sandbox is full right now</code></summary><p>The free sandbox has a limit on worlds. Try later, or install Antibody yourself.</p></details>
+            <details class="ts"><summary><code>slow down: too many actions this minute</code></summary><p>Each sandbox allows about 40 actions a minute. Wait a moment.</p></details>
+            <details class="ts"><summary>My sandbox looks different from before</summary><p>Sandboxes can be reset by you (Settings → Reset sandbox) or cleared during maintenance. They are simulated and hold nothing of value.</p></details>
+          </div>
+        </section>
+      </article>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/install.js"></script>
+</body>
+</html>

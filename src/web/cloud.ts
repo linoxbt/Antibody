@@ -25,6 +25,7 @@ import { buildControl } from '../services.ts';
 import type { QuarantineSeed } from '../core/types.ts';
 import { Auth, AuthError, type Session } from './auth.ts';
 import { RevokeFlow } from './revoke.ts';
+import { zkLoginClient } from '../adapters/zklogin.ts';
 import { CSP, readBody, staticFile, stateJson, TYPES, WEB } from './server.ts';
 
 export interface CloudOptions {
@@ -154,7 +155,7 @@ function clientOf(req: IncomingMessage): string {
 
 export async function startCloud(o: CloudOptions): Promise<{ server: Server; tenants: Tenants; auth: Auth }> {
   const tenants = new Tenants(o);
-  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.' });
+  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.', client: zkLoginClient() });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://sandbox');

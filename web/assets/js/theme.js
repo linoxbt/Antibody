@@ -39,3 +39,26 @@ export function themeButton() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', META[theme()]);
   return b;
 }
+
+/** A two-way Dark / Light control for menus and footers. */
+export function themeSwitch() {
+  const wrap = document.createElement('div');
+  wrap.className = 'theme-switch';
+  wrap.setAttribute('role', 'group');
+  wrap.setAttribute('aria-label', 'Theme');
+  const opt = (t, label, paths) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.t = t;
+    b.append(icon(paths), document.createTextNode(label));
+    b.addEventListener('click', () => setTheme(t));
+    return b;
+  };
+  const buttons = [opt('dark', 'Dark', MOON), opt('light', 'Light', SUN)];
+  const paint = () => buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.t === theme())));
+  addEventListener('themechange', paint);
+  paint();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', META[theme()]);
+  wrap.append(...buttons);
+  return wrap;
+}

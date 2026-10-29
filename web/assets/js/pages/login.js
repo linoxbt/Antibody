@@ -4,11 +4,11 @@ import { sky, armReveals } from '../motion.js';
 import { api, authStatus, setDemo } from '../data.js';
 import { $, el } from '../ui.js';
 import { discoverWallets, connect, signMessage, cancelled } from '../wallets.js';
-import { themeButton } from '../theme.js';
+import { themeSwitch } from '../theme.js';
 
 sky();
 armReveals();
-document.querySelector('.auth-top .back').after(themeButton());
+$('theme-slot').append(themeSwitch());
 
 const params = new URLSearchParams(location.search);
 const next = (() => {
@@ -53,6 +53,7 @@ async function signInWith(w, btn) {
 }
 
 function renderWallets() {
+  if (node === false && wallets.length) $('wallet-seen').replaceChildren(el('span', { class: 'seen' }, `${wallets.map((w) => w.name).join(', ')} detected, ready for your node.`));
   const host = $('wallets');
   if (!wallets.length) {
     host.replaceChildren(el('div', { class: 'wallet-empty' }, 'No Sui wallet detected. Install ', el('a', { href: 'https://slush.app', target: '_blank', rel: 'noopener' }, 'Slush'), ' or another Sui wallet, then reload.'));
@@ -60,7 +61,7 @@ function renderWallets() {
   }
   host.replaceChildren(
     ...wallets.map((w) => {
-      const b = el('button', { class: 'wallet-btn', type: 'button' }, w.icon ? el('img', { src: w.icon, alt: '', width: 32, height: 32 }) : el('span', { class: 'wi' }, w.name[0] ?? '?'), `Continue with ${w.name}`, el('small', {}, node === false ? 'needs a node' : 'detected'));
+      const b = el('button', { class: 'wallet-btn', type: 'button' }, w.icon ? el('img', { src: w.icon, alt: '', width: 32, height: 32 }) : el('span', { class: 'wi' }, w.name[0] ?? '?'), `Continue with ${w.name}`, el('small', {}, 'detected'));
       b.addEventListener('click', () => signInWith(w, b));
       return b;
     }),
@@ -101,11 +102,8 @@ $('demo').addEventListener('click', () => setDemo(true));
   if (fromHash) history.replaceState(null, '', location.pathname + location.search); // keep the token out of history
   const st = await authStatus();
   node = !!st;
-  $('node-state').textContent = st ? 'Node online' : 'Public demo site';
-  if (!st) {
-    $('op-form').querySelectorAll('input, button').forEach((x) => (x.disabled = true));
-    say('This public site has no Antibody node behind it. Explore the recorded demo, or run antibody up locally to sign in.');
-  }
+  document.body.dataset.node = st ? 'on' : 'off';
+  $('node-state').textContent = st ? 'Node online · signing is free and moves no funds' : 'Public demo site';
   renderWallets();
   if (st?.authenticated) return location.replace(next);
   if (params.has('signedout')) say('Signed out.');

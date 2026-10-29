@@ -387,8 +387,17 @@ details[open] summary::before { content: '– '; }
 .theme-btn:hover { color: var(--text); border-color: var(--line-3); }
 .theme-btn:active { transform: rotate(-20deg) scale(0.95); }
 .theme-btn svg { width: 18px; height: 18px; }
-.nav .theme-btn { margin-left: auto; }
-.nav .theme-btn ~ .nav-cta { margin-left: 0; }
-@media (max-width: 1080px) { .nav .burger { margin-left: 8px; } }
 /* the white mark reads as navy with blue tips on soft white */
 :root[data-theme='light'] img[src$='mark.svg'] { filter: invert(1) hue-rotate(180deg) saturate(1.4); }
+.theme-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.03); }
+.theme-switch button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: 500 13px var(--sans); cursor: pointer; transition: background 0.2s, color 0.2s; }
+.theme-switch button svg { width: 15px; height: 15px; }
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed='true'] { background: rgba(var(--fg-rgb), 0.08); color: var(--text); }
+:root[data-theme='light'] .theme-switch button[aria-pressed='true'] { background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
+.drawer-theme { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 4px 4px; color: var(--muted); font-size: 14px; }
+.footer .legal { align-items: center; }
+.drawer a.btn { align-items: center; justify-content: center; height: 52px; padding: 0 22px; flex: none; }
+.drawer a.btn-primary { color: #071331; }
+.drawer a.btn-ghost { color: var(--text); }
+:root[data-theme='light'] .drawer a.btn-primary { color: #fff; }

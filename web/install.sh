@@ -64,6 +64,7 @@ bold "Installing dependencies (about a minute)"
   "Behind a proxy? npm config set proxy http://host:port" \
   "Then re-run this installer; it picks up where it stopped."
 ok "dependencies installed"
+(cd "$DIR" && node --import tsx scripts/build-site.ts >/dev/null 2>&1) && ok "recorded demo built" || echo "  (recorded demo skipped: the console still works; Enter the demo will not)"
 
 mkdir -p "$BIN" || fail "Could not create $BIN." "Pick another folder you own: ANTIBODY_BIN_DIR=~/bin bash install.sh"
 cat >"$BIN/antibody" <<SH

@@ -5,22 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Security model · Antibody</title>
   <meta name="description" content="Antibody's twelve invariants, its architecture, lanes and trust assumptions." />
-  <meta name="theme-color" content="#faf8f4" />
+  <meta name="theme-color" content="#030407" />
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
-  <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/assets/css/brand.css" />
 </head>
 <body data-page="security">
+  <div class="app-bg" aria-hidden="true"></div>
   <main class="wrap">
     <div class="page-head">
-      <div><span class="eyebrow">Security model</span><h1><em>Security.</em></h1></div>
+      <div><span class="eyebrow">Security <b>06</b></span><h1 class="words">Twelve <span class="tail">guarantees.</span></h1></div>
     </div>
     <div class="app-main">
-      <section class="grid-4"><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-1</span><h3 style="font-size:18px;margin:6px 0 4px">Lane binding</h3><span class="tiny muted mono">T-02 T-03 T-20</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-2</span><h3 style="font-size:18px;margin:6px 0 4px">Default deny</h3><span class="tiny muted mono">T-01 T-03</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-3</span><h3 style="font-size:18px;margin:6px 0 4px">Taint follows reads</h3><span class="tiny muted mono">T-04 T-05 T-06</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-4</span><h3 style="font-size:18px;margin:6px 0 4px">Model can’t mint trust</h3><span class="tiny muted mono">T-07</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-5</span><h3 style="font-size:18px;margin:6px 0 4px">Payments by code</h3><span class="tiny muted mono">T-08 T-09</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-6</span><h3 style="font-size:18px;margin:6px 0 4px">Fail closed</h3><span class="tiny muted mono">T-10</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-7</span><h3 style="font-size:18px;margin:6px 0 4px">Exclude, never delete</h3><span class="tiny muted mono">T-15 T-16</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-8</span><h3 style="font-size:18px;margin:6px 0 4px">Live quarantine closure</h3><span class="tiny muted mono">T-13</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-9</span><h3 style="font-size:18px;margin:6px 0 4px">Revocation is independent</h3><span class="tiny muted mono">T-14 T-20</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-10</span><h3 style="font-size:18px;margin:6px 0 4px">Deterministic rebuild</h3><span class="tiny muted mono">T-17 T-18</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-11</span><h3 style="font-size:18px;margin:6px 0 4px">Tamper-evident ledger</h3><span class="tiny muted mono">T-11 T-12</span></div><div class="card guarantee-mini"><span class="mono" style="color:var(--gold)">I-12</span><h3 style="font-size:18px;margin:6px 0 4px">Separated keys</h3><span class="tiny muted mono">T-19</span></div></section>
+      <section class="inv-grid" aria-label="Invariants">
+        <div class="inv reveal"><span class="inv-n">I-01</span><h3>Lane binding</h3><span class="inv-t">T-02 T-03 T-20</span></div>
+        <div class="inv reveal"><span class="inv-n">I-02</span><h3>Default deny</h3><span class="inv-t">T-01 T-03</span></div>
+        <div class="inv reveal"><span class="inv-n">I-03</span><h3>Taint follows reads</h3><span class="inv-t">T-04 T-05 T-06</span></div>
+        <div class="inv reveal"><span class="inv-n">I-04</span><h3>Model can’t mint trust</h3><span class="inv-t">T-07</span></div>
+        <div class="inv reveal"><span class="inv-n">I-05</span><h3>Payments by code</h3><span class="inv-t">T-08 T-09</span></div>
+        <div class="inv reveal"><span class="inv-n">I-06</span><h3>Fail closed</h3><span class="inv-t">T-10</span></div>
+        <div class="inv reveal"><span class="inv-n">I-07</span><h3>Exclude, never delete</h3><span class="inv-t">T-15 T-16</span></div>
+        <div class="inv reveal"><span class="inv-n">I-08</span><h3>Live quarantine closure</h3><span class="inv-t">T-13</span></div>
+        <div class="inv reveal"><span class="inv-n">I-09</span><h3>Revocation is independent</h3><span class="inv-t">T-14 T-20</span></div>
+        <div class="inv reveal"><span class="inv-n">I-10</span><h3>Deterministic rebuild</h3><span class="inv-t">T-17 T-18</span></div>
+        <div class="inv reveal"><span class="inv-n">I-11</span><h3>Tamper-evident ledger</h3><span class="inv-t">T-11 T-12</span></div>
+        <div class="inv reveal"><span class="inv-n">I-12</span><h3>Separated keys</h3><span class="inv-t">T-19</span></div>
+      </section>
       <section class="grid-2">
-        <div class="card">
-          <div class="card-title"><div><h3>Lanes</h3></div></div>
+        <div class="card reveal">
+          <div class="card-title"><h3>Lanes</h3></div>
           <table class="table"><tbody>
             <tr><td class="mono">antibody:user</td><td><span class="tag trusted">trusted</span></td></tr>
             <tr><td class="mono">antibody:agent</td><td><span class="tag derived">derived</span></td></tr>
@@ -28,8 +41,8 @@
             <tr><td class="mono">antibody:control</td><td><span class="tag record">control</span></td></tr>
           </tbody></table>
         </div>
-        <div class="card">
-          <div class="card-title"><div><h3>Trust assumptions</h3></div></div>
+        <div class="card reveal d1">
+          <div class="card-title"><h3>Trust assumptions</h3></div>
           <table class="table"><tbody>
             <tr><td>Owner wallet</td><td class="muted">root of trust</td></tr>
             <tr><td>Relayer</td><td class="muted">lies → blocks, never wrong pays</td></tr>
@@ -38,8 +51,8 @@
           </tbody></table>
         </div>
       </section>
-      <section class="card gold">
-        <div class="card-title"><div><h3>Envelope</h3></div></div>
+      <section class="card glow reveal">
+        <div class="card-title"><h3>Envelope</h3><span class="pill rec plain">AB1</span></div>
         <pre class="quote">AB1|base64url(JCS(header))|base64url(Ed25519 sig)
 [lane:… kind:… id:…]
 body</pre>

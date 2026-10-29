@@ -5,27 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Console · Antibody</title>
   <meta name="description" content="Run Steward and an unprotected agent side by side, and watch Antibody decide." />
-  <meta name="theme-color" content="#faf8f4" />
+  <meta name="theme-color" content="#030407" />
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
-  <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/assets/css/brand.css" />
 </head>
 <body data-page="console">
+  <div class="app-bg" aria-hidden="true"></div>
   <main class="wrap">
     <div class="page-head">
-      <div><span class="eyebrow">Console</span><h1>Steward, <em>watched.</em></h1></div>
+      <div><span class="eyebrow">Console <b>02</b></span><h1 class="words">Steward, <span class="tail">watched.</span></h1></div>
       <div id="modebar"></div>
     </div>
     <div class="app-main">
       <section class="stat-row" id="stats" aria-label="System status"></section>
-      <section class="card gold">
+      <section class="card glow">
         <div class="card-title"><div><h3>Split screen</h3></div></div>
         <form id="run-form" style="display:grid;gap:12px;margin-bottom:20px">
           <div style="display:flex;flex-wrap:wrap;gap:10px">
             <input id="instruction" aria-label="Instruction to Steward" value="Pay this month's rent." style="flex:1 1 320px" />
             <label class="small muted" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="execute" style="height:auto" /> execute</label>
-            <button class="btn btn-gold" id="run-btn" type="submit">Run</button>
+            <button class="btn btn-primary" id="run-btn" type="submit">Run</button>
           </div>
           <div class="chips" id="presets"></div>
         </form>

@@ -39,7 +39,7 @@ function evidence(step, prev) {
     out.push(
       el(
         'section',
-        { class: 'card gold' },
+        { class: 'card glow' },
         el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Digests')), el('span', { class: `pill ${ok ? 'ok' : 'bad'}` }, ok ? 'match' : 'mismatch')),
         el('dl', { class: 'kv' }, el('dt', {}, 'live'), el('dd', {}, el('code', {}, s.digest)), el('dt', {}, 'rebuild'), el('dd', {}, el('code', {}, step.rebuildDigest))),
       ),
@@ -83,8 +83,13 @@ function render() {
     ),
   );
   $('wt-time').textContent = `${i + 1} / ${demo.steps.length}`;
-  $('wt-title').textContent = step.title;
-  $('wt-text').textContent = step.text;
+  for (const [id, text] of [['wt-title', step.title], ['wt-text', step.text]]) {
+    const node = $(id);
+    node.textContent = text;
+    node.style.animation = 'none';
+    void node.offsetWidth; // restart the entrance animation
+    node.style.animation = '';
+  }
   $('bar').style.width = `${((i + 1) / demo.steps.length) * 100}%`;
   $('prev').disabled = i === 0;
   $('next').disabled = i === demo.steps.length - 1;
@@ -115,7 +120,7 @@ document.addEventListener('keydown', (e) => {
   try {
     demo = await loadDemo();
   } catch {
-    $('evidence').replaceChildren(el('div', { class: 'card' }, el('h3', {}, 'No recording on this server'), el('p', { class: 'muted' }, 'Generate one with npx tsx scripts/build-site.ts, or use the live console.'), el('a', { class: 'btn btn-gold', href: '/console', style: 'margin-top:12px' }, 'Open the console')));
+    $('evidence').replaceChildren(el('div', { class: 'card' }, el('h3', {}, 'No recording on this server'), el('p', { class: 'muted' }, 'Generate one with npx tsx scripts/build-site.ts, or use the live console.'), el('a', { class: 'btn btn-primary', href: '/console', style: 'margin-top:12px' }, 'Open the console')));
     return;
   }
   const m = /chapter-(\d+)/.exec(location.hash);

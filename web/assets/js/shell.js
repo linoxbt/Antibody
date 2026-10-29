@@ -1,36 +1,33 @@
-// Site shell: navigation (with mobile drawer), footer, toast, scroll reveal,
-// and the live/recorded mode bar used by the console pages.
+// Site shell: navigation (with mobile drawer), footer, toast, starfield and
+// motion, and the live/recorded mode bar used by the console pages.
 import { el } from './ui.js';
+import { sky, armReveals } from './motion.js';
 
 export const REPO = 'https://github.com/linoxbt/Antibody';
 
 const PAGES = [
-  { href: '/', id: 'home', label: 'Overview', hint: 'Product' },
-  { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '8 chapters' },
-  { href: '/console', id: 'console', label: 'Console', hint: 'Run' },
-  { href: '/graph', id: 'graph', label: 'Blast radius', hint: 'Lineage' },
-  { href: '/ledger', id: 'ledger', label: 'Ledger', hint: 'Control' },
-  { href: '/incidents', id: 'incidents', label: 'Incidents', hint: 'Sentinel' },
-  { href: '/security', id: 'security', label: 'Security', hint: 'Guarantees' },
+  { href: '/', id: 'home', label: 'Overview', hint: '00' },
+  { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '01' },
+  { href: '/console', id: 'console', label: 'Console', hint: '02' },
+  { href: '/graph', id: 'graph', label: 'Blast radius', hint: '03' },
+  { href: '/ledger', id: 'ledger', label: 'Ledger', hint: '04' },
+  { href: '/incidents', id: 'incidents', label: 'Incidents', hint: '05' },
+  { href: '/security', id: 'security', label: 'Security', hint: '06' },
 ];
+const NAV_LINKS = ['walkthrough', 'graph', 'ledger', 'incidents', 'security'];
 
 function brand() {
-  return el(
-    'a',
-    { class: 'brand', href: '/', 'aria-label': 'Antibody home' },
-    el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }),
-    el('span', { class: 'wordmark' }, 'Antibody', el('small', {}, 'Memory provenance')),
-  );
+  return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'));
 }
 
 export function mountShell(current) {
-  const link = (p) => el('a', { href: p.href, ...(p.id === current ? { 'aria-current': 'page' } : {}) }, p.label);
+  const here = (p) => (p.id === current ? { 'aria-current': 'page' } : {});
   const burger = el('button', { class: 'burger', 'aria-label': 'Open menu', 'aria-expanded': 'false', 'aria-controls': 'drawer' }, el('span'), el('span'), el('span'));
   const drawer = el(
     'nav',
     { class: 'drawer', id: 'drawer', 'aria-label': 'Site', 'aria-hidden': 'true' },
-    ...PAGES.map((p) => el('a', { href: p.href, ...(p.id === current ? { 'aria-current': 'page' } : {}) }, p.label, el('span', {}, p.hint))),
-    el('a', { class: 'btn btn-gold', href: REPO, target: '_blank', rel: 'noopener' }, 'View on GitHub'),
+    ...PAGES.map((p) => el('a', { href: p.href, ...here(p) }, p.label, el('span', {}, p.hint))),
+    el('a', { class: 'btn btn-primary', href: REPO, target: '_blank', rel: 'noopener' }, 'View on GitHub'),
   );
   const header = el(
     'header',
@@ -39,8 +36,8 @@ export function mountShell(current) {
       'div',
       { class: 'wrap' },
       brand(),
-      el('nav', { class: 'nav-links', 'aria-label': 'Primary' }, ...PAGES.slice(1).map(link)),
-      el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: REPO, target: '_blank', rel: 'noopener' }, 'GitHub')),
+      el('nav', { class: 'nav-links', 'aria-label': 'Primary' }, ...PAGES.filter((p) => NAV_LINKS.includes(p.id)).map((p) => el('a', { href: p.href, ...here(p) }, p.label))),
+      el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: REPO, target: '_blank', rel: 'noopener' }, 'GitHub'), el('a', { class: 'btn btn-primary btn-sm', href: '/console' }, 'Open console')),
       burger,
     ),
   );
@@ -50,6 +47,7 @@ export function mountShell(current) {
     burger.setAttribute('aria-expanded', String(open));
     burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
     document.body.classList.toggle('no-scroll', open);
+    header.classList.toggle('scrolled', open || scrollY > 8);
     if (open) drawer.querySelector('a')?.focus();
   };
   burger.addEventListener('click', () => setOpen(burger.getAttribute('aria-expanded') !== 'true'));
@@ -59,7 +57,10 @@ export function mountShell(current) {
       burger.focus();
     }
   });
-  matchMedia('(min-width: 1041px)').addEventListener('change', (m) => m.matches && setOpen(false));
+  matchMedia('(min-width: 1081px)').addEventListener('change', (m) => m.matches && setOpen(false));
+  const onScroll = () => header.classList.toggle('scrolled', scrollY > 8 || drawer.classList.contains('open'));
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
   document.body.prepend(header, drawer);
 
   const col = (title, links) => el('div', {}, el('h4', {}, title), ...links.map(([t, h, ext]) => el('a', { href: h, ...(ext ? { target: '_blank', rel: 'noopener' } : {}) }, t)));
@@ -73,16 +74,18 @@ export function mountShell(current) {
         el(
           'div',
           { class: 'footer-grid' },
-          el('div', {}, brand()),
-          col('Product', [['Walkthrough', '/walkthrough'], ['Console', '/console'], ['Blast radius', '/graph'], ['Security model', '/security']]),
-          col('Operate', [['Ledger', '/ledger'], ['Incidents', '/incidents'], ['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set results', `${REPO}/blob/main/docs/attack-set-results.md`, true]]),
-          col('Project', [['Source code', REPO, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall hackathon', 'https://tatum.io/hackathon/total-recall', true]]),
+          el('div', {}, brand(), el('p', {}, 'An immune system for agent memory.')),
+          col('Product', [['Walkthrough', '/walkthrough'], ['Console', '/console'], ['Blast radius', '/graph'], ['Security', '/security']]),
+          col('Operate', [['Ledger', '/ledger'], ['Incidents', '/incidents'], ['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set', `${REPO}/blob/main/docs/attack-set-results.md`, true]]),
+          col('Project', [['Source', REPO, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
         ),
-        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT licensed`), el('span', {}, 'Demo data is simulated.')),
+        el('div', { class: 'giant', 'aria-hidden': 'true' }, 'antibody'),
+        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT`), el('span', {}, 'Demo data is simulated.')),
       ),
     ),
   );
-  revealOnScroll();
+  sky();
+  armReveals();
 }
 
 let toastTimer;
@@ -93,14 +96,6 @@ export function toast(msg, ms = 4200) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
-}
-
-export function revealOnScroll() {
-  const els = document.querySelectorAll('.reveal');
-  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  document.documentElement.classList.add('reveal-armed');
-  const io = new IntersectionObserver((entries) => entries.forEach((en) => en.isIntersecting && (en.target.classList.add('in'), io.unobserve(en.target))), { rootMargin: '0px 0px -8% 0px' });
-  els.forEach((e) => io.observe(e));
 }
 
 /** Live/recorded indicator; in recorded mode a step selector drives the page. */

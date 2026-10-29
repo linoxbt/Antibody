@@ -31,9 +31,9 @@ function render() {
         { class: 'item' },
         el('div', { class: 'item-head' }, el('span', { class: `pill plain ${STATUS[i.status] ?? ''}` }, i.status.replace('-', ' ')), el('span', { class: 'mono small' }, `score ${i.score}`), el('code', {}, short(i.objectId, 18))),
         el('p', {}, i.rules.map((r) => r.split(':')[0]).filter((v, k, a) => a.indexOf(v) === k).join(' · ')),
-        i.lessonMatches.length ? el('p', { style: 'color:var(--gold-hi)' }, `Learned · lesson ${[...new Set(i.lessonMatches.map((m) => '#' + m.lessonSeq))].join(', ')}`) : null,
+        i.lessonMatches.length ? el('p', { style: 'color:var(--accent-hi)' }, `Learned · lesson ${[...new Set(i.lessonMatches.map((m) => '#' + m.lessonSeq))].join(', ')}`) : null,
         i.status === 'open'
-          ? el('div', {}, el('button', { class: 'btn btn-gold btn-sm', onclick: () => quarantine('source', i.objectId) }, 'Quarantine'))
+          ? el('div', {}, el('button', { class: 'btn btn-primary btn-sm', onclick: () => quarantine('source', i.objectId) }, 'Quarantine'))
           : i.quarantineSeq !== undefined
             ? el('p', { class: 'muted small' }, `Ledger #${i.quarantineSeq}`)
             : null,

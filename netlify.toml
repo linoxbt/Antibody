@@ -18,3 +18,29 @@
   for = "/assets/fonts/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# The console is a single-page app; old standalone pages moved into it.
+[[redirects]]
+  from = "/console"
+  to = "/app/steward"
+  status = 301
+
+[[redirects]]
+  from = "/graph"
+  to = "/app/memory"
+  status = 301
+
+[[redirects]]
+  from = "/ledger"
+  to = "/app/ledger"
+  status = 301
+
+[[redirects]]
+  from = "/incidents"
+  to = "/app/incidents"
+  status = 301
+
+[[redirects]]
+  from = "/app/*"
+  to = "/app.html"
+  status = 200

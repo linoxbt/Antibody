@@ -55,10 +55,11 @@ async function registerLanes(admin: AccountAdmin, readPub: (r: Exclude<Role, 'si
 }
 
 /** Offline (SIMULATED) setup: a fixture account, funded wallet, keys, genesis. */
-export async function setupOffline(cfg: Config, opts: { readKeyFile: (role: Role) => string }): Promise<SetupResult> {
+export async function setupOffline(cfg: Config, opts: { readKeyFile: (role: Role) => string; ownerSecret?: string }): Promise<SetupResult> {
   if (cfg.backend !== 'offline') throw new Error('setupOffline needs ANTIBODY_BACKEND=offline');
   generateKeys(cfg);
-  const owner = Ed25519Keypair.generate().toSuiAddress();
+  // A known owner (OWNER_SUI_PRIVATE_KEY) lets a browser wallet sign in to the console; else a throwaway.
+  const owner = (opts.ownerSecret ? Ed25519Keypair.fromSecretKey(opts.ownerSecret) : Ed25519Keypair.generate()).toSuiAddress();
   const accountId = normalizeSuiAddress('0x' + sha256Hex(`memwal-account:${owner}`));
   const fixture = new FixtureChain(`${cfg.home}/offline`);
   fixture.createAccount(accountId, owner);

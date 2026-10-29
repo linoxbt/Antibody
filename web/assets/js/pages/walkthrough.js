@@ -1,5 +1,5 @@
 import { mountShell } from '../shell.js';
-import { loadDemo } from '../data.js';
+import { loadDemo, setDemo } from '../data.js';
 import { $, el, short, plural, protectedPane, unprotectedPane, renderGraph } from '../ui.js';
 
 mountShell('walkthrough');
@@ -51,7 +51,7 @@ function evidence(step, prev) {
     el(
       'section',
       { class: 'card' },
-      el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Memory')), el('a', { class: 'btn btn-ghost btn-sm', href: `/graph?step=${i + 1}` }, 'Explore')),
+      el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Memory')), el('a', { class: 'btn btn-ghost btn-sm', href: `/app/memory?step=${i + 1}`, onclick: () => setDemo(true) }, 'Explore')),
       graphHost,
     ),
   );
@@ -120,7 +120,7 @@ document.addEventListener('keydown', (e) => {
   try {
     demo = await loadDemo();
   } catch {
-    $('evidence').replaceChildren(el('div', { class: 'card' }, el('h3', {}, 'No recording on this server'), el('p', { class: 'muted' }, 'Generate one with npx tsx scripts/build-site.ts, or use the live console.'), el('a', { class: 'btn btn-primary', href: '/console', style: 'margin-top:12px' }, 'Open the console')));
+    $('evidence').replaceChildren(el('div', { class: 'card' }, el('h3', {}, 'No recording on this server'), el('p', { class: 'muted' }, 'Generate one with npx tsx scripts/build-site.ts, or use the live console.'), el('a', { class: 'btn btn-primary', href: '/login', style: 'margin-top:12px' }, 'Sign in to the console')));
     return;
   }
   const m = /chapter-(\d+)/.exec(location.hash);

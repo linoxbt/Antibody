@@ -51,7 +51,7 @@ Interactive, with real daemons and the web view:
 export ANTIBODY_HOME=$PWD/.antibody ANTIBODY_BACKEND=offline
 alias antibody="node $PWD/bin/antibody.mjs"
 antibody setup                                   # lane keys, on-chain labels, genesis
-antibody up                                      # signer, control (+ web on :7402), agent daemons
+antibody up                                      # signer, control (+ web on :7402), agent daemons; prints a sign-in link
 antibody payee add --label landlord --address 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d --coin USDC --cap 500
 antibody statement "Rent is 450 USDC (coin type 0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC), paid on the 1st to my landlord at 0x7a11ce0000000000000000000000000000000000000000000000000000001a2d."
 antibody steward "Pay this month's rent."        # ALLOW (dry-run; add --execute to pay)
@@ -63,22 +63,37 @@ antibody quarantine --source <coin object id> --yes   # blast radius preview, le
 antibody show --forensic --graph 2               # projection, forensic view, blast-radius tree
 antibody rebuild --fresh                         # same projection digest from Walrus + Sui alone
 antibody steward "Pay this month's rent." --execute   # ALLOW, executed
-open http://127.0.0.1:7402                       # lanes, graph, split screen, digests
+antibody login                                   # one-click console sign-in link (operator token, this run only)
 ```
 
 ![Antibody](docs/web-view.png)
 
-The web app (`web/`) is a multi-page site served by the control process:
-**Overview** (landing), **Walkthrough** (the story in 8 chapters), **Console**
-(split screen against the unprotected agent, lanes, restoration digests),
-**Blast radius** (lineage explorer), **Ledger** (records, payees, lessons),
-**Incidents** (sentinel, quarantine, forensic view) and **Security** (invariants,
-lanes, trust assumptions). It talks to the live control API when one is behind it.
+The web app (`web/`) is served by the control process. The public pages are
+**Overview** (landing), **Walkthrough** (the story in 8 chapters) and
+**Security** (invariants, lanes, trust assumptions). The **console** at `/app`
+sits behind **sign-in** (`/login`) and has eight views: Overview, Steward (split
+screen against the unprotected agent), Memory (blast-radius lineage explorer),
+Payees, Ledger, Incidents (sentinel, quarantine, forensic view), Keys (lanes,
+revocation, rebuild digests) and Settings.
+
+**Sign-in.** The owner wallet is the root of trust, so the console admits whoever
+proves control of it: any Sui wallet in the browser (Wallet Standard, e.g. Slush)
+signs a one-time challenge, and the signature must recover the MemWal account
+owner's address. Anyone with a shell on the machine can also use the operator
+link that `antibody up` and `antibody login` print. Its token is written 0600 to
+`$ANTIBODY_HOME/run/web-token` and travels in the URL fragment. Sessions are
+HttpOnly, SameSite=Strict cookies that last 12 hours, held in memory, so a
+control restart signs everyone out. Every `/api` route except sign-in needs a
+session. Payees and quarantine releases still need the user key on the command
+line: the console shows them and generates the command, but cannot create them.
+For an offline node you can sign in to with a wallet, set `OWNER_SUI_PRIVATE_KEY`
+before `antibody setup` and import that key into the wallet.
 
 **Public site:** <https://antibody-memory.netlify.app> serves the same pages
 against a recorded walkthrough, generated at build time by running this code on
 the offline backend (`scripts/build-site.ts` → `site/`, config in
-`netlify.toml`). It is read-only and labelled SIMULATED; for the interactive
+`netlify.toml`). There is no node behind it, so its sign-in page offers the
+recorded demo, which is read-only and labelled SIMULATED. For the interactive
 version run `antibody up` locally.
 
 ![Console](docs/console-view.png)
@@ -258,6 +273,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | --- | --- | --- |
 | `antibody setup` | control + owner | generate keys, register `antibody:*` labels, write genesis |
 | `antibody up` / `down` | — | start/stop signer, control (+web) and agent daemons |
+| `antibody login` | — | print a one-click console sign-in link (operator token) |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
 | `antibody release <seq> --reason …` | user | `quarantine.release` (human decision) |
@@ -294,11 +310,11 @@ src/signer/     signer (re-simulates, signs, executes)
 src/payments/   x402 (v2 types/headers) · x402-server (resource server + Sui exact facilitator)
 src/user/       human CLI operations (user-signed records)
 src/cli/        antibody CLI · render
-src/web/        web server (control process, 127.0.0.1; clean URLs, CSP)
-web/            index · walkthrough · console · graph · ledger · incidents · security · 404 (.html)
-                assets/css (brand, landing, walkthrough) · assets/js (shell, data, ui, pages/*) · assets/img (logo) · assets/fonts
+src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth (wallet + operator sign-in, sessions)
+web/            index · walkthrough · security · login · app (console SPA) · 404 (.html)
+                assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint)
+test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 

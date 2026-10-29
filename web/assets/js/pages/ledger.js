@@ -35,9 +35,9 @@ function render() {
   }
   $('stats').replaceChildren(
     stat('Head', `#${l.head.seq}`, short(l.head.hash, 20)),
-    stat('Payees', String(l.payees.length), 'user-signed'),
+    stat('Payees', String(l.payees.length)),
     stat('Quarantines', String(l.quarantines.filter((q) => !q.released).length), `${l.quarantines.filter((q) => q.auto).length} automatic`),
-    stat('Lessons', String(l.lessons.filter((x) => x.active).length), l.firstSync ? 'first sync on this machine' : 'rollback guard armed'),
+    stat('Lessons', String(l.lessons.filter((x) => x.active).length)),
   );
   $('records').replaceChildren(
     el(
@@ -53,7 +53,7 @@ function render() {
       : el('p', { class: 'empty' }, 'No payees yet.'),
   );
   $('lessons').replaceChildren(
-    ...(l.lessons.length === 0 ? [el('p', { class: 'empty' }, 'Nothing learned yet. Confirm a quarantine and Antibody learns from it.')] : []),
+    ...(l.lessons.length === 0 ? [el('p', { class: 'empty' }, 'Nothing learned yet.')] : []),
     el(
       'div',
       { class: 'feed' },
@@ -62,9 +62,7 @@ function render() {
           'div',
           { class: 'item' },
           el('div', { class: 'item-head' }, el('strong', {}, `Lesson #${x.seq}`), el('span', { class: `pill plain ${x.active ? 'ok' : 'bad'}` }, x.active ? 'active' : 'retired'), el('span', { class: 'muted small' }, `from quarantine #${x.fromSeq}`)),
-          el('p', {}, `Senders: ${x.indicators.senders.map((v) => short(v, 12)).join(', ') || '—'}`),
-          el('p', {}, `Packages: ${x.indicators.packages.map((v) => short(v, 12)).join(', ') || '—'}`),
-          el('p', { class: 'muted' }, `Words: ${x.indicators.keywords.slice(0, 10).join(' · ') || '—'}`),
+          el('p', { class: 'muted' }, `sender ${x.indicators.senders.map((v) => short(v, 10)).join(', ') || '—'}`),
         ),
       ),
     ),

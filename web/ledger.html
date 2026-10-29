@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ledger · Antibody</title>
   <meta name="description" content="The hash-chained control ledger on Walrus: payees, quarantines, lessons and revocations." />
-  <meta name="theme-color" content="#06080d" />
+  <meta name="theme-color" content="#faf8f4" />
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
   <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
@@ -14,15 +14,15 @@
 <body data-page="ledger">
   <main class="wrap">
     <div class="page-head">
-      <div><span class="eyebrow">Ledger</span><h1>The rules, <em>signed and chained.</em></h1><p>All control state lives in an append-only, hash-chained ledger on Walrus. If it can't be shown complete and intact, Steward can't pay anyone.</p></div>
+      <div><span class="eyebrow">Ledger</span><h1>The <em>ledger.</em></h1></div>
       <div id="modebar"></div>
     </div>
     <div class="app-main">
       <section class="stat-row" id="stats"></section>
-      <section class="card"><div class="card-title"><div><h3>Records</h3><p>Each record names its predecessor's hash. A gap, fork, wrong signer or rollback blocks every payment.</p></div></div><div class="table-wrap" id="records"></div></section>
+      <section class="card"><div class="card-title"><div><h3>Records</h3></div></div><div class="table-wrap" id="records"></div></section>
       <section class="grid-2">
-        <div class="card"><div class="card-title"><div><h3>Payees</h3><p>The only addresses Steward can pay, each added by Ada with a typed confirmation.</p></div></div><div id="payees"></div></div>
-        <div class="card gold"><div class="card-title"><div><h3>What Antibody learned</h3><p>Lessons derived from confirmed quarantines. They tighten the sentinel and never touch payments.</p></div></div><div id="lessons"></div></div>
+        <div class="card"><div class="card-title"><div><h3>Payees</h3></div></div><div id="payees"></div></div>
+        <div class="card gold"><div class="card-title"><div><h3>Lessons</h3></div></div><div id="lessons"></div></div>
       </section>
     </div>
   </main>

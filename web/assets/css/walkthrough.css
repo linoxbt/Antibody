@@ -2,7 +2,7 @@
 .wt-rail { position: sticky; top: calc(var(--nav-h) + 20px); padding: 14px; }
 .wt-rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .chapter { width: 100%; text-align: left; display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-2); font: 400 13.5px/1.4 var(--sans); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
-.chapter:hover { background: rgba(255, 255, 255, 0.03); }
+.chapter:hover { background: var(--bg); }
 .chapter .time { font: 500 12px var(--mono); color: var(--muted); padding-top: 1px; }
 .chapter.done .time { color: var(--gold); }
 .chapter.on { background: var(--gold-wash); border-color: var(--line-gold); color: var(--text); }

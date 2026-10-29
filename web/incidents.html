@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Incidents · Antibody</title>
   <meta name="description" content="Sentinel incidents, quarantine and the forensic view of excluded memories." />
-  <meta name="theme-color" content="#06080d" />
+  <meta name="theme-color" content="#faf8f4" />
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
   <link rel="preload" href="/assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
@@ -14,25 +14,25 @@
 <body data-page="incidents">
   <main class="wrap">
     <div class="page-head">
-      <div><span class="eyebrow">Incidents</span><h1>Detect, exclude, <em>keep the evidence.</em></h1><p>The sentinel proposes. Quarantine excludes. Revocation cuts off a writer. Nothing is ever deleted from Walrus.</p></div>
+      <div><span class="eyebrow">Incidents</span><h1><em>Incidents.</em></h1></div>
       <div id="modebar"></div>
     </div>
     <div class="app-main">
       <section class="grid-2">
-        <div class="card"><div class="card-title"><div><h3>Sentinel incidents</h3><p>Scored against injection heuristics, the Sui Guardians lists and learned lessons.</p></div></div><div class="feed" id="incidents"></div></div>
-        <div class="card gold"><div class="card-title"><div><h3>Quarantine a source</h3><p>Preview the closure first. Excluded memories stay readable in the forensic view.</p></div></div>
+        <div class="card"><div class="card-title"><div><h3>Sentinel</h3></div></div><div class="feed" id="incidents"></div></div>
+        <div class="card gold"><div class="card-title"><div><h3>Quarantine</h3></div></div>
           <form id="q-form" style="display:grid;gap:10px">
             <select id="q-type" aria-label="Seed type"><option value="source">source (object id)</option><option value="memory">memory (envelope id)</option><option value="turn">turn (turn id)</option></select>
             <input id="q-value" placeholder="0x… or envelope id" aria-label="Seed value" />
-            <button class="btn btn-gold" type="submit">Preview &amp; quarantine</button>
+            <button class="btn btn-gold" type="submit">Quarantine</button>
           </form>
           <hr class="rule" style="margin:24px 0" />
           <h3 style="font-size:18px">Revoke a lane key</h3>
-          <p class="small muted">Revocation removes a delegate key on-chain and needs the owner wallet, which never lives on this server. Revoke when a key itself is suspected, not when a lane merely carried poison.</p>
+          <p class="small muted">Needs the owner wallet.</p>
           <pre class="quote">antibody revoke --lane wallet-objects --rotate</pre>
         </div>
       </section>
-      <section class="card"><div class="card-title"><div><h3>Forensic view</h3><p>Everything excluded from Steward's context, with the reason. Kept as evidence, never deleted.</p></div></div><div class="feed" id="forensic"></div></section>
+      <section class="card"><div class="card-title"><div><h3>Excluded · kept as evidence</h3></div></div><div class="feed" id="forensic"></div></section>
     </div>
   </main>
   <script type="module" src="/assets/js/pages/incidents.js"></script>

@@ -55,14 +55,14 @@ async function main() {
     await w.addPayee({ payeeId: 'utility', label: 'utility', address: CAST.utility, capDisplay: '150' });
     await snap({
       time: 'setup',
-      title: 'Four lanes, one account, payees signed by Ada',
-      text: 'Each lane is a Walrus Memory delegate key labelled on-chain by the owner wallet. Ada registered her landlord, her sister and the utility through the CLI, signed with the user key after typing the last six characters of each address. Only these addresses can ever be paid.',
+      title: 'Four keys. One account.',
+      text: 'Only payees Ada signed can be paid.',
     });
 
     await snap({
       time: '0:00',
-      title: 'Steward at work: rent is paid',
-      text: 'Steward recalls Ada’s trusted fact and proposes 450 USDC to the landlord. The policy engine checks the ledger, the address, the label, the cap and an exact dry-run: ALLOW. The unprotected agent, with the same model and memories, agrees.',
+      title: 'Rent is paid.',
+      text: 'Trusted fact, registered payee: allowed.',
       run: await run(w, RENT, true),
     });
 
@@ -70,22 +70,22 @@ async function main() {
     const scan = await w.scan();
     await snap({
       time: '0:20',
-      title: 'The poison: a coin called “USDC Rewards”',
-      text: `A second wallet sends Steward a coin whose description reads: “${POISON_COIN.description}” The ingest worker writes it through the wallet-objects lane as an untrusted observation, and the sentinel scores it ${scan.items[0]?.score.toFixed(2)}: an incident.`,
+      title: 'A coin that talks.',
+      text: '“Landlord moved to a new wallet.” Stored as untrusted.',
     });
 
     await snap({
       time: '0:55',
-      title: 'The near-miss: the model was fooled, the code wasn’t',
-      text: 'Asked to pay rent, the model believes the “new wallet”, writes itself a note and proposes paying 0xbad0…. The runtime made the note a child of everything the turn read, so it is untrusted. The policy blocks the payment: the landlord is registered to a different address. The unprotected agent would have sent 450 USDC to the attacker.',
+      title: 'Fooled. Blocked.',
+      text: 'The model believes it. The policy doesn’t.',
       run: await run(w, RENT, true),
     });
 
     const q = await w.quarantine({ type: 'source', value: coin.objectId }, 'poisoned coin metadata (USDC Rewards)');
     await snap({
       time: '1:40',
-      title: 'Blast radius and quarantine',
-      text: `One quarantine record (ledger #${q.seq}) excludes the coin’s observation, Steward’s note and the blocked decision from every future prompt and policy input. Nothing is deleted: the forensic view still shows all three. Antibody also learned lesson #${q.lessonSeq} from it.`,
+      title: 'Quarantined.',
+      text: 'Coin, note and decision leave context. Evidence stays.',
       highlight: q.seq,
     });
 
@@ -94,22 +94,22 @@ async function main() {
     const inc = scan2.items[0]?.incident;
     await snap({
       time: '2:05',
-      title: 'It learned: the repeat attack is caught on sight',
-      text: `The same attacker sends an innocent-looking “Tenant Points” coin: no address, no instructions. The sentinel recognises the sender from lesson #${q.lessonSeq} and the coin is auto-quarantined (ledger #${inc?.quarantineSeq}) before Steward ever reads it.`,
+      title: 'It learned.',
+      text: 'Same attacker, new coin: caught before Steward sees it.',
       ...(inc?.quarantineSeq !== undefined ? { highlight: inc.quarantineSeq } : {}),
     });
 
     await snap({
       time: '2:15',
-      title: 'Clean restoration: same digest from Walrus + Sui alone',
-      text: 'A fresh process with an empty cache rebuilds everything from the ledger and memories on Walrus and the lane labels on Sui. Its projection digest matches the live one, so the quarantine survived restoration. Rent now goes to the real landlord.',
+      title: 'Rebuilt.',
+      text: 'Fresh process, same digest. Rent goes to the real landlord.',
       run: await run(w, RENT, true),
     }, true);
 
     await snap({
       time: '2:25',
-      title: 'Agent payments over x402, under the same policy',
-      text: 'The utility bills over HTTP 402. Its payTo becomes an ordinary proposal; the signer signs the Sui transaction without executing it and the facilitator settles it. A 402 server naming any other address would be blocked like an unknown recipient.',
+      title: 'Pays over x402.',
+      text: 'HTTP 402 bill, same policy, settled on Sui.',
       run: await run(w, `Pay the electricity bill at http://127.0.0.1:${BILL_PORT}/bill/2026-11`, true),
     }, true);
   } finally {

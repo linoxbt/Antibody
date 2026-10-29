@@ -5,6 +5,7 @@ import { sky } from '../motion.js';
 import { authStatus, demoChosen, liveSource, recordedSource, signOut, AuthRequired, ReadOnlyError } from '../data.js';
 import { el, short } from '../ui.js';
 import { icon, avatar } from './kit.js';
+import { themeButton } from '../theme.js';
 import overview from './views/overview.js';
 import steward from './views/steward.js';
 import memory from './views/memory.js';
@@ -84,6 +85,7 @@ const side = el('aside', { class: 'side', id: 'side', 'aria-label': 'Console nav
 const scrim = el('div', { class: 'scrim', 'aria-hidden': 'true' });
 const crumbs = el('div', { class: 'crumbs' });
 const tbRight = el('div', { class: 'tb-right' });
+const themeBtn = themeButton();
 const view = el('main', { class: 'view', id: 'view', tabindex: '-1' });
 const demoBar = el('div', { class: 'demo-bar hidden' });
 const burger = el('button', { class: 'icon-btn burger-app', type: 'button', 'aria-label': 'Open navigation', 'aria-controls': 'side', 'aria-expanded': 'false' }, icon('menu'));
@@ -150,7 +152,7 @@ function renderTop() {
     r.addEventListener('click', () => ctx.act(async () => (await src.refresh(), route({ keepScroll: true }), toast('Refreshed from Walrus + Sui.'))));
     parts.push(r);
   }
-  tbRight.replaceChildren(...parts);
+  tbRight.replaceChildren(...parts, themeBtn);
   demoBar.classList.toggle('hidden', src.mode !== 'recorded');
   if (src.mode === 'recorded') demoBar.replaceChildren(el('span', { class: 'dot b' }), 'Recorded demo · read-only', el('span', { class: 'long' }, ' · simulated data from the offline run.'), el('a', { href: '/login' }, 'Sign in live →'));
 }
@@ -178,6 +180,11 @@ async function route({ keepScroll = false } = {}) {
 }
 
 addEventListener('popstate', () => route());
+// The lineage graph switches layout at 760px: redraw when the window crosses it.
+let narrow = innerWidth < 760;
+addEventListener('resize', () => {
+  if (src && narrow !== innerWidth < 760) (narrow = !narrow), route({ keepScroll: true });
+});
 // In-view links marked data-nav route without a reload.
 document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[data-nav]');

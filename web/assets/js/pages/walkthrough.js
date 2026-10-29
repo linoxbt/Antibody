@@ -110,6 +110,10 @@ $('play').addEventListener('click', () => {
 });
 $('prev').addEventListener('click', () => (stop(), setChapter(i - 1)));
 $('next').addEventListener('click', () => (stop(), setChapter(i + 1)));
+let narrow = innerWidth < 760;
+addEventListener('resize', () => {
+  if (demo && narrow !== innerWidth < 760) (narrow = !narrow), render();
+});
 document.addEventListener('keydown', (e) => {
   if (!demo || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
   if (e.key === 'ArrowRight') (stop(), setChapter(i + 1));

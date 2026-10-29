@@ -4,11 +4,11 @@
 .wt-rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: ch; }
 .chapter { position: relative; width: 100%; text-align: left; display: grid; grid-template-columns: 40px 1fr; gap: 4px 10px; padding: 12px 12px; border-radius: 12px; border: 0; background: transparent; color: var(--muted); font: 400 14.5px/1.35 var(--sans); cursor: pointer; transition: background 0.3s var(--ease), color 0.3s; counter-increment: ch; }
 .chapter::before { content: counter(ch, decimal-leading-zero); font: 300 17px/1.1 var(--sans); color: var(--faint); grid-row: span 2; }
-.chapter:hover { color: var(--text-2); background: rgba(255, 255, 255, 0.03); }
+.chapter:hover { color: var(--text-2); background: rgba(var(--fg-rgb), 0.03); }
 .chapter .time { font: 400 11.5px var(--mono); color: var(--faint); order: 2; }
 .chapter .ttl { order: 1; }
 .chapter.done::before { color: var(--accent-hi); }
-.chapter.on { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+.chapter.on { background: rgba(var(--fg-rgb), 0.07); color: var(--text); }
 .chapter.on::before { color: var(--text); }
 .chapter.on::after { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px; border-radius: 2px; background: linear-gradient(180deg, var(--accent-hi), var(--accent)); box-shadow: 0 0 10px var(--accent); }
 .wt-stage .card.glow h2 { font-size: clamp(36px, 4.6vw, 60px); }

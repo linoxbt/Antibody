@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#030407" />
   <meta property="og:title" content="Antibody — An immune system for agent memory" />
   <meta property="og:description" content="Signed memories. Payments by code. Quarantine that survives. Built on Walrus Memory, Sui and Tatum." />
+  <script src="/assets/js/theme-init.js"></script>
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
   <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/assets/css/brand.css" />
@@ -21,7 +22,7 @@
       <div class="orbits" aria-hidden="true">
         <svg viewBox="0 0 1000 1000">
           <defs>
-            <linearGradient id="arc-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35" /><stop offset=".6" stop-color="#fff" stop-opacity=".06" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></linearGradient>
+            <linearGradient id="arc-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="ink" stop-opacity=".35" /><stop offset=".6" class="ink" stop-opacity=".06" /><stop offset="1" class="ink" stop-opacity="0" /></linearGradient>
           </defs>
           <circle cx="500" cy="500" r="430" fill="none" stroke="url(#arc-a)" stroke-width="1" />
         </svg>
@@ -43,15 +44,15 @@
     <section class="radar" id="signature" aria-label="Every memory is signed">
       <div class="sticky">
         <svg class="radar-grid" viewBox="-720 -450 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          <g fill="none" stroke="rgba(255,255,255,.14)">
+          <g class="rg-solid" fill="none">
             <circle r="160" /><circle r="390" /><circle r="620" /><circle r="850" />
             <path d="M0 -900V900" />
           </g>
-          <g fill="none" stroke="rgba(255,255,255,.12)" stroke-dasharray="6 8">
+          <g class="rg-dash" fill="none" stroke-dasharray="6 8">
             <path d="M-720 0H720" /><path d="M-640 -640L640 640" /><path d="M-640 640L640 -640" />
           </g>
-          <g id="radar-dot"><circle cx="160" cy="0" r="18" fill="url(#halo)" /><circle cx="160" cy="0" r="7" fill="#fff" /></g>
-          <defs><radialGradient id="halo"><stop offset="0" stop-color="#fff" stop-opacity=".7" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient></defs>
+          <g id="radar-dot"><circle cx="160" cy="0" r="18" fill="url(#halo)" /><circle cx="160" cy="0" r="7" class="rg-dot" /></g>
+          <defs><radialGradient id="halo"><stop offset="0" class="ink" stop-opacity=".7" /><stop offset="1" class="ink" stop-opacity="0" /></radialGradient></defs>
         </svg>
         <div class="wrap radar-copy">
           <h2 class="scrub">Every memory gets a <span class="tail">signature.</span></h2>

@@ -16,6 +16,10 @@ export function sky() {
   const ctx = c.getContext('2d');
   if (!ctx) return;
   let w = 0, h = 0, stars = [], meteor = null, nextMeteor = 3000;
+  let ink = '#fff';
+  const readInk = () => (ink = getComputedStyle(document.documentElement).getPropertyValue('--star').trim() || '#fff');
+  readInk();
+  addEventListener('themechange', () => (readInk(), reduced && draw(0)));
   const depth = 1.6;
 
   function resize() {
@@ -35,7 +39,7 @@ export function sky() {
   function draw(t) {
     ctx.clearRect(0, 0, w, h);
     const sy = scrollY, span = h * depth;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = ink;
     for (const s of stars) {
       let y = (s.y - sy * s.z) % span;
       if (y < 0) y += span;
@@ -59,8 +63,8 @@ export function sky() {
         meteor.x += meteor.vx;
         meteor.y += meteor.vy;
         const g = ctx.createLinearGradient(meteor.x, meteor.y, meteor.x - meteor.vx * 18, meteor.y - meteor.vy * 18);
-        g.addColorStop(0, 'rgba(255,255,255,0.9)');
-        g.addColorStop(1, 'rgba(255,255,255,0)');
+        g.addColorStop(0, ink);
+        g.addColorStop(1, 'transparent');
         ctx.globalAlpha = clamp(1 - meteor.life / 70);
         ctx.strokeStyle = g;
         ctx.lineWidth = 1.2;

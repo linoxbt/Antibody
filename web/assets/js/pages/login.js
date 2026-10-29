@@ -4,9 +4,11 @@ import { sky, armReveals } from '../motion.js';
 import { api, authStatus, setDemo } from '../data.js';
 import { $, el } from '../ui.js';
 import { discoverWallets, connect, signMessage, cancelled } from '../wallets.js';
+import { themeButton } from '../theme.js';
 
 sky();
 armReveals();
+document.querySelector('.auth-top .back').after(themeButton());
 
 const params = new URLSearchParams(location.search);
 const next = (() => {

@@ -152,7 +152,7 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
   for (const s of sources) {
     const p = pos.get(`src:${s.id}`);
     const g = svg('g', { class: `g-node${highlightSeq !== null && hotSrc !== `src:${s.id}` ? ' dim' : ''}`, transform: `translate(${p.x},${p.y})` });
-    g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: NH / 2, fill: 'transparent', stroke: css('--gold'), 'stroke-dasharray': '3 4' }));
+    g.append(svg('rect', { class: 'shape', width: nodeW, height: NH, rx: NH / 2, fill: 'transparent', stroke: css('--accent-hi'), 'stroke-dasharray': '3 4' }));
     g.append(svg('text', { x: 16, y: 17 }, `◆ ${short(s.id, 18)}`), svg('text', { x: 16, y: 31, class: 'sub' }, short(String(s.type).split('::').slice(-1)[0], 30)));
     root.append(g);
   }

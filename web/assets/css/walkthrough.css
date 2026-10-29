@@ -1,16 +1,24 @@
-.wt-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
-.wt-rail { position: sticky; top: calc(var(--nav-h) + 20px); padding: 14px; }
-.wt-rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.chapter { width: 100%; text-align: left; display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-2); font: 400 13.5px/1.4 var(--sans); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
-.chapter:hover { background: var(--bg); }
-.chapter .time { font: 500 12px var(--mono); color: var(--muted); padding-top: 1px; }
-.chapter.done .time { color: var(--gold); }
-.chapter.on { background: var(--gold-wash); border-color: var(--line-gold); color: var(--text); }
-.chapter.on .time { color: var(--gold-hi); }
-.progress { height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 22px; }
-.progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); transition: width 0.5s cubic-bezier(.2,.7,.2,1); }
+/* Walkthrough: a chapter rail beside the stage, Jimo-style numbered tabs. */
+.wt-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 16px; align-items: start; }
+.wt-rail { position: sticky; top: calc(var(--nav-h) + 20px); padding: 10px; }
+.wt-rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: ch; }
+.chapter { position: relative; width: 100%; text-align: left; display: grid; grid-template-columns: 40px 1fr; gap: 4px 10px; padding: 12px 12px; border-radius: 12px; border: 0; background: transparent; color: var(--muted); font: 400 14.5px/1.35 var(--sans); cursor: pointer; transition: background 0.3s var(--ease), color 0.3s; counter-increment: ch; }
+.chapter::before { content: counter(ch, decimal-leading-zero); font: 300 17px/1.1 var(--sans); color: var(--faint); grid-row: span 2; }
+.chapter:hover { color: var(--text-2); background: rgba(255, 255, 255, 0.03); }
+.chapter .time { font: 400 11.5px var(--mono); color: var(--faint); order: 2; }
+.chapter .ttl { order: 1; }
+.chapter.done::before { color: var(--accent-hi); }
+.chapter.on { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+.chapter.on::before { color: var(--text); }
+.chapter.on::after { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px; border-radius: 2px; background: linear-gradient(180deg, var(--accent-hi), var(--accent)); box-shadow: 0 0 10px var(--accent); }
+.wt-stage .card.glow h2 { font-size: clamp(36px, 4.6vw, 60px); }
+.wt-stage .card.glow { padding: clamp(24px, 4vw, 44px); }
+.progress { height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 26px; }
+.progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-lo)); box-shadow: 0 0 12px var(--accent-hi); transition: width 0.6s var(--ease); }
+#wt-title, #wt-text { animation: chip-in-wt 0.7s var(--ease) both; }
+@keyframes chip-in-wt { from { opacity: 0; transform: translateY(8px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @media (max-width: 980px) {
   .wt-layout { grid-template-columns: 1fr; }
   .wt-rail { position: static; overflow-x: auto; }
-  .wt-rail ol { grid-auto-flow: column; grid-auto-columns: minmax(210px, 1fr); }
+  .wt-rail ol { grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); }
 }

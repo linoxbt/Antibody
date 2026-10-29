@@ -121,6 +121,7 @@ export async function stateJson(rt: Runtime, control: Control) {
     digest: p.digest,
     coverage: p.coverage,
     incidents: control.incidents.list().slice(-20).reverse(),
+    reports: control.reportLog.list(),
   };
 }
 

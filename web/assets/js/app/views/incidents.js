@@ -14,6 +14,38 @@ async function quarantine(ctx, type, value, reason) {
   ctx.rerender();
 }
 
+/** The incident report for a quarantine: its link once published (FR-14), else a button to publish it. */
+function reportCell(ctx, seq, reports) {
+  const r = reports.filter((x) => x.seq === seq).at(-1);
+  if (r) {
+    const local = r.url.startsWith('file://');
+    return el(
+      'span',
+      { style: 'display:flex;gap:8px;align-items:center;width:100%;padding-left:20px' },
+      local ? el('span', { class: 'small muted', title: r.url.slice(7) }, 'Report saved locally') : el('a', { href: r.url, target: '_blank', rel: 'noopener', class: 'small', style: 'color:var(--accent-hi)' }, 'Incident report ↗'),
+      el('code', { title: r.blobId }, short(r.blobId, 10)),
+      r.simulated ? el('span', { class: 'tag record' }, 'simulated') : el('span', { class: 'tag trusted' }, 'Walrus via Tatum'),
+    );
+  }
+  const b = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, 'Publish report');
+  b.addEventListener('click', () =>
+    ctx.act(async () => {
+      b.disabled = true;
+      b.textContent = 'Publishing…';
+      try {
+        const up = await ctx.src.api('/api/report', { seq });
+        await ctx.src.refresh();
+        ctx.toast(up.simulated ? `Report for #${seq} written locally (simulated: no Tatum key).` : `Report for #${seq} uploaded to Walrus through the Tatum Storage API.`);
+        ctx.rerender();
+      } finally {
+        b.disabled = false;
+        b.textContent = 'Publish report';
+      }
+    }),
+  );
+  return b;
+}
+
 export default {
   id: 'incidents',
   path: '/app/incidents',
@@ -23,6 +55,7 @@ export default {
     const s = ctx.state;
     const qs = s.ledger.ok ? s.ledger.quarantines.filter((q) => !q.released) : [];
     const excluded = s.nodes.filter((n) => !n.eligible);
+    const reports = s.reports ?? [];
 
     const type = el('select', { 'aria-label': 'Seed type' }, ...[['source', 'Source object'], ['memory', 'Memory'], ['turn', 'Turn']].map(([v, t]) => el('option', { value: v, ...(v === form.type ? { selected: true } : {}) }, t)));
     type.addEventListener('change', () => (form.type = type.value));
@@ -74,7 +107,7 @@ export default {
             'Active quarantines',
             null,
             qs.length
-              ? el('div', { class: 'row-list' }, ...qs.map((q) => el('div', { class: 'row-i' }, el('span', { class: 'dot r' }), el('span', { class: 'grow' }, `#${q.seq} · ${q.seed.type} ${short(q.seed.value, 12)}`), el('span', { class: 'meta' }, q.auto ? 'auto' : 'manual'))))
+              ? el('div', { class: 'row-list' }, ...qs.map((q) => el('div', { class: 'row-i', style: 'flex-wrap:wrap' }, el('span', { class: 'dot r' }), el('span', { class: 'grow' }, `#${q.seq} · ${q.seed.type} ${short(q.seed.value, 12)}`), el('span', { class: 'meta' }, q.auto ? 'auto' : 'manual'), reportCell(ctx, q.seq, reports))))
               : el('p', { class: 'empty' }, 'None.'),
             qs.length ? el('div', { style: 'margin-top:12px;display:grid;gap:8px' }, el('p', { class: 'hint' }, 'Releasing is a human decision, signed with your user key:'), command(`antibody release ${qs[0].seq} --reason "reviewed: safe"`)) : null,
           ),

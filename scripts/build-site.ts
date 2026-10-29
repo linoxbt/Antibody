@@ -6,7 +6,7 @@
  *
  *   npx tsx scripts/build-site.ts    → site/
  */
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CAST, createWorld, POISON_COIN, seedBaseline, type World } from '../src/dev/world.ts';
@@ -40,6 +40,7 @@ async function main() {
   const w = await createWorld();
   const bill = await startBillServer({ chain: w.rt.chain, network: suiNetworkId('mainnet', true), payTo: CAST.utility, asset: CAST.usdc, amount: '42500000', serviceName: 'City Power & Water', port: BILL_PORT });
   const steps: Step[] = [];
+  const reportFiles = new Map<string, string>(); // filename → JSON, captured before the world is disposed
   /** Rebuild in a fresh control with an empty cache, from Walrus + Sui alone. */
   const rebuild = async () => {
     const fresh = buildControl(w.rt, { signer: null, noCache: true, cacheDirOverride: mkdtempSync(join(tmpdir(), 'antibody-site-')) });
@@ -82,6 +83,8 @@ async function main() {
     });
 
     const q = await w.quarantine({ type: 'source', value: coin.objectId }, 'poisoned coin metadata (USDC Rewards)');
+    const published = await w.control.report(q.seq); // FR-14: the incident report, published (locally, SIMULATED)
+    reportFiles.set(published.upload.filename, readFileSync(published.upload.url.slice('file://'.length), 'utf8'));
     await snap({
       time: '1:40',
       title: 'Quarantined.',
@@ -117,6 +120,12 @@ async function main() {
     w.dispose();
   }
 
+  // Offline reports live in the world's temporary cache; ship them with the site so the links resolve.
+  mkdirSync(join(OUT, 'reports'), { recursive: true });
+  for (const [name, text] of reportFiles) writeFileSync(join(OUT, 'reports', name), text);
+  for (const st of steps) {
+    for (const r of (st.state as { reports?: { url: string; filename: string }[] }).reports ?? []) if (reportFiles.has(r.filename)) r.url = `/reports/${r.filename}`;
+  }
   writeFileSync(join(OUT, 'demo.json'), JSON.stringify({ generatedAt: new Date().toISOString(), simulated: true, steps }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
   cpSync('web', OUT, { recursive: true });
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));

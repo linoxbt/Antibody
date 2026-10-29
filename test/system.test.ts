@@ -246,3 +246,22 @@ test('I-6: when chain reads fail, a proposal gets a recorded BLOCK CHAIN_UNAVAIL
     w.rt.chain.getAccount = real;
   }
 });
+
+test('FR-14: an incident report covers the blast radius, is logged per quarantine and appears in the web state', async () => {
+  const w = await world();
+  const coin = w.airdrop(POISON_COIN);
+  await w.scan();
+  await w.steward(RENT);
+  const q = await w.quarantine({ type: 'source', value: coin.objectId });
+  const { report, upload } = await w.control.report(q.seq);
+  assert.equal(report.kind, 'antibody.incident-report/v1');
+  assert.equal(report.quarantine.seq, q.seq);
+  assert.equal(report.blastRadius.memories.length, q.radius.memories.length);
+  assert.equal(upload.simulated, true, 'offline: written locally and labelled simulated');
+  const logged = w.control.reportLog.list();
+  assert.deepEqual(logged.map((r) => [r.seq, r.blobId]), [[q.seq, upload.blobId]]);
+  const { stateJson } = await import('../src/web/server.ts');
+  const state = await stateJson(w.rt, w.control);
+  assert.equal(state.reports.at(-1)!.url, upload.url);
+  await assert.rejects(w.control.report(0), /not a quarantine record/);
+});

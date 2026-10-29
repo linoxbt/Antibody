@@ -325,7 +325,7 @@ src/web/        web server (control process, 127.0.0.1; clean URLs, CSP) · auth
 web/            index · walkthrough · security · login · app (console SPA) · 404 (.html)
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh
-test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch, crosscheck)
+test/           node:test suites (envelope, lineage, ledger, policy, system, keys, lint, auth, revoke, watch, crosscheck, rates)
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
 
@@ -333,10 +333,11 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
-| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check | ✅ 73 tests | same code |
+| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates | ✅ 76 tests | same code |
 | Relayer reachable, package/registry IDs match | — | ✅ probe P-1 run on 2026-10-29 |
 | FR-18 checkpoint stream with an affected-address filter | fixture (polling) | ✅ streamed from a mainnet fullnode: busy address matched, random address none |
 | FR-19 delegate set cross-checked against a second RPC (`ANTIBODY_CROSSCHECK_RPC_URL`) | ✅ forged key on one reader → every payment BLOCKed | set the URL to enable |
+| USD values (Tatum Data API `/v4/data/rate/symbol`), display only | ✅ stablecoins at peg, labelled simulated | with `TATUM_API_KEY` |
 | MemWalAccount parsing (`delegate_keys`, base64 keys) | fixture | ✅ read a live account over gRPC |
 | Build + dry-run + R5 on a real transfer | fixture | ✅ live gRPC dry-run passes R5 (negative net gas handled) |
 | P-2…P-8 (byte-identical retrieval, delegate add/remove, Tatum gateway, restore, coverage) | — | ⏳ needs your keys: `npx tsx scripts/probe.ts` ([runbook](docs/demo-live.md)) |

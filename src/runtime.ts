@@ -9,6 +9,7 @@ import type { ChainReader } from './adapters/chain.ts';
 import { SdkChainReader } from './adapters/chain-sdk.ts';
 import { FixtureChain } from './adapters/chain-fixture.ts';
 import { CrossCheckedChain } from './adapters/chain-crosscheck.ts';
+import { SimulatedRates, TatumRates, type RateSource } from './adapters/rates.ts';
 import type { MemoryClient } from './adapters/memory.ts';
 import { LiveMemoryClient } from './adapters/memwal-live.ts';
 import { OfflineRelayer } from './adapters/memwal-offline.ts';
@@ -26,6 +27,8 @@ export interface Runtime {
   chain: ChainReader;
   memory(key: LaneKey & { seedHex: string }): MemoryClient;
   reports: ReportStore;
+  /** USD display rates (Tatum Data API); display only, never policy. */
+  rates: RateSource;
   /** Offline only. */
   fixture?: FixtureChain;
   relayer?: OfflineRelayer;
@@ -54,6 +57,7 @@ export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
       chain: fixture,
       memory: (key) => relayer.client(key.publicKeyHex),
       reports: new LocalReportStore(join(cacheDir(cfg), 'reports')),
+      rates: new SimulatedRates(),
       fixture,
       relayer,
       banners,
@@ -82,6 +86,7 @@ export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
       return new LiveMemoryClient({ seedHex: key.seedHex, publicKeyHex: key.publicKeyHex, accountId, serverUrl: cfg.memwalServerUrl });
     },
     reports: cfg.tatumApiKey ? new TatumStorage(cfg.tatumApiUrl, cfg.tatumApiKey) : new LocalReportStore(join(cacheDir(cfg), 'reports')),
+    rates: cfg.tatumApiKey ? new TatumRates(cfg.tatumApiUrl, cfg.tatumApiKey) : { usd: async () => ({}) },
     banners,
   };
 }

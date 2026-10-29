@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/assets/css/brand.css" />
   <link rel="stylesheet" href="/assets/css/app.css" />
 </head>
-<body class="auth">
+<body class="auth" data-node="unknown">
   <div class="auth-grid">
     <main class="auth-col">
       <div class="auth-top">
@@ -20,20 +20,25 @@
         <a class="back" href="/">← Back to site</a>
       </div>
       <div class="auth-body">
-        <div>
+        <div class="node-only">
           <span class="eyebrow">Console</span>
           <h1 class="words">Welcome <span class="tail">back.</span></h1>
           <p class="lede">Sign in with the wallet that owns this Antibody account.</p>
         </div>
+        <div class="public-only">
+          <span class="eyebrow">Console</span>
+          <h1 class="words">Explore the <span class="tail">console.</span></h1>
+          <p class="lede">This public site replays a recorded run, read-only. Nothing to sign in to here.</p>
+        </div>
 
-        <section aria-labelledby="w-h">
+        <section class="node-only" aria-labelledby="w-h">
           <h2 id="w-h" class="sr-only">Sui wallets</h2>
           <div class="wallets" id="wallets"><div class="wallet-empty">Looking for Sui wallets…</div></div>
         </section>
 
-        <div class="or">or</div>
+        <div class="or node-only">or</div>
 
-        <section aria-labelledby="op-h">
+        <section class="node-only" aria-labelledby="op-h">
           <h2 id="op-h" class="sr-only">Operator link</h2>
           <form class="op-form" id="op-form">
             <input id="op-token" autocomplete="off" spellcheck="false" placeholder="Operator token" aria-label="Operator token" />
@@ -45,8 +50,15 @@
         <p class="auth-msg" id="msg" role="status" aria-live="polite"></p>
 
         <a class="btn btn-primary btn-lg demo-btn" id="demo" href="/app">Explore the recorded demo <span class="arrow" aria-hidden="true">→</span></a>
+
+        <section class="run-own public-only" aria-labelledby="own-h">
+          <h2 id="own-h">Sign in with your wallet</h2>
+          <p>Wallet sign-in works on a node you run. Start one, open its console, and sign in with the wallet that owns your account.<span id="wallet-seen"></span></p>
+          <pre class="quote">antibody setup &amp;&amp; antibody up</pre>
+          <a class="small" href="https://github.com/linoxbt/Antibody#readme" target="_blank" rel="noopener">How to run a node →</a>
+        </section>
       </div>
-      <div class="auth-foot"><span>Signing is free and moves no funds.</span><span id="node-state"></span></div>
+      <div class="auth-foot"><span id="node-state"></span><span id="theme-slot"></span></div>
     </main>
 
     <aside class="auth-art" aria-hidden="true">

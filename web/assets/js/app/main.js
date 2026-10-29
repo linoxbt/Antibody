@@ -5,7 +5,7 @@ import { sky } from '../motion.js';
 import { authStatus, demoChosen, liveSource, recordedSource, signOut, AuthRequired, ReadOnlyError } from '../data.js';
 import { el, short } from '../ui.js';
 import { icon, avatar } from './kit.js';
-import { themeButton } from '../theme.js';
+import { themeSwitch } from '../theme.js';
 import overview from './views/overview.js';
 import steward from './views/steward.js';
 import memory from './views/memory.js';
@@ -85,7 +85,7 @@ const side = el('aside', { class: 'side', id: 'side', 'aria-label': 'Console nav
 const scrim = el('div', { class: 'scrim', 'aria-hidden': 'true' });
 const crumbs = el('div', { class: 'crumbs' });
 const tbRight = el('div', { class: 'tb-right' });
-const themeBtn = themeButton();
+const themeCtl = el('div', { class: 'side-theme' }, themeSwitch());
 const view = el('main', { class: 'view', id: 'view', tabindex: '-1' });
 const demoBar = el('div', { class: 'demo-bar hidden' });
 const burger = el('button', { class: 'icon-btn burger-app', type: 'button', 'aria-label': 'Open navigation', 'aria-controls': 'side', 'aria-expanded': 'false' }, icon('menu'));
@@ -131,6 +131,7 @@ function renderSide() {
     ...SECTIONS.flatMap(([title, ids]) => [el('div', { class: 'side-sec' }, title), ...ids.map((id) => link(VIEWS.find((v) => v.id === id)))]),
     el('div', { class: 'side-spacer' }),
     link(settings),
+    themeCtl,
     el('div', { class: 'me', style: 'margin-top:8px' }, avatar(who, true), el('div', {}, el('b', {}, session?.address ? short(session.address, 12) : src.mode === 'recorded' ? 'Demo visitor' : 'Operator'), el('small', {}, src.mode === 'recorded' ? 'read-only' : session?.method === 'wallet' ? 'owner wallet' : 'operator link')), signOutBtn),
   );
 }
@@ -152,7 +153,7 @@ function renderTop() {
     r.addEventListener('click', () => ctx.act(async () => (await src.refresh(), route({ keepScroll: true }), toast('Refreshed from Walrus + Sui.'))));
     parts.push(r);
   }
-  tbRight.replaceChildren(...parts, themeBtn);
+  tbRight.replaceChildren(...parts);
   demoBar.classList.toggle('hidden', src.mode !== 'recorded');
   if (src.mode === 'recorded') demoBar.replaceChildren(el('span', { class: 'dot b' }), 'Recorded demo · read-only', el('span', { class: 'long' }, ' · simulated data from the offline run.'), el('a', { href: '/login' }, 'Sign in live →'));
 }

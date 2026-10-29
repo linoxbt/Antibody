@@ -182,3 +182,19 @@ a.action span { color: var(--muted); font-size: 14px; }
 .auth-top a.back { margin-left: auto; }
 .topbar .theme-btn { width: 36px; height: 36px; }
 :root[data-theme='light'] a.action { background: #fff; }
+
+/* sign-in states: a node behind the page (sign in) or the public site (demo only) */
+body.auth[data-node='unknown'] .node-only, body.auth[data-node='unknown'] .public-only,
+body.auth[data-node='off'] .node-only, body.auth[data-node='on'] .public-only { display: none; }
+body.auth[data-node='unknown'] .demo-btn { visibility: hidden; }
+body.auth[data-node='on'] .demo-btn { background: transparent; color: var(--text); border-color: var(--line-2); box-shadow: none; }
+.run-own { border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; gap: 12px; background: rgba(var(--fg-rgb), 0.025); }
+.run-own h2 { font-size: 16px; font-weight: 500; letter-spacing: 0; }
+.run-own p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.run-own a { color: var(--accent-hi); }
+.run-own .seen { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--text-2); }
+.run-own .seen::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--allow); }
+.auth-foot { align-items: center; }
+.side-theme { padding: 10px 2px 2px; }
+.side-theme .theme-switch { display: flex; }
+.side-theme .theme-switch button { flex: 1; justify-content: center; }

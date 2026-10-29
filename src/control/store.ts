@@ -94,3 +94,34 @@ export class IncidentStore {
     return this.list().find((i) => i.id === id);
   }
 }
+
+/** Published incident reports, one entry per upload (FR-14). */
+export interface ReportEntry {
+  seq: number;
+  url: string;
+  blobId: string;
+  jobId: string;
+  status: string;
+  filename: string;
+  sizeBytes: number;
+  simulated: boolean;
+  at: number;
+}
+
+export class ReportLog {
+  private readonly store: JsonFileStore<ReportEntry[]>;
+
+  constructor(dir: string) {
+    this.store = new JsonFileStore(join(dir, 'reports.json'), () => []);
+  }
+
+  list(): ReportEntry[] {
+    return this.store.read();
+  }
+
+  add(e: ReportEntry): void {
+    this.store.update((s) => {
+      s.push(e);
+    });
+  }
+}

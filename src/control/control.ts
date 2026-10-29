@@ -39,7 +39,7 @@ import type { IpcClient } from '../ipc.ts';
 import type { Logger } from '../log.ts';
 import { decodeHeader, encodeHeader, HDR_REQUIRED, HDR_RESPONSE, HDR_SIGNATURE, paymentRequiredSchema, selectRequirement, type PaymentPayload, type SettlementResponse } from '../payments/x402.ts';
 import { retrieveContent, retrieveLedger } from './retrieve.ts';
-import { HighWaterMark, IncidentStore, TextCache, type Incident } from './store.ts';
+import { HighWaterMark, IncidentStore, ReportLog, TextCache, type Incident } from './store.ts';
 
 export interface ControlDeps {
   acct: string;
@@ -99,6 +99,7 @@ export class Control {
   readonly cache: TextCache;
   readonly hwm: HighWaterMark;
   readonly incidents: IncidentStore;
+  readonly reportLog: ReportLog;
   private readonly now: () => number;
   private last: Snapshot | null = null;
 
@@ -106,6 +107,7 @@ export class Control {
     this.cache = new TextCache(d.cacheDir);
     this.hwm = new HighWaterMark(join(d.home, 'hwm.json'));
     this.incidents = new IncidentStore(d.cacheDir);
+    this.reportLog = new ReportLog(d.cacheDir);
     this.now = d.now ?? Date.now;
   }
 
@@ -545,6 +547,7 @@ export class Control {
     };
     const up = await this.d.reports.upload(`antibody-incident-${seq}.json`, report);
     for (const i of this.incidents.list()) if (i.quarantineSeq === seq) this.incidents.upsert({ ...i, report: { url: up.url, blobId: up.blobId, simulated: up.simulated } });
+    this.reportLog.add({ seq, url: up.url, blobId: up.blobId, jobId: up.jobId, status: up.status, filename: up.filename, sizeBytes: up.sizeBytes, simulated: up.simulated, at: this.now() });
     this.d.log.info('report.upload', { seq, blobId: up.blobId, url: up.url, simulated: up.simulated });
     return { report, upload: up };
   }

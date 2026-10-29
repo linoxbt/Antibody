@@ -73,12 +73,12 @@ export function mountShell(current) {
         el(
           'div',
           { class: 'footer-grid' },
-          el('div', {}, brand(), el('p', { class: 'muted small', style: 'max-width:36ch;margin:18px 0 0' }, 'Provenance and quarantine for AI agents with long-term memory. Built on Walrus Memory and Sui, read through Tatum.')),
+          el('div', {}, brand()),
           col('Product', [['Walkthrough', '/walkthrough'], ['Console', '/console'], ['Blast radius', '/graph'], ['Security model', '/security']]),
           col('Operate', [['Ledger', '/ledger'], ['Incidents', '/incidents'], ['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set results', `${REPO}/blob/main/docs/attack-set-results.md`, true]]),
           col('Project', [['Source code', REPO, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall hackathon', 'https://tatum.io/hackathon/total-recall', true]]),
         ),
-        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT licensed`), el('span', {}, 'Public demo data is recorded on the offline backend and labelled SIMULATED.')),
+        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT licensed`), el('span', {}, 'Demo data is simulated.')),
       ),
     ),
   );
@@ -107,12 +107,12 @@ export function revealOnScroll() {
 export function modeBar(src, onChange) {
   if (src.mode === 'live') {
     const s = src.state;
-    return el('div', { class: 'modebar' }, el('span', { class: 'pill live' }, 'Live'), el('span', { class: 'muted small' }, `${s.backend === 'offline' ? 'offline backend (SIMULATED)' : 'Walrus Memory mainnet'} · chain ${s.chain} · checkpoint ${s.checkpoint}`));
+    return el('div', { class: 'modebar' }, el('span', { class: 'pill live' }, 'Live'), el('span', { class: 'muted small' }, s.backend === 'offline' ? 'simulated' : 'mainnet'));
   }
   const sel = el('select', { 'aria-label': 'Recorded moment' }, ...src.steps.map((s, i) => el('option', { value: String(i), ...(i === src.index ? { selected: true } : {}) }, `${i + 1} · ${s.time} · ${s.title}`)));
   sel.addEventListener('change', () => {
     src.setIndex(Number(sel.value));
     onChange();
   });
-  return el('div', { class: 'modebar' }, el('span', { class: 'pill rec' }, 'Recorded · simulated'), sel);
+  return el('div', { class: 'modebar' }, el('span', { class: 'pill rec' }, 'Recorded'), sel);
 }

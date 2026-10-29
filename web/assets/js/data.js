@@ -54,7 +54,7 @@ export async function loadSource() {
         return this.state;
       },
       api() {
-        throw new ReadOnlyError('This public site replays a recording, so actions are read-only. Run it yourself with npm install && npx tsx scripts/demo-m1.ts, or antibody up for the live console.');
+        throw new ReadOnlyError('Read-only recording. Run it live with antibody up.');
       },
       setIndex(i) {
         this.index = Math.min(Math.max(i, 0), demo.steps.length - 1);

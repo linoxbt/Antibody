@@ -23,18 +23,17 @@ function render() {
   const eligible = s.nodes.filter((n) => n.eligible).length;
   $('stats').replaceChildren(
     stat('Ledger', s.ledger.ok ? `#${s.ledger.head.seq}` : s.ledger.code, s.ledger.ok ? `head ${short(s.ledger.head.hash, 12)}` : 'every payment blocked'),
-    stat('Memories', `${eligible} in context`, `${s.nodes.length - eligible} excluded · ${s.failed.length} failed verification`),
+    stat('Memories', `${eligible} in context`, `${s.nodes.length - eligible} excluded`),
     stat('Payees', s.ledger.ok ? String(s.ledger.payees.length) : '—', s.ledger.ok ? s.ledger.payees.map((p) => p.label).join(', ') : ''),
-    stat('Checkpoint', String(s.checkpoint), `${s.backend === 'offline' ? 'fixture chain · SIMULATED' : 'Sui mainnet'} · ${s.chain}`),
+    stat('Checkpoint', String(s.checkpoint), s.backend === 'offline' ? 'simulated' : 'mainnet'),
   );
   $('lanes').replaceChildren(
     ...s.lanes.map((l) => el('div', { class: 'lane' }, el('span', { class: 'name' }, l.label), el('span', { class: `pill plain ${l.status === 'active' ? 'ok' : 'bad'}` }, l.status), el('span', { class: 'key' }, l.pub))),
-    el('p', { class: 'tiny muted', style: 'margin:14px 0 0' }, `account ${short(s.account.id, 18)} · wallet ${short(s.wallet ?? '', 18)}`),
   );
   const step = src.mode === 'recorded' ? src.steps[src.index] : null;
   const rd = step ? (src.steps.slice(0, src.index + 1).reverse().find((x) => x.rebuildDigest && x.state.digest === s.digest)?.rebuildDigest ?? null) : rebuildDigest;
-  $('digests').replaceChildren(el('dt', {}, 'live'), el('dd', {}, el('code', {}, s.digest)), el('dt', {}, 'rebuild'), el('dd', {}, rd ? el('code', {}, rd) : el('span', { class: 'muted' }, 'not run yet')));
-  $('digest-match').replaceChildren(rd ? el('span', { class: `pill ${rd === s.digest ? 'ok' : 'bad'}` }, rd === s.digest ? 'match · quarantine survived' : 'mismatch') : '');
+  $('digests').replaceChildren(el('dt', {}, 'live'), el('dd', {}, el('code', {}, s.digest)), el('dt', {}, 'rebuild'), el('dd', {}, rd ? el('code', {}, rd) : el('span', { class: 'muted' }, '—')));
+  $('digest-match').replaceChildren(rd ? el('span', { class: `pill ${rd === s.digest ? 'ok' : 'bad'}` }, rd === s.digest ? 'match' : 'mismatch') : '');
   const run = lastRun();
   if (src.mode === 'recorded') {
     $('instruction').value = run?.instruction ?? PRESETS[0];
@@ -87,7 +86,7 @@ $('run-form').addEventListener('submit', async (e) => {
     toast(err.message);
   } finally {
     b.disabled = false;
-    b.textContent = 'Run both agents';
+    b.textContent = 'Run';
   }
 });
 

@@ -29,7 +29,7 @@ function evidence(step, prev) {
       el(
         'section',
         { class: 'card' },
-        el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Split screen'), el('p', {}, `“${step.run.instruction}” — same model, same memories.`))),
+        el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, `“${step.run.instruction}”`))),
         el('div', { class: 'split' }, el('div', { class: 'pane protected' }, el('div', { class: 'pane-head' }, el('span', { class: 'kicker' }, 'Steward + Antibody')), protectedPane(step.run.protected)), el('div', { class: 'pane unprotected' }, el('div', { class: 'pane-head' }, el('span', { class: 'kicker' }, 'Unprotected agent')), unprotectedPane(step.run.unprotected))),
       ),
     );
@@ -40,7 +40,7 @@ function evidence(step, prev) {
       el(
         'section',
         { class: 'card gold' },
-        el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Projection digests'), el('p', {}, 'Live process versus a fresh process that read only Walrus and Sui.')), el('span', { class: `pill ${ok ? 'ok' : 'bad'}` }, ok ? 'match' : 'mismatch')),
+        el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Digests')), el('span', { class: `pill ${ok ? 'ok' : 'bad'}` }, ok ? 'match' : 'mismatch')),
         el('dl', { class: 'kv' }, el('dt', {}, 'live'), el('dd', {}, el('code', {}, s.digest)), el('dt', {}, 'rebuild'), el('dd', {}, el('code', {}, step.rebuildDigest))),
       ),
     );
@@ -51,7 +51,7 @@ function evidence(step, prev) {
     el(
       'section',
       { class: 'card' },
-      el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Memory at this moment'), el('p', {}, `${plural(s.nodes.length, 'memory')} · ${s.nodes.filter((n) => !n.eligible).length} excluded · ${step.highlight !== undefined ? `highlighting quarantine #${step.highlight}` : 'coloured by trust class'}`)), el('a', { class: 'btn btn-ghost btn-sm', href: `/graph?step=${i + 1}` }, 'Open in explorer')),
+      el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Memory')), el('a', { class: 'btn btn-ghost btn-sm', href: `/graph?step=${i + 1}` }, 'Explore')),
       graphHost,
     ),
   );
@@ -64,10 +64,10 @@ function evidence(step, prev) {
         'section',
         { class: added.length && newInc.length ? 'grid-2' : '' },
         added.length
-          ? el('div', { class: 'card' }, el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Written to the ledger'), el('p', {}, 'Hash-chained records on Walrus.'))), el('div', { class: 'feed' }, ...added.map((r) => el('div', { class: 'item' }, el('div', { class: 'item-head' }, el('span', { class: 'mono small' }, `#${r.seq}`), el('span', { class: 'tag record' }, r.type), el('code', {}, short(r.blobId, 14)))))))
+          ? el('div', { class: 'card' }, el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Ledger'))), el('div', { class: 'feed' }, ...added.map((r) => el('div', { class: 'item' }, el('div', { class: 'item-head' }, el('span', { class: 'mono small' }, `#${r.seq}`), el('span', { class: 'tag record' }, r.type), el('code', {}, short(r.blobId, 14)))))))
           : null,
         newInc.length
-          ? el('div', { class: 'card' }, el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Sentinel'), el('p', {}, 'Incidents raised by the ingest worker.'))), el('div', { class: 'feed' }, ...newInc.map((x) => el('div', { class: 'item' }, el('div', { class: 'item-head' }, el('span', { class: `pill plain ${x.status === 'open' ? 'rec' : 'bad'}` }, x.status.replace('-', ' ')), el('span', { class: 'mono small' }, `score ${x.score}`)), el('p', {}, x.rules.map((r) => r.split(':')[0]).filter((v, k, a) => a.indexOf(v) === k).join(' · '))))))
+          ? el('div', { class: 'card' }, el('div', { class: 'card-title' }, el('div', {}, el('h3', {}, 'Sentinel'))), el('div', { class: 'feed' }, ...newInc.map((x) => el('div', { class: 'item' }, el('div', { class: 'item-head' }, el('span', { class: `pill plain ${x.status === 'open' ? 'rec' : 'bad'}` }, x.status.replace('-', ' ')), el('span', { class: 'mono small' }, `score ${x.score}`)), el('p', {}, x.rules.map((r) => r.split(':')[0]).filter((v, k, a) => a.indexOf(v) === k).join(' · '))))))
           : null,
       ),
     );
@@ -82,7 +82,7 @@ function render() {
       el('li', {}, el('button', { class: `chapter${k === i ? ' on' : ''}${k < i ? ' done' : ''}`, 'aria-current': k === i ? 'step' : null, onclick: () => (stop(), setChapter(k)) }, el('span', { class: 'time' }, s.time), el('span', { class: 'ttl' }, s.title))),
     ),
   );
-  $('wt-time').textContent = `Chapter ${i + 1} of ${demo.steps.length} · ${step.time}`;
+  $('wt-time').textContent = `${i + 1} / ${demo.steps.length}`;
   $('wt-title').textContent = step.title;
   $('wt-text').textContent = step.text;
   $('bar').style.width = `${((i + 1) / demo.steps.length) * 100}%`;

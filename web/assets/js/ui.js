@@ -43,7 +43,7 @@ const ICON = { pass: '✓', fail: '✕' };
 
 /** The protected (Steward + Antibody) result of a run. */
 export function protectedPane(p) {
-  if (!p) return el('div', { class: 'empty' }, 'Run an instruction to see Steward’s verdict.');
+  if (!p) return el('div', { class: 'empty' }, 'Run to see the verdict.');
   if (p.error) return el('div', { class: 'empty' }, el('span', { style: 'color:var(--block)' }, p.error));
   const recall = p.steps?.find((s) => s.tool === 'recall_memories');
   const items = recall?.result?.items ?? [];
@@ -56,7 +56,7 @@ export function protectedPane(p) {
           'div',
           {},
           el('div', { class: `verdict ${d.verdict.decision === 'ALLOW' ? 'allow' : 'block'}` }, d.verdict.decision === 'ALLOW' ? 'Allowed' : 'Blocked', el('small', {}, d.verdict.code === 'OK' ? (d.txDigest ? 'executed' : 'dry-run passed') : d.verdict.code.replaceAll('_', ' '))),
-          el('p', { class: 'small', style: 'margin:0;color:var(--text-2)' }, d.verdict.reasons.join('; ')),
+          el('p', { class: 'small', style: 'margin:0;color:var(--text-2)' }, d.verdict.reasons[0] ?? ''),
           el('ul', { class: 'rules' }, ...d.verdict.rules.map((r) => el('li', {}, el('span', { class: `i ${r.pass ? 'pass' : 'fail'}` }, r.pass ? ICON.pass : ICON.fail), el('span', { class: 'r' }, r.rule), el('span', {}, r.detail)))),
           el('p', { class: 'tiny muted', style: 'margin:14px 0 0' }, `decision ${short(d.decisionId, 13)} · ${d.txDigest ? `tx ${short(d.txDigest, 14)}` : d.dryRunOnly ? 'dry-run only' : 'nothing signed'}`),
         )
@@ -65,26 +65,26 @@ export function protectedPane(p) {
       ? el(
           'details',
           { style: 'margin-top:18px' },
-          el('summary', { class: 'kicker', style: 'cursor:pointer' }, `What Steward saw · ${plural(items.length, 'memory')}`),
+          el('summary', { class: 'kicker', style: 'cursor:pointer' }, `Context · ${items.length}`),
           el('ul', { class: 'ctx', style: 'margin-top:12px' }, ...items.map((i) => el('li', {}, el('span', {}, el('span', { class: `tag ${labelClass(i.label)}` }, i.label.replace(/[[\]]/g, '').split(' — ')[0])), i.text.split('\n')[0].slice(0, 220)))),
         )
       : null,
-    p.notes?.length ? el('p', { class: 'tiny muted', style: 'margin:12px 0 0' }, `Wrote ${plural(p.notes.length, 'note')}; the runtime set its parents to everything the turn read, so taint follows.`) : null,
+    p.notes?.length ? el('p', { class: 'tiny muted', style: 'margin:12px 0 0' }, 'Note written · tainted by its reads') : null,
   );
 }
 
 /** The unprotected agent's result: what it would have done. */
 export function unprotectedPane(u) {
-  if (!u) return el('div', { class: 'empty' }, 'Same model, same memories, no Antibody.');
+  if (!u) return el('div', { class: 'empty' }, 'No policy.');
   if (u.error) return el('div', { class: 'empty' }, u.error);
   if (!u.wouldSend) return el('div', { class: 'empty' }, u.final ?? 'Proposed no payment.');
   const w = u.wouldSend;
   return el(
     'div',
     {},
-    el('div', { class: 'verdict would' }, `Would send ${w.amount} ${w.symbol}`, el('small', {}, 'no policy · dry-run only · never signed')),
+    el('div', { class: 'verdict would' }, `Would send ${w.amount} ${w.symbol}`, el('small', {}, 'dry-run · never signed')),
     el('p', { class: 'small', style: 'margin:0;color:var(--text-2)' }, 'to ', el('code', {}, w.recipient)),
-    el('p', { class: 'tiny muted', style: 'margin:14px 0 0' }, `dry-run ${w.dryRunOk ? 'succeeds — this transfer would have gone through' : `fails: ${w.dryRunError}`}`),
+    el('p', { class: 'tiny muted', style: 'margin:14px 0 0' }, w.dryRunOk ? 'Would have gone through.' : `Dry-run fails: ${w.dryRunError}`),
   );
 }
 
@@ -178,7 +178,7 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
 }
 
 export function nodeDetail(n, extra = null) {
-  if (!n) return el('p', { class: 'muted small' }, 'Select a node to read its envelope, class and lineage.');
+  if (!n) return el('p', { class: 'muted small' }, 'Select a node.');
   return el(
     'div',
     { class: 'detail' },

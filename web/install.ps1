@@ -66,6 +66,11 @@
     if ($LASTEXITCODE -ne 0) { Fail 'npm could not install the dependencies.' @('Out of disk space? Free some and re-run.', 'Behind a proxy? npm config set proxy http://host:port', 'Then run this installer again; it picks up where it stopped.') }
   } finally { Pop-Location }
   Ok 'dependencies installed'
+  Push-Location $Dir
+  try {
+    node --import tsx scripts/build-site.ts *> $null
+    if ($LASTEXITCODE -eq 0) { Ok 'recorded demo built' } else { Write-Host '  (recorded demo skipped: the console still works; Enter the demo will not)' }
+  } finally { Pop-Location }
 
   New-Item -ItemType Directory -Force -Path $Bin | Out-Null
   $cmd = Join-Path $Bin 'antibody.cmd'

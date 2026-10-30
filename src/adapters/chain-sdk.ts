@@ -155,6 +155,25 @@ export class SdkChainReader implements ChainReader {
     return tx.build({ client: this.client });
   }
 
+  /** Unsigned owner transaction: {package}::account::create_account(registry, clock). One account per owner address. */
+  async buildCreateAccount(req: { sender: string; packageId: string; registryId: string }): Promise<Uint8Array> {
+    const tx = new Transaction();
+    tx.setSender(req.sender);
+    tx.moveCall({ target: `${req.packageId}::account::create_account`, arguments: [tx.object(req.registryId), tx.object('0x6')] });
+    if (this.o.gasBudget) tx.setGasBudget(this.o.gasBudget);
+    return tx.build({ client: this.client });
+  }
+
+  /** The MemWalAccount a create_account transaction created, if any. */
+  async createdAccountOf(digest: string): Promise<string | null> {
+    const r = await this.client.core.getTransaction({ digest, include: { effects: true, objectTypes: true } });
+    const t = (r.Transaction ?? r.FailedTransaction) as { effects?: { changedObjects?: { objectId: string; idOperation?: string }[] }; objectTypes?: Record<string, string> } | undefined;
+    for (const c of t?.effects?.changedObjects ?? []) {
+      if (c.idOperation === 'Created' && t?.objectTypes?.[c.objectId]?.includes('::account::MemWalAccount')) return normalizeSuiAddress(c.objectId);
+    }
+    return null;
+  }
+
   async simulate(txBytes: Uint8Array): Promise<SimulationResult> {
     const sender = Transaction.from(txBytes).getData().sender ?? '';
     try {

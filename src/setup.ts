@@ -81,11 +81,27 @@ export async function setupOffline(cfg: Config, opts: { readKeyFile: (role: Role
  * or, with `admin`, in their own browser wallet (setup --wallet): then all
  * four keys go in one transaction and the owner key never touches this machine.
  */
-export async function setupLive(cfg: Config, opts: { ownerSecret?: string; admin?: (owner: string, chain: SdkChainReader) => AccountAdmin & { addDelegateKeys?(keys: { pub: string; label: string }[]): Promise<{ digest: string }> }; readKeyFile: (role: Role) => string }): Promise<SetupResult> {
-  if (!cfg.accountId) throw new Error('set MEMWAL_ACCOUNT_ID to the account created on memory.walrus.xyz');
-  generateKeys(cfg);
+export async function setupLive(
+  cfgIn: Config,
+  opts: {
+    ownerSecret?: string;
+    admin?: (owner: string, chain: SdkChainReader) => AccountAdmin & { addDelegateKeys?(keys: { pub: string; label: string }[]): Promise<{ digest: string }> };
+    /** No MEMWAL_ACCOUNT_ID: create the MemWalAccount on-chain first (the owner signs create_account). */
+    createAccount?: (chain: SdkChainReader) => Promise<{ accountId: string; digest: string }>;
+    readKeyFile: (role: Role) => string;
+  },
+): Promise<SetupResult & { createdAccount?: { accountId: string; digest: string } }> {
+  let cfg = cfgIn;
   const chain = new SdkChainReader({ transport: cfg.chainTransport, network: cfg.network, url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl, apiKey: cfg.tatumApiKey, packageId: cfg.packageId });
-  const account = await chain.getAccount(cfg.accountId);
+  let createdAccount: { accountId: string; digest: string } | undefined;
+  if (!cfg.accountId) {
+    if (!opts.createAccount) throw new Error('no MemWalAccount: set MEMWAL_ACCOUNT_ID, or let setup create one (antibody setup --wallet, or OWNER_SUI_PRIVATE_KEY)');
+    createdAccount = await opts.createAccount(chain);
+    cfg = { ...cfg, accountId: createdAccount.accountId };
+  }
+  const accountId = cfg.accountId!;
+  generateKeys(cfg);
+  const account = await chain.getAccount(accountId);
   const owner = normalizeSuiAddress(account.owner);
   let admin: ReturnType<NonNullable<typeof opts.admin>>;
   if (opts.admin) admin = opts.admin(owner, chain);
@@ -93,10 +109,10 @@ export async function setupLive(cfg: Config, opts: { ownerSecret?: string; admin
     if (!opts.ownerSecret) throw new Error('the owner must sign: run antibody setup --wallet (your browser wallet), or set OWNER_SUI_PRIVATE_KEY for a throwaway demo owner');
     const ownerAddr = normalizeSuiAddress(Ed25519Keypair.fromSecretKey(opts.ownerSecret).toSuiAddress());
     if (owner !== ownerAddr) throw new Error(`OWNER_SUI_PRIVATE_KEY controls ${ownerAddr}, but the account owner is ${account.owner}`);
-    admin = liveAccountAdmin({ ownerSecret: opts.ownerSecret, accountId: cfg.accountId, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network, suiClient: chain.client });
+    admin = liveAccountAdmin({ ownerSecret: opts.ownerSecret, accountId, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network, suiClient: chain.client });
   }
   const wallet = normalizeSuiAddress(Ed25519Keypair.fromSecretKey(opts.readKeyFile('signer')).toSuiAddress());
-  persist(cfg, { accountId: cfg.accountId, stewardWallet: wallet, network: cfg.network });
+  persist(cfg, { accountId, stewardWallet: wallet, network: cfg.network });
   const existing = new Set(account.delegateKeys.map((k) => k.publicKeyHex));
   const wanted: { lane: string; label: string; pub: string }[] = [];
   for (const role of ROLES) {
@@ -111,12 +127,12 @@ export async function setupLive(cfg: Config, opts: { ownerSecret?: string; admin
   } else for (const t of todo) digests.set(t.pub, (await admin.addDelegateKey(t.pub, t.label)).digest);
   const lanes: SetupResult['lanes'] = wanted.map((w) => ({ ...w, digest: digests.get(w.pub) ?? 'already-registered' }));
   // Verify through the chain reader (Tatum) that every label is bound.
-  const after = await chain.getAccount(cfg.accountId);
+  const after = await chain.getAccount(accountId);
   for (const l of lanes) {
     if (!after.delegateKeys.some((k) => k.publicKeyHex === l.pub && k.label === l.label)) throw new Error(`lane ${l.lane} key not visible on-chain yet`);
   }
-  const genesis = await writeGenesisAs(cfg, cfg.accountId, wallet);
-  return { accountId: cfg.accountId, owner, wallet, lanes, genesis, simulated: false };
+  const genesis = await writeGenesisAs(cfg, accountId, wallet);
+  return { accountId, owner, wallet, lanes, genesis, simulated: false, ...(createdAccount ? { createdAccount } : {}) };
 }
 
 async function writeGenesisAs(cfg: Config, accountId: string, wallet: string) {

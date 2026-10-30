@@ -46,6 +46,7 @@ import { startBillServer } from '../payments/x402-server.ts';
 import { suiNetworkId } from '../payments/x402.ts';
 import { startWeb } from '../web/server.ts';
 import { ownerSession, verifyOwnerMessage, walletAccountAdmin, type OwnerSession } from '../web/owner-sign.ts';
+import { callOf } from '../web/revoke.ts';
 import { doctorExitCode, runDoctor, type Check } from '../ops/doctor.ts';
 import { installService, serviceStatus, servicePlan, uninstallService } from '../ops/service.ts';
 import { Alerter, alertConfigFrom } from '../ops/alerts.ts';
@@ -114,6 +115,40 @@ async function ownerAdmin(r: Runtime, wallet = false): Promise<{ admin: AccountA
     return { session: null, admin: r.fixture.admin(owner) };
   }
   return { session: null, admin: liveAccountAdmin({ ownerSecret: secret!, accountId: requireAccount(r.cfg), packageId: r.cfg.packageId, registryId: r.cfg.registryId, network: r.cfg.network, suiClient: (primaryOf(r.chain) as SdkChainReader).client }) };
+}
+
+/**
+ * No MemWalAccount yet: the owner signs create_account (one account per owner
+ * address). The owner's browser wallet when there is an approval session,
+ * otherwise OWNER_SUI_PRIVATE_KEY.
+ */
+async function createAccountAsOwner(chain: SdkChainReader, cfg: Config, session: OwnerSession | null): Promise<{ accountId: string; digest: string }> {
+  const ids = { packageId: cfg.packageId, registryId: cfg.registryId };
+  let digest: string;
+  if (session) {
+    const hello = ['Antibody · identify the owner wallet', `Network: ${cfg.network}`, `Nonce: ${sha256Hex(String(Date.now()) + Math.random()).slice(0, 24)}`].join('\n');
+    const who = await session.sign({ kind: 'message', title: 'choose the owner wallet', lines: ['Next: one transaction creates your Walrus Memory account'], owner: null, message: hello });
+    await verifyOwnerMessage(hello, who, who.address);
+    const sender = normalizeSuiAddress(who.address);
+    const bytes = await chain.buildCreateAccount({ sender, ...ids });
+    const signed = await session.sign({ kind: 'transaction', title: 'create your Walrus Memory account', lines: [`Owner: ${sender}`, `Package: ${cfg.packageId}`], owner: sender, txBytes: Buffer.from(bytes).toString('base64'), chain: `sui:${cfg.network}` });
+    const got = signed.bytes ? Buffer.from(signed.bytes, 'base64') : Buffer.from(bytes);
+    if (!got.equals(Buffer.from(bytes)) && callOf(got) !== callOf(bytes)) throw new Error('the wallet changed the transaction; refusing to submit it');
+    const tx = await chain.execute(got, signed.signature);
+    if (!tx.ok) throw new Error(`create_account failed: ${tx.error ?? 'unknown error'}`);
+    digest = tx.digest;
+  } else {
+    const secret = process.env.OWNER_SUI_PRIVATE_KEY;
+    if (!secret) throw new Error('to create the account, run antibody setup --wallet, or set OWNER_SUI_PRIVATE_KEY (throwaway owner)');
+    const kp = Ed25519Keypair.fromSecretKey(secret);
+    const bytes = await chain.buildCreateAccount({ sender: kp.toSuiAddress(), ...ids });
+    const tx = await chain.execute(bytes, (await kp.signTransaction(bytes)).signature);
+    if (!tx.ok) throw new Error(`create_account failed: ${tx.error ?? 'unknown error'}`);
+    digest = tx.digest;
+  }
+  const accountId = await chain.createdAccountOf(digest);
+  if (!accountId) throw new Error(`create_account ${digest} succeeded but no MemWalAccount was found in its effects (does this owner already have one? set MEMWAL_ACCOUNT_ID)`);
+  return { accountId, digest };
 }
 
 /** The owner approval page, opened in the default browser. */
@@ -194,10 +229,13 @@ async function main(argv: string[]): Promise<void> {
         } else {
           res = await setupLive(cfg, {
             readKeyFile: read,
+            createAccount: (chain) => createAccountAsOwner(chain, cfg, session),
             ...(session ? { admin: (owner: string, chain: SdkChainReader) => walletAccountAdmin({ session, owner, accountId: cfg.accountId!, chain, reader: chain, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network }) } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY }),
           });
         }
         await session?.finish({ ok: true, text: `Antibody is set up. Owner ${short(res.owner, 14)}; the lane keys are registered${res.simulated ? ' (simulated)' : ' on Sui'}. Back in the terminal: antibody up.` });
+        const created = (res as { createdAccount?: { accountId: string; digest: string } }).createdAccount;
+        if (created) console.log(green(`MemWalAccount created on ${cfg.network}: ${created.accountId}`) + dim(` (create_account ${created.digest})`));
         console.log(bold('Antibody set up'));
         console.log(`  account ${res.accountId}\n  owner   ${res.owner}${session ? dim(' (your wallet: sign in to the console with it)') : ''}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
         for (const l of res.lanes) console.log(`  ${l.label.padEnd(24)} ${l.pub}  ${dim('tx ' + l.digest)}`);

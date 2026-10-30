@@ -96,6 +96,9 @@ export interface AxeViolation {
 
 /** Serious and critical WCAG 2.1 A/AA violations on the current page. */
 export async function axe(page: Page): Promise<AxeViolation[]> {
+  // Measure settled colours, not a frame in the middle of a colour transition (timing differs between machines).
+  await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation-play-state: paused !important; }' });
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.addScriptTag({ path: AXE });
   const v = await page.evaluate(async () => {
     const r = await (window as unknown as { axe: { run(c: unknown, o: unknown): Promise<{ violations: { id: string; impact: string; help: string; nodes: { target: string[] }[] }[] }> } }).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }, resultTypes: ['violations'] });

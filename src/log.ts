@@ -38,7 +38,13 @@ export function createLogger(opts: LoggerOptions): Logger {
       },
       (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
     );
-    if (file) appendFileSync(file, line + '\n', { mode: 0o600 });
+    if (file) {
+      try {
+        appendFileSync(file, line + '\n', { mode: 0o600 });
+      } catch {
+        // A full disk or a removed log folder must never take a daemon down; the line still goes to stderr if enabled.
+      }
+    }
     if (opts.stderr) process.stderr.write(line + '\n');
   };
   return {

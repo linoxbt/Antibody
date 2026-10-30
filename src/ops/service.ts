@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, posix, win32 } from 'node:path';
 
 export const SERVICE_LABEL = 'xyz.antibody.daemon';
 export const TASK_NAME = 'Antibody';
@@ -40,6 +40,8 @@ const sq = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 export function servicePlan(i: ServiceInputs): ServicePlan {
   const hd = i.homeDir ?? homedir();
+  // Paths in the target platform's own syntax, whatever machine builds the plan.
+  const join = i.platform === 'win32' ? win32.join : posix.join;
   if (i.platform === 'linux') {
     const path = join(hd, '.config', 'systemd', 'user', 'antibody.service');
     const content = `[Unit]

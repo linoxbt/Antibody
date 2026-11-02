@@ -4,7 +4,9 @@ let deferred = null;
 const listeners = new Set();
 
 if ('serviceWorker' in navigator && isSecureContext) {
-  addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  // The build id names the worker's cache, so a new deploy never keeps serving an old shell.
+  const build = document.querySelector('meta[name="antibody-build"]')?.content || 'dev';
+  addEventListener('load', () => navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(build)}`).catch(() => {}));
 }
 addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();

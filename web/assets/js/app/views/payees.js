@@ -2,7 +2,9 @@ import { el } from '../../ui.js';
 import { head, card, command, amount, shortAddr, avatar, usd } from '../kit.js';
 
 const CANONICAL = /^0x[0-9a-f]{64}$/;
+const CAP = /^\d+(\.\d{1,6})?$/; // USDC has 6 decimals
 let draft = { label: '', address: '', coin: 'USDC', cap: '' };
+let adding = false;
 
 /** Shell-safe single-quoting for the generated command. */
 const q = (s) => (/^[A-Za-z0-9._:-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`);
@@ -27,22 +29,30 @@ export default {
     // Sandbox: the server holds this world's (simulated) user key, so adding is a button.
     const addBtn = (disabled) =>
       el('button', {
-        class: 'btn btn-primary', type: 'button', ...(disabled ? { disabled: true } : {}),
-        onclick: () =>
+        class: 'btn btn-primary', type: 'button', ...(disabled || adding ? { disabled: true } : {}),
+        onclick: (e) => {
+          if (adding) return;
+          adding = true;
+          e.currentTarget.disabled = true;
           ctx.act(async () => {
-            const r = await ctx.src.api('/api/sandbox/payee', { label: draft.label.trim(), address: draft.address.trim(), cap: draft.cap.trim() });
-            draft = { label: '', address: '', coin: 'USDC', cap: '' };
-            await ctx.src.refresh();
-            ctx.toast(`Payee signed into your ledger as #${r.seq}.`);
-            ctx.rerender();
-          }),
+            try {
+              const r = await ctx.src.api('/api/sandbox/payee', { label: draft.label.trim(), address: draft.address.trim(), cap: draft.cap.trim() });
+              draft = { label: '', address: '', coin: 'USDC', cap: '' };
+              await ctx.src.refresh();
+              ctx.toast(`Payee signed into your ledger as #${r.seq}.`);
+            } finally {
+              adding = false;
+              ctx.rerender();
+            }
+          });
+        },
       }, 'Add payee');
     function update() {
       const addr = draft.address.trim();
       const problems = [];
       if (!draft.label.trim()) problems.push('a label');
       if (!CANONICAL.test(addr)) problems.push('a canonical address (0x + 64 lowercase hex; names are never resolved)');
-      if (!/^\d+(\.\d+)?$/.test(draft.cap.trim())) problems.push('a per-payment cap');
+      if (!CAP.test(draft.cap.trim())) problems.push('a per-payment cap (at most 6 decimals)');
       hint.textContent = problems.length ? `Needs ${problems.join(', ')}.` : s.sandbox ? 'Signed into your sandbox ledger with its user lane key.' : 'Run this where your user key lives. You confirm the last six characters of the address before it is signed.';
       hint.className = `hint${problems.length && (draft.label || draft.address || draft.cap) ? ' err' : ''}`;
       if (s.sandbox) return out.replaceChildren(addBtn(problems.length > 0));
@@ -89,7 +99,7 @@ export default {
       el(
         'div',
         { class: 'grid-2' },
-        el('section', { class: 'card glow' }, el('div', { class: 'card-title' }, el('h3', {}, 'Add a payee')), el('div', { class: 'form-grid' }, field('label', 'Label', { placeholder: 'landlord' }), field('cap', 'Cap per payment', { placeholder: '500', inputmode: 'decimal' }), field('address', 'Address', { placeholder: '0x…', full: true }), field('coin', 'Coin', { placeholder: 'USDC' })), el('div', { style: 'margin-top:14px;display:grid;gap:10px' }, out, hint)),
+        el('section', { class: 'card glow' }, el('div', { class: 'card-title' }, el('h3', {}, 'Add a payee')), el('div', { class: 'form-grid' }, field('label', 'Label', { placeholder: 'landlord' }), field('cap', 'Cap per payment', { placeholder: '500', inputmode: 'decimal' }), field('address', 'Address', { placeholder: '0x…', full: true }), s.sandbox ? el('div', { class: 'static-field' }, el('span', {}, 'Coin'), el('b', {}, 'USDC')) : field('coin', 'Coin', { placeholder: 'USDC' })), el('div', { style: 'margin-top:14px;display:grid;gap:10px' }, out, hint)),
         s.sandbox
           ? card('In your own install', null, el('p', { class: 'hint', style: 'font-size:14.5px;line-height:1.6' }, 'Payees are signed with the user lane key. Here the sandbox server holds a simulated one for you. On your own install that key never leaves your machine, so a payee can only be added from your terminal.'))
           : card(

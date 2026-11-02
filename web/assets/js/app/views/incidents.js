@@ -1,18 +1,10 @@
-import { el, short, plural } from '../../ui.js';
-import { head, card, command, shortAddr } from '../kit.js';
+import { el, short } from '../../ui.js';
+import { head, card, command, shortAddr, quarantine } from '../kit.js';
 
 const STATUS = { open: 'rec', quarantined: 'bad', 'auto-quarantined': 'bad', dismissed: 'plain' };
 let form = { type: 'source', value: '' };
 
-async function quarantine(ctx, type, value, reason) {
-  const src = ctx.src;
-  const pv = await src.api('/api/preview', { type, value });
-  if (!confirm(`Quarantine ${type} ${value}?\n\n${plural(pv.memories - pv.decisions, 'memory')} and ${plural(pv.decisions, 'decision')} leave Steward's context. They stay on Walrus as evidence.`)) return;
-  const r = await src.api('/api/quarantine', { type, value, reason });
-  ctx.toast(`Quarantine written as ledger #${r.seq}${r.lessonSeq !== null ? `; learned lesson #${r.lessonSeq}` : ''}.`);
-  await src.refresh();
-  ctx.rerender();
-}
+const run = (ctx, button, type, value, reason) => ctx.act(async () => (await quarantine(ctx, { type, value, reason, what: `${type} ${short(value, 16)}`, button })) && ctx.rerender());
 
 /** The incident report for a quarantine: its link once published (FR-14), else a button to publish it. */
 function reportCell(ctx, seq, reports) {
@@ -61,11 +53,12 @@ export default {
     type.addEventListener('change', () => (form.type = type.value));
     const value = el('input', { placeholder: '0x… or envelope id', 'aria-label': 'Seed value', value: form.value, autocomplete: 'off', spellcheck: 'false' });
     value.addEventListener('input', () => (form.value = value.value));
-    const qForm = el('form', { style: 'display:grid;gap:10px' }, type, value, el('button', { class: 'btn btn-primary', type: 'submit' }, 'Preview and quarantine'));
+    const submit = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Preview and quarantine');
+    const qForm = el('form', { style: 'display:grid;gap:10px' }, type, value, submit);
     qForm.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!form.value.trim()) return value.focus();
-      ctx.act(() => quarantine(ctx, form.type, form.value.trim(), 'quarantined from the console'));
+      if (!submit.disabled) run(ctx, submit, form.type, form.value.trim(), 'quarantined from the console');
     });
 
     return el(
@@ -90,7 +83,7 @@ export default {
                     el('p', {}, [...new Set(i.rules.map((r) => r.split(':')[0]))].join(' · ')),
                     i.lessonMatches.length ? el('p', { style: 'color:var(--accent-hi)' }, `Caught by lesson ${[...new Set(i.lessonMatches.map((m) => '#' + m.lessonSeq))].join(', ')}`) : null,
                     i.status === 'open'
-                      ? el('div', {}, el('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => ctx.act(() => quarantine(ctx, 'source', i.objectId, 'quarantined from the incidents view')) }, 'Quarantine source'))
+                      ? el('div', {}, el('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: (e) => run(ctx, e.currentTarget, 'source', i.objectId, 'quarantined from the incidents view') }, 'Quarantine source'))
                       : i.quarantineSeq !== undefined
                         ? el('p', { class: 'muted small' }, `Ledger #${i.quarantineSeq}`)
                         : null,
@@ -109,7 +102,7 @@ export default {
             qs.length
               ? el('div', { class: 'row-list' }, ...qs.map((q) => el('div', { class: 'row-i', style: 'flex-wrap:wrap' }, el('span', { class: 'dot r' }), el('span', { class: 'grow' }, `#${q.seq} · ${q.seed.type} ${short(q.seed.value, 12)}`), el('span', { class: 'meta' }, q.auto ? 'auto' : 'manual'), reportCell(ctx, q.seq, reports))))
               : el('p', { class: 'empty' }, 'None.'),
-            qs.length && !s.sandbox ? el('div', { style: 'margin-top:12px;display:grid;gap:8px' }, el('p', { class: 'hint' }, 'Releasing is a human decision, signed with your user key:'), command(`antibody release ${qs[0].seq} --reason "reviewed: safe"`)) : null,
+            qs.length && !s.sandbox ? el('div', { style: 'margin-top:12px;display:grid;gap:8px' }, el('p', { class: 'hint' }, 'Releasing is a human decision, signed with your user key:'), ...qs.map((q) => command(`antibody release ${q.seq} --reason "reviewed: safe"`))) : null,
           ),
         ),
       ),

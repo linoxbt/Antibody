@@ -1,5 +1,5 @@
 // Small building blocks shared by the console views.
-import { el, svg, short } from '../ui.js';
+import { el, svg, short, plural } from '../ui.js';
 
 // 24px stroke icons, drawn for Antibody.
 const PATHS = {
@@ -16,8 +16,6 @@ const PATHS = {
   refresh: ['M20 11a8 8 0 0 0-14.7-4.4L4 8', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 4.4L20 16', 'M20 20v-4h-4'],
   copy: ['M9 9h10v11H9z', 'M5 15V4h10'],
   check: ['M5 12.5l4.5 4.5L19 7.5'],
-  arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
-  play: ['M8 5v14l11-7z'],
 };
 
 export function icon(name) {
@@ -92,6 +90,42 @@ export const shortAddr = (a) => (a && a.length > 14 ? `${a.slice(0, 8)}…${a.sl
 /** The verdict a decision memory recorded, e.g. "ALLOW" or "BLOCK LABEL_MISMATCH". */
 export function decisionVerdict(n) {
   return /Payment decision: (\w+)( \w+)?/.exec(n.text)?.slice(1).join('').trim() ?? '';
+}
+
+/** The control's seed normalisation, mirrored so the dialog names exactly what gets recorded. */
+function seedValue(type, value) {
+  const t = value.trim();
+  const addr = (a) => '0x' + a.slice(2).toLowerCase().padStart(64, '0');
+  if (type !== 'source') return t;
+  const m = /^(0x[0-9a-fA-F]{1,64})(::[A-Za-z_]\w*::[A-Za-z_]\w*(<.*>)?)?$/.exec(t);
+  return m ? addr(m[1]) + (m[2] ?? '') : t;
+}
+
+let quarantining = false;
+/**
+ * Preview, confirm and write one quarantine at a time (the button stays disabled while it runs).
+ * Resolves to the ledger record, or null when cancelled or another is in flight.
+ */
+export async function quarantine(ctx, { type, value, reason, what, button }) {
+  if (quarantining) return null;
+  quarantining = true;
+  if (button) button.disabled = true;
+  try {
+    const seed = `${type} ${seedValue(type, value)}`;
+    const pv = await ctx.src.api('/api/preview', { type, value });
+    const msg =
+      pv.memories === 0 && pv.decisions === 0
+        ? `This seed matches nothing right now.\n\nSeed: ${seed}\n\nA quarantine record is permanent: it is signed into the ledger and can later be released, never removed. Write it anyway?`
+        : `Quarantine ${what ?? 'this seed'}?\n\nSeed: ${seed}\n\n${plural(pv.memories - pv.decisions, 'memory')} and ${plural(pv.decisions, 'decision')} leave Steward's context. They stay on Walrus as evidence.`;
+    if (!confirm(msg)) return null;
+    const r = await ctx.src.api('/api/quarantine', { type, value, reason });
+    ctx.toast(`Quarantine written as ledger #${r.seq}${r.lessonSeq != null ? `; learned lesson #${r.lessonSeq}` : ''}.`);
+    await ctx.src.refresh();
+    return r;
+  } finally {
+    quarantining = false;
+    if (button) button.disabled = false;
+  }
 }
 
 export { short };

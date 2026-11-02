@@ -52,6 +52,10 @@ export async function ownerSession(o: { onUrl: (url: string) => void; timeoutMs?
   let current: { id: string; req: OwnerRequest; resolve: (s: Signed) => void; reject: (e: Error) => void } | null = null;
   let finished: { ok: boolean; text: string } | null = null;
   let error: string | null = null;
+  // S14: the first browser to open the page is bound to it by a cookie; a leaked link is useless afterwards.
+  const binding = randomBytes(18).toString('base64url');
+  let bound = false;
+  const boundHere = (cookie: string | undefined) => (cookie ?? '').split(';').some((c) => c.trim() === `ab_owner=${binding}`);
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const send = (code: number, body: unknown) => {
@@ -60,9 +64,12 @@ export async function ownerSession(o: { onUrl: (url: string) => void; timeoutMs?
     };
     try {
       if (url.pathname === base) {
-        res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer' });
+        if (bound && !boundHere(req.headers.cookie)) return send(409, { error: 'this approval page is already open in another browser' });
+        bound = true;
+        res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY', 'set-cookie': `ab_owner=${binding}; HttpOnly; SameSite=Strict; Path=${base}` });
         return res.end(readFileSync(join(WEB, 'owner.html')));
       }
+      if ((url.pathname === `${base}/request` || url.pathname === `${base}/result`) && !boundHere(req.headers.cookie)) return send(403, { error: 'open the approval page first, in one browser' });
       if (url.pathname === `${base}/request` && req.method === 'GET') {
         if (finished) return send(200, { done: finished });
         if (!current) return send(200, { waiting: true, error });

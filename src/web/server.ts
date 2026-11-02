@@ -40,7 +40,37 @@ export const TYPES: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
   '.ico': 'image/x-icon',
 };
-export const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
+export const CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+/** S15: hardening headers on every response (pages and JSON). */
+export const SECURITY_HEADERS: Record<string, string> = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'no-referrer',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+};
+
+/**
+ * Turn an error into a client answer. Known request mistakes keep their message
+ * (4xx); anything internal (file-system errors with paths, type errors) becomes
+ * a generic 500, logged instead of echoed (S15).
+ */
+export function errorAnswer(e: unknown, log?: (msg: string) => void): { status: number; body: { error: string } } {
+  if (e instanceof AuthError) return { status: e.status, body: { error: e.message } };
+  if (e instanceof SyntaxError) return { status: 400, body: { error: e.message.includes('too large') ? 'request body too large' : 'malformed JSON body' } };
+  const err = e as NodeJS.ErrnoException & { issues?: unknown };
+  if (err?.name === 'ZodError' || err?.issues) return { status: 400, body: { error: 'invalid request' } };
+  if (err?.code || e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError) {
+    log?.(`${err?.name ?? 'Error'}: ${err?.message}`);
+    return { status: 500, body: { error: 'internal error (see the server log)' } };
+  }
+  return { status: 400, body: { error: (e as Error)?.message ?? 'request failed' } };
+}
+
+/** A JSON body must be a plain object. */
+export function asObject(v: unknown): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new AuthError(400, 'request body must be a JSON object');
+  return v as Record<string, unknown>;
+}
 
 /** Pages that moved into the signed-in app. */
 export const MOVED: Record<string, string> = { '/console': '/app/steward', '/graph': '/app/memory', '/ledger': '/app/ledger', '/incidents': '/app/incidents' };
@@ -160,7 +190,12 @@ export function tokenPath(rt: Runtime): string {
 }
 
 export async function startWeb(rt: Runtime, control: Control, port: number, auth?: Auth): Promise<{ server: Server; auth: Auth }> {
-  const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined, client: zkLoginClient() });
+  const a = auth ?? new Auth(async () => (await control.snapshot()).account.owner, { operatorToken: process.env.ANTIBODY_WEB_TOKEN || undefined, client: zkLoginClient(), requireSessionHeader: true });
+  // S6: only these Host values are this console. Anything else is DNS rebinding (an attacker's name pointed at 127.0.0.1).
+  const hosts = () => {
+    const p = (server.address() as { port: number } | null)?.port ?? port;
+    return new Set([`127.0.0.1:${p}`, `localhost:${p}`, `[::1]:${p}`]);
+  };
   const revoke = new RevokeFlow(rt, control);
   mkdirSync(join(rt.cfg.home, 'run'), { recursive: true, mode: 0o700 });
   writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600 });
@@ -168,10 +203,18 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
-      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers });
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers });
       res.end(JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     };
     try {
+      const allowed = hosts();
+      if (!allowed.has(String(req.headers.host ?? '').toLowerCase())) return send(421, { error: 'this console only answers on 127.0.0.1 / localhost' });
+      if (req.method === 'POST') {
+        // S6: a page on another site can never post here, even if it reached the port.
+        const origin = req.headers.origin;
+        if (origin && !allowed.has(origin.replace(/^https?:\/\//, '').toLowerCase())) return send(403, { error: 'cross-origin request refused' });
+        if (req.headers['sec-fetch-site'] === 'cross-site') return send(403, { error: 'cross-site request refused' });
+      }
       if (req.method === 'GET' && MOVED[url.pathname]) {
         res.writeHead(301, { location: MOVED[url.pathname] + url.search, 'cache-control': 'no-store' });
         res.end();
@@ -182,21 +225,22 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         const status = file ? 200 : 404;
         const path = file ?? join(WEB, '404.html');
         const bytes = readFileSync(path); // before writeHead, so a read error still gets a clean 500
-        res.writeHead(status, { 'content-type': TYPES[extname(path)]!, 'cache-control': 'no-store', 'content-security-policy': CSP, 'x-content-type-options': 'nosniff' });
+        res.writeHead(status, { 'content-type': TYPES[extname(path)]!, 'cache-control': 'no-store', 'content-security-policy': CSP, ...SECURITY_HEADERS });
         res.end(bytes);
         return;
       }
-      const session = a.fromCookie(req.headers.cookie);
+      const session = a.fromCookie(req.headers.cookie, req.headers['x-antibody-session']);
       if (req.method === 'GET' && url.pathname === '/api/auth/status') {
         return send(200, { node: true, authenticated: !!session, method: session?.method ?? null, address: session?.address ?? null, expiresAt: session?.expiresAt ?? null });
       }
       if (req.method === 'POST' && url.pathname.startsWith('/api/auth/')) {
         if (req.headers['x-antibody-ui'] !== '1') return send(403, { error: 'missing x-antibody-ui header' });
-        const body = (await readBody(req)) as Record<string, unknown>;
-        if (url.pathname === '/api/auth/challenge') return send(200, a.challenge(String(body.address ?? ''), `http://${req.headers.host ?? `127.0.0.1:${port}`}`));
+        const body = asObject(await readBody(req));
+        // The Host was checked above, so the challenge can only name this console.
+        if (url.pathname === '/api/auth/challenge') return send(200, a.challenge(String(body.address ?? ''), `http://${String(req.headers.host).toLowerCase()}`));
         if (url.pathname === '/api/auth/logout') {
           if (session) a.end(session.id);
-          return send(200, { ok: true }, { 'set-cookie': Auth.clearCookie() });
+          return send(200, { ok: true }, { 'set-cookie': a.clearCookieHeader() });
         }
         const s =
           url.pathname === '/api/auth/wallet'
@@ -205,20 +249,28 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
               ? a.signInWithOperatorToken(String(body.token ?? ''))
               : null;
         if (!s) return send(404, { error: 'not found' });
-        return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': Auth.setCookie(s) });
+        // csrf: the page keeps it in localStorage and sends it as x-antibody-session (S11).
+        return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt, csrf: s.csrf }, { 'set-cookie': a.cookie(s) });
       }
       if (url.pathname.startsWith('/api/') && !session) return send(401, { error: 'sign in required' });
       if (req.method === 'GET' && url.pathname === '/api/state') return send(200, await stateJson(rt, control));
       if (req.method === 'GET' && url.pathname === '/api/blast') {
-        const r = await control.blast(Number(url.searchParams.get('seq')));
+        const seq = Number(url.searchParams.get('seq'));
+        if (!Number.isInteger(seq) || seq < 0) throw new AuthError(400, 'seq must be a ledger sequence number');
+        const r = await control.blast(seq);
         return send(200, { seq: r.seedSeq, sources: r.sources, memories: r.memories.map((m) => m.id), decisions: r.decisions.map((m) => m.id), txDigests: r.txDigests, edges: r.edges });
       }
       if (req.method !== 'POST') return send(404, { error: 'not found' });
       if (req.headers['x-antibody-ui'] !== '1') return send(403, { error: 'missing x-antibody-ui header' });
-      const body = (await readBody(req)) as Record<string, unknown>;
+      const body = asObject(await readBody(req));
 
       if (url.pathname === '/api/quarantine') {
         const seed: QuarantineSeed = { type: body.type as QuarantineSeed['type'], value: String(body.value) };
+        // B15: a quarantine record is permanent; one that matches nothing needs an explicit yes.
+        if (body.force !== true) {
+          const pv = await control.preview(seed);
+          if (pv.memories === 0) return send(409, { error: 'this seed matches nothing right now; send force: true to write the quarantine anyway', memories: 0 });
+        }
         const q = await control.quarantine(seed, String(body.reason ?? 'quarantined from the web view'), [seed.value], false);
         return send(200, { seq: q.seq, lessonSeq: q.lessonSeq, memories: q.radius.memories.length, decisions: q.radius.decisions.length });
       }
@@ -254,9 +306,8 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
       }
       return send(404, { error: 'not found' });
     } catch (e) {
-      if (e instanceof AuthError) return send(e.status, { error: e.message });
-      if (e instanceof SyntaxError) return send(400, { error: 'malformed JSON body' });
-      return send(500, { error: (e as Error).message });
+      const r = errorAnswer(e, (m) => rt.log.warn('web.error', { path: url.pathname, error: m }));
+      return send(r.status, r.body);
     }
   });
   return new Promise((resolveP) => server.listen(port, '127.0.0.1', () => resolveP({ server, auth: a })));

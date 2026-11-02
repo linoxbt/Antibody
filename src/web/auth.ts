@@ -36,6 +36,12 @@ export interface Session {
   address: string | null;
   createdAt: number;
   expiresAt: number;
+  /**
+   * S11: a second secret the page keeps in localStorage (scoped to this exact
+   * origin, port included) and sends as x-antibody-session. A cookie alone is
+   * sent to every port on 127.0.0.1, so on the local console it is not enough.
+   */
+  csrf: string;
 }
 
 export const SESSION_COOKIE = 'ab_session';
@@ -43,6 +49,11 @@ const CHALLENGE_TTL = 5 * 60_000;
 const SESSION_TTL = 12 * 60 * 60_000;
 const FAIL_WINDOW = 60_000;
 const FAIL_LIMIT = 10;
+/** S8: bounded state for unauthenticated callers. */
+const MAX_CHALLENGES = 10_000;
+const MAX_CHALLENGES_PER_ADDRESS = 5;
+const MAX_SESSIONS_PER_ADDRESS = 5;
+const ZKLOGIN_PER_MINUTE = 30;
 
 export class AuthError extends Error {
   readonly status: number;
@@ -61,6 +72,12 @@ export interface AuthOptions {
   client?: () => SigClient;
   /** Persist sessions here (hashed ids, 0600) so a restart keeps people signed in. */
   sessionFile?: string;
+  /** Count failed sign-ins per client and lock out after FAIL_LIMIT (default true; the sandbox turns it off: signatures can't be guessed, and IP buckets there only enabled lockouts). */
+  throttleFailures?: boolean;
+  /** Cookie name (the hosted sandbox uses __Host-ab_session). */
+  cookieName?: string;
+  /** S11: require x-antibody-session alongside the cookie (the local console). */
+  requireSessionHeader?: boolean;
 }
 
 const idHash = (id: string) => createHash('sha256').update(id).digest('base64url');
@@ -87,7 +104,7 @@ export class Auth {
     if (opts.sessionFile && existsSync(opts.sessionFile)) {
       try {
         const saved = JSON.parse(readFileSync(opts.sessionFile, 'utf8')) as Record<string, Omit<Session, 'id'>>;
-        for (const [h, v] of Object.entries(saved)) if (v.expiresAt > this.now()) this.sessions.set(h, { ...v, id: '' });
+        for (const [h, v] of Object.entries(saved)) if (v.expiresAt > this.now()) this.sessions.set(h, { ...v, csrf: v.csrf ?? '', id: '' });
       } catch {
         /* a damaged file just signs everyone out */
       }
@@ -99,6 +116,8 @@ export class Auth {
   }
 
   private throttle(client: string) {
+    this.sweep();
+    if (this.opts.throttleFailures === false) return;
     const t = this.now();
     const recent = (this.failures.get(client) ?? []).filter((f) => t - f < FAIL_WINDOW);
     this.failures.set(client, recent);
@@ -107,8 +126,34 @@ export class Auth {
   }
 
   private fail(status: number, message: string, client: string): never {
-    this.failures.set(client, [...(this.failures.get(client) ?? []), this.now()]);
+    if (this.opts.throttleFailures !== false) this.failures.set(client, [...(this.failures.get(client) ?? []), this.now()]);
     throw new AuthError(status, message);
+  }
+
+  private lastSweep = 0;
+  /** Outstanding challenge messages per address (S8: no full scan to count them). */
+  private byAddress = new Map<string, string[]>();
+  private zkTimes: number[] = [];
+
+  /** S8: expire challenges, failures and sessions in bulk, at most every few seconds (never a full scan per request). */
+  private sweep(force = false) {
+    const t = this.now();
+    if (!force && t - this.lastSweep < 5_000) return;
+    this.lastSweep = t;
+    // Insertion order is issue order and every challenge lives CHALLENGE_TTL: expired ones are at the front.
+    for (const [m, c] of this.challenges) {
+      if (c.expiresAt >= t) break;
+      this.challenges.delete(m);
+    }
+    for (const [a, list] of this.byAddress) {
+      const live = list.filter((m) => this.challenges.has(m));
+      if (live.length) this.byAddress.set(a, live);
+      else this.byAddress.delete(a);
+    }
+    for (const [k, v] of this.failures) if (!v.some((f) => t - f < FAIL_WINDOW)) this.failures.delete(k);
+    let removed = false;
+    for (const [h, sess] of this.sessions) if (sess.expiresAt < t) (this.sessions.delete(h), (removed = true));
+    if (removed) this.save();
   }
 
   /** A SIWE-style message for the wallet to sign; single use, five minutes. */
@@ -137,19 +182,43 @@ export class Auth {
       `Issued At: ${new Date(issued).toISOString()}`,
       `Expiration Time: ${new Date(expiresAt).toISOString()}`,
     ].join('\n');
+    // S8: at most a few outstanding challenges per address (oldest dropped), and a global cap.
+    const mine = (this.byAddress.get(address) ?? []).filter((m) => this.challenges.has(m));
+    if (mine.length >= MAX_CHALLENGES_PER_ADDRESS) this.challenges.delete(mine.shift()!);
+    if (this.challenges.size >= MAX_CHALLENGES) {
+      this.sweep(true);
+      if (this.challenges.size >= MAX_CHALLENGES) throw new AuthError(503, 'too many sign-ins in progress; try again in a minute');
+    }
     this.challenges.set(message, { address, expiresAt });
-    for (const [m, c] of this.challenges) if (c.expiresAt < issued) this.challenges.delete(m);
+    mine.push(message);
+    this.byAddress.set(address, mine);
     return { message, expiresAt };
   }
 
   /** Verify a signed challenge; the signer must be the account owner. */
   async signInWithWallet(addressIn: string, message: string, signature: string, client = 'local'): Promise<Session> {
+    return this.open('wallet', await this.verifyWallet(addressIn, message, signature, client));
+  }
+
+  /**
+   * Check a signed challenge and return the verified address, without opening a
+   * session (the sandbox creates the visitor's world first, so a refused world
+   * never leaves a session behind).
+   */
+  async verifyWallet(addressIn: string, message: string, signature: string, client = 'local'): Promise<string> {
     this.throttle(client);
     const c = this.challenges.get(message);
     this.challenges.delete(message); // single use, even on failure
     if (!c || c.expiresAt < this.now()) this.fail(401, 'challenge expired or unknown; try again', client);
     const address = normalizeSuiAddress(addressIn);
     if (address !== c.address) this.fail(401, 'challenge was issued to a different address', client);
+    if (isZkLogin(signature)) {
+      // S8: each zkLogin check is an outbound RPC call: rate-limited on its own.
+      const t = this.now();
+      this.zkTimes = this.zkTimes.filter((x) => t - x < 60_000);
+      if (this.zkTimes.length >= ZKLOGIN_PER_MINUTE) throw new AuthError(503, 'zkLogin sign-in is busy; try again in a minute');
+      this.zkTimes.push(t);
+    }
     try {
       // zkLogin signatures (e.g. Slush accounts made with Google) are checked against the chain.
       await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, { address, ...(this.opts.client && isZkLogin(signature) ? { client: this.opts.client() } : {}) });
@@ -160,6 +229,11 @@ export class Auth {
       const owner = normalizeSuiAddress(await this.owner());
       if (address !== owner) this.fail(403, `this wallet is not the account owner (${owner.slice(0, 8)}…${owner.slice(-4)})`, client);
     }
+    return address;
+  }
+
+  /** A session for an address already verified with verifyWallet. */
+  openWallet(address: string): Session {
     return this.open('wallet', address);
   }
 
@@ -172,7 +246,13 @@ export class Auth {
 
   private open(method: AuthMethod, address: string | null): Session {
     const t = this.now();
-    const s: Session = { id: randomBytes(32).toString('base64url'), method, address, createdAt: t, expiresAt: t + SESSION_TTL };
+    this.sweep();
+    if (address) {
+      // S8: a handful of sessions per address; the oldest goes.
+      const mine = [...this.sessions].filter(([, x]) => x.address === address).sort((a, b) => a[1].createdAt - b[1].createdAt);
+      while (mine.length >= MAX_SESSIONS_PER_ADDRESS) this.sessions.delete(mine.shift()![0]);
+    }
+    const s: Session = { id: randomBytes(32).toString('base64url'), method, address, createdAt: t, expiresAt: t + SESSION_TTL, csrf: randomBytes(24).toString('base64url') };
     this.sessions.set(idHash(s.id), s);
     this.save();
     return s;
@@ -196,7 +276,7 @@ export class Auth {
     this.dirty = false;
     const now = this.now();
     const out: Record<string, Omit<Session, 'id'>> = {};
-    for (const [h, v] of this.sessions) if (v.expiresAt > now) out[h] = { method: v.method, address: v.address, createdAt: v.createdAt, expiresAt: v.expiresAt };
+    for (const [h, v] of this.sessions) if (v.expiresAt > now) out[h] = { method: v.method, address: v.address, createdAt: v.createdAt, expiresAt: v.expiresAt, csrf: v.csrf };
     const tmp = `${file}.tmp-${process.pid}`;
     try {
       writeFileSync(tmp, JSON.stringify(out), { mode: 0o600 });
@@ -206,9 +286,9 @@ export class Auth {
     }
   }
 
-  /** The session named by a Cookie header, if live. */
-  fromCookie(header: string | undefined): Session | null {
-    const id = parseCookies(header)[SESSION_COOKIE];
+  /** The session named by a Cookie header, if live (and, on the local console, proven by its x-antibody-session secret). */
+  fromCookie(header: string | undefined, sessionHeader?: string | string[]): Session | null {
+    const id = parseCookies(header)[this.cookieName];
     if (!id) return null;
     const h = idHash(id);
     const s = this.sessions.get(h);
@@ -218,7 +298,26 @@ export class Auth {
       this.save();
       return null;
     }
+    if (this.opts.requireSessionHeader) {
+      const got = typeof sessionHeader === 'string' ? sessionHeader : '';
+      if (!s.csrf || !got || !timingSafeEqual(sha(got), sha(s.csrf))) return null;
+    }
     return { ...s, id };
+  }
+
+  get cookieName(): string {
+    return this.opts.cookieName ?? SESSION_COOKIE;
+  }
+
+  /** Set-Cookie for this Auth's cookie name. The __Host- prefix always gets Secure. */
+  cookie(s: Session, secure = false): string {
+    const sec = secure || this.cookieName.startsWith('__Host-');
+    return `${this.cookieName}=${s.id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor((s.expiresAt - s.createdAt) / 1000)}${sec ? '; Secure' : ''}`;
+  }
+
+  clearCookieHeader(secure = false): string {
+    const sec = secure || this.cookieName.startsWith('__Host-');
+    return `${this.cookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${sec ? '; Secure' : ''}`;
   }
 
   end(id: string) {

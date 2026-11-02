@@ -9,12 +9,25 @@ import { createWorld } from '../src/dev/world.ts';
 import { LANE_LABEL } from '../src/core/types.ts';
 
 /** Plays the browser page: poll for the request, sign it with `kp` (or cancel), post it back. */
+const cookies = new Map<string, string>();
+/** Open the page once (the server binds it to this "browser" with a cookie). */
+async function open(url: string): Promise<string> {
+  const known = cookies.get(url);
+  if (known) return known;
+  const r = await fetch(url);
+  assert.equal(r.status, 200);
+  const c = r.headers.get('set-cookie')!.split(';')[0]!;
+  cookies.set(url, c);
+  return c;
+}
+
 async function page(url: string, kp: Ed25519Keypair | 'cancel') {
+  const cookie = await open(url);
   for (let i = 0; i < 100; i++) {
-    const r = await (await fetch(`${url}/request`)).json();
+    const r = await (await fetch(`${url}/request`, { headers: { cookie } })).json();
     if (r.id) {
       const body = kp === 'cancel' ? { id: r.id, cancelled: true } : { id: r.id, signature: (await kp.signPersonalMessage(new TextEncoder().encode(r.message))).signature, address: kp.toSuiAddress() };
-      const res = await fetch(`${url}/result`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: JSON.stringify(body) });
+      const res = await fetch(`${url}/result`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1', cookie }, body: JSON.stringify(body) });
       assert.equal(res.status, 200);
       return r;
     }
@@ -60,7 +73,9 @@ test('a signature from another wallet, or a cancel, changes nothing', async () =
     await assert.rejects(Promise.all([admin.removeDelegateKey(pub), page(session.url, 'cancel')]), /cancelled/);
     assert.ok((await w.rt.chain.getAccount(w.setup.accountId)).delegateKeys.some((k) => k.publicKeyHex === pub), 'key still registered');
     const done = session.finish({ ok: false, text: 'stopped' });
-    assert.deepEqual((await (await fetch(`${session.url}/request`)).json()).done, { ok: false, text: 'stopped' });
+    assert.deepEqual((await (await fetch(`${session.url}/request`, { headers: { cookie: await open(session.url) } })).json()).done, { ok: false, text: 'stopped' });
+    assert.equal((await fetch(session.url)).status, 409, 'a second browser (a leaked link) is refused');
+    assert.equal((await fetch(`${session.url}/request`)).status, 403);
     await done;
   } finally {
     w.dispose();

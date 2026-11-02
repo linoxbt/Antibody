@@ -26,7 +26,8 @@ import type { QuarantineSeed } from '../core/types.ts';
 import { Auth, AuthError, type Session } from './auth.ts';
 import { RevokeFlow } from './revoke.ts';
 import { zkLoginClient } from '../adapters/zklogin.ts';
-import { CSP, readBody, staticFile, stateJson, TYPES, WEB } from './server.ts';
+import { asObject, CSP, errorAnswer, readBody, SECURITY_HEADERS, staticFile, stateJson, TYPES, WEB } from './server.ts';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 export interface CloudOptions {
   dataDir: string;
@@ -46,6 +47,12 @@ export interface CloudOptions {
   idleDays?: number;
   /** Bearer token for GET /metrics; unset serves it openly (it holds counts only, nothing per visitor). */
   metricsToken?: string;
+  /** The site visitors sign in to; the sign-in message names it (never a request header, S15). */
+  publicOrigin?: string;
+  /** Resets per wallet per hour (they do not count against newTenantsPerHour). */
+  resetsPerHour?: number;
+  /** Secure, __Host- cookies (default). Off only for plain-HTTP local tests. */
+  secureCookies?: boolean;
 }
 
 /** Counters and gauges for GET /metrics (Prometheus text format). Nothing per visitor. */
@@ -108,11 +115,12 @@ export class Tenants {
   private readonly globalRate: number;
   private readonly newPerHour: number;
   private readonly idleMs: number;
+  private readonly resetsPerHour: number;
   private globalHits: number[] = [];
   private created: number[] = [];
   readonly metrics: Metrics;
 
-  constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute' | 'globalRatePerMinute' | 'newTenantsPerHour' | 'idleDays'>, metrics = new Metrics()) {
+  constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute' | 'globalRatePerMinute' | 'newTenantsPerHour' | 'idleDays' | 'resetsPerHour'>, metrics = new Metrics()) {
     this.dir = join(o.dataDir, 'tenants');
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     this.maxTenants = o.maxTenants ?? 500;
@@ -121,6 +129,7 @@ export class Tenants {
     this.globalRate = o.globalRatePerMinute ?? 1200;
     this.newPerHour = o.newTenantsPerHour ?? 200;
     this.idleMs = (o.idleDays ?? 14) * 24 * 60 * 60_000;
+    this.resetsPerHour = o.resetsPerHour ?? 6;
     this.metrics = metrics;
   }
 
@@ -178,7 +187,7 @@ export class Tenants {
   }
 
   /** The visitor's world, created on first use and seeded with the demo household. */
-  async get(address: string): Promise<Tenant> {
+  async get(address: string, o: { reset?: boolean } = {}): Promise<Tenant> {
     const key = normalizeSuiAddress(address);
     const t = this.open.get(key);
     if (t) {
@@ -193,10 +202,13 @@ export class Tenants {
       const exists = existsSync(join(home, 'antibody.json'));
       if (!exists) {
         if (this.count() >= this.maxTenants) throw new AuthError(503, 'the sandbox is full right now; try again later or install Antibody yourself');
-        const now = Date.now();
-        this.created = this.created.filter((c) => now - c < 60 * 60_000);
-        if (this.created.length >= this.newPerHour) throw new AuthError(503, 'the sandbox is busy creating worlds; try again in a few minutes');
-        this.created.push(now);
+        // A reset recreates an existing visitor's world: it has its own per-wallet budget (S8), not the global one.
+        if (!o.reset) {
+          const now = Date.now();
+          this.created = this.created.filter((c) => now - c < 60 * 60_000);
+          if (this.created.length >= this.newPerHour) throw new AuthError(503, 'the sandbox is busy creating worlds; try again in a few minutes');
+          this.created.push(now);
+        }
       }
       const world = exists ? await createWorld({ home, keep: true, open: true }) : await createWorld({ home, keep: true, ownerAddress: key });
       if (!exists) {
@@ -240,8 +252,15 @@ export class Tenants {
     return next;
   }
 
+  private resets = new Map<string, number[]>();
+
   async reset(address: string): Promise<void> {
     const key = normalizeSuiAddress(address);
+    const now = Date.now();
+    const recent = (this.resets.get(key) ?? []).filter((t) => now - t < 3_600_000);
+    if (recent.length >= this.resetsPerHour) throw new AuthError(429, `at most ${this.resetsPerHour} resets an hour`);
+    recent.push(now);
+    this.resets.set(key, recent);
     const t = this.open.get(key);
     if (t) {
       await t.queue;
@@ -249,6 +268,7 @@ export class Tenants {
       this.open.delete(key);
     }
     rmSync(this.home(key), { recursive: true, force: true });
+    await this.get(key, { reset: true });
   }
 
   close() {
@@ -257,16 +277,26 @@ export class Tenants {
   }
 }
 
+/**
+ * Client key for logs and the zkLogin limiter (S8). The left-most
+ * X-Forwarded-For entry is whatever the client typed, so it is never used: the
+ * right-most entry is the one the nearest proxy appended. A deployment that
+ * knows its proxy's real-client header names it in ANTIBODY_CLIENT_IP_HEADER.
+ */
 function clientOf(req: IncomingMessage): string {
-  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]!.trim();
-  return fwd || req.socket.remoteAddress || 'unknown';
+  const named = process.env.ANTIBODY_CLIENT_IP_HEADER?.toLowerCase();
+  const fromNamed = named ? String(req.headers[named] ?? '').trim() : '';
+  if (fromNamed) return fromNamed;
+  const hops = String(req.headers['x-forwarded-for'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return hops.at(-1) || req.socket.remoteAddress || 'unknown';
 }
 
 export async function startCloud(o: CloudOptions): Promise<{ server: Server; tenants: Tenants; auth: Auth; metrics: Metrics }> {
   const metrics = new Metrics();
   const tenants = new Tenants(o, metrics);
   mkdirSync(o.dataDir, { recursive: true, mode: 0o700 });
-  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.', client: zkLoginClient(), sessionFile: join(o.dataDir, 'sessions.json') });
+  const auth = new Auth(null, { statement: 'Signing in opens your own Antibody sandbox (simulated). It costs nothing and moves no funds.', client: zkLoginClient(), sessionFile: join(o.dataDir, 'sessions.json'), throttleFailures: false, cookieName: o.secureCookies === false ? 'ab_session' : '__Host-ab_session' });
+  const origin = o.publicOrigin ?? 'https://antibody-memory.netlify.app';
   // Idle worlds go away on a timer (and once at start); open ones are never swept.
   tenants.sweep();
   const sweeper = setInterval(() => tenants.sweep(), 60 * 60_000);
@@ -274,17 +304,18 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://sandbox');
-    const secure = req.headers['x-forwarded-proto'] === 'https';
     const route = routeOf(url.pathname);
     res.once('finish', () => metrics.inc('antibody_sandbox_requests_total', { route, status: String(res.statusCode) }));
     const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
-      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers });
       res.end(JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
     };
     try {
       if (req.method === 'GET' && url.pathname === '/healthz') return send(200, { ok: true, tenants: tenants.count() });
       if (req.method === 'GET' && url.pathname === '/metrics') {
-        if (o.metricsToken && req.headers.authorization !== `Bearer ${o.metricsToken}`) return send(401, { error: 'metrics token required' });
+        // S15: no token configured, no metrics; compared in constant time.
+        const want = o.metricsToken ? createHash('sha256').update(`Bearer ${o.metricsToken}`).digest() : null;
+        if (!want || !timingSafeEqual(want, createHash('sha256').update(String(req.headers.authorization ?? '')).digest())) return send(want ? 401 : 404, { error: want ? 'metrics token required' : 'not found' });
         const mem = process.memoryUsage();
         res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', 'cache-control': 'no-store' });
         return res.end(metrics.render({ antibody_sandbox_worlds: tenants.count(), antibody_sandbox_worlds_open: tenants.openCount, antibody_sandbox_sessions: auth.sessionCount, antibody_sandbox_uptime_seconds: Math.round((Date.now() - metrics.started) / 1000), process_resident_memory_bytes: mem.rss, nodejs_heap_used_bytes: mem.heapUsed }));
@@ -293,7 +324,7 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         const file = staticFile(url.pathname);
         const path = file ?? join(WEB, '404.html');
         const bytes = readFileSync(path);
-        res.writeHead(file ? 200 : 404, { 'content-type': TYPES[extname(path)]!, 'content-security-policy': CSP, 'x-content-type-options': 'nosniff', 'cache-control': 'no-cache' });
+        res.writeHead(file ? 200 : 404, { 'content-type': TYPES[extname(path)]!, 'content-security-policy': CSP, ...SECURITY_HEADERS, 'cache-control': 'no-cache' });
         res.end(bytes);
         return;
       }
@@ -303,20 +334,23 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         return send(200, { node: true, mode: 'sandbox', authenticated: !!session, method: session?.method ?? null, address: session?.address ?? null, expiresAt: session?.expiresAt ?? null });
       }
       if (req.method === 'POST' && req.headers['x-antibody-ui'] !== '1') return send(403, { error: 'missing x-antibody-ui header' });
-      const body = req.method === 'POST' ? ((await readBody(req, 64 * 1024)) as Record<string, unknown>) : {};
+      const body = req.method === 'POST' ? asObject(await readBody(req, 64 * 1024)) : {};
 
       if (req.method === 'POST' && url.pathname.startsWith('/api/auth/')) {
         const client = clientOf(req);
-        if (url.pathname === '/api/auth/challenge') return send(200, auth.challenge(String(body.address ?? ''), `https://${req.headers['x-forwarded-host'] ?? req.headers.host ?? 'sandbox'}`, client));
+        // S15: the message names the configured site, never a header the client controls.
+        if (url.pathname === '/api/auth/challenge') return send(200, auth.challenge(String(body.address ?? ''), origin, client));
         if (url.pathname === '/api/auth/logout') {
           if (session) auth.end(session.id);
-          return send(200, { ok: true }, { 'set-cookie': Auth.clearCookie(secure) });
+          return send(200, { ok: true }, { 'set-cookie': auth.clearCookieHeader(true) });
         }
         if (url.pathname === '/api/auth/wallet') {
-          const s = await auth.signInWithWallet(String(body.address ?? ''), String(body.message ?? ''), String(body.signature ?? ''), client);
+          const address = await auth.verifyWallet(String(body.address ?? ''), String(body.message ?? ''), String(body.signature ?? ''), client);
+          // S8: the world first; a refused world (sandbox full or busy) leaves no session behind.
+          await tenants.get(address);
+          const s = auth.openWallet(address);
           metrics.inc('antibody_sandbox_sign_ins_total');
-          await tenants.get(s.address!); // create or open the visitor's world now, so the console loads at once
-          return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': Auth.setCookie(s, secure) });
+          return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': auth.cookie(s, o.secureCookies !== false) });
         }
         return send(404, { error: 'not found' });
       }
@@ -330,7 +364,9 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
       }
       if (req.method === 'GET' && url.pathname === '/api/blast') {
         return send(200, await tenants.run(me, async ({ world }) => {
-          const r = await world.control.blast(Number(url.searchParams.get('seq')));
+          const seq = Number(url.searchParams.get('seq'));
+          if (!Number.isInteger(seq) || seq < 0) throw new AuthError(400, 'seq must be a ledger sequence number');
+          const r = await world.control.blast(seq);
           return { seq: r.seedSeq, sources: r.sources, memories: r.memories.map((m) => m.id), decisions: r.decisions.map((m) => m.id), txDigests: r.txDigests, edges: r.edges };
         }));
       }
@@ -346,6 +382,8 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         case '/api/quarantine':
           return send(200, await act(async ({ world }) => {
             const seed: QuarantineSeed = { type: body.type as QuarantineSeed['type'], value: String(body.value) };
+            // B15: a quarantine record is permanent; one that matches nothing needs an explicit yes.
+            if (body.force !== true && (await world.control.preview(seed)).memories === 0) throw new AuthError(409, 'this seed matches nothing right now; send force: true to write the quarantine anyway');
             const q = await world.control.quarantine(seed, String(body.reason ?? 'quarantined from the sandbox console').slice(0, 200), [seed.value], false);
             return { seq: q.seq, lessonSeq: q.lessonSeq, memories: q.radius.memories.length, decisions: q.radius.decisions.length };
           }));
@@ -396,21 +434,22 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
             if (!CANONICAL.test(address)) throw new AuthError(400, 'address must be 0x followed by 64 lowercase hex characters');
             if (!/^\d+(\.\d{1,6})?$/.test(cap) || Number(cap) <= 0) throw new AuthError(400, 'cap must be a positive amount, e.g. 120 or 12.5');
             const payeeId = label.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+            // B18: a double click or a repeat must not write a second record.
+            const snap = await world.control.snapshot();
+            if (snap.ledger.ok && snap.ledger.payees.some((p) => p.payeeId === payeeId || p.address === address)) throw new AuthError(409, `a payee with that ${snap.ledger.payees.some((p) => p.payeeId === payeeId) ? 'name' : 'address'} already exists`);
             return world.addPayee({ payeeId, label, address, capDisplay: cap });
           }));
         case '/api/sandbox/reset':
           await act(async () => undefined); // counts against the rate limit, and waits for in-flight work
           await tenants.reset(me);
-          await tenants.get(me);
           return send(200, { ok: true });
         default:
           return send(404, { error: 'not found' });
       }
     } catch (e) {
-      if (e instanceof AuthError) return send(e.status, { error: e.message });
-      if (e instanceof SyntaxError) return send(400, { error: e.message.includes('too large') ? 'request body too large' : 'malformed JSON body' });
-      metrics.inc('antibody_sandbox_errors_total', { route });
-      return send(500, { error: (e as Error).message });
+      const r = errorAnswer(e, (m) => console.error(`${route}: ${m}`));
+      if (r.status >= 500) metrics.inc('antibody_sandbox_errors_total', { route });
+      return send(r.status, r.body);
     }
   });
   server.on('close', () => (clearInterval(sweeper), auth.flush()));

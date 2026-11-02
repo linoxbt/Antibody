@@ -100,3 +100,85 @@ test('global caps: new worlds per hour, and actions per minute across everyone',
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('no metrics token configured means no metrics endpoint (S15)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ab-cloudops-'));
+  const c = await boot(dir);
+  try {
+    assert.equal((await fetch(`${c.base}/metrics`)).status, 404);
+    assert.equal((await fetch(`${c.base}/metrics`, { headers: { authorization: 'Bearer anything' } })).status, 404);
+  } finally {
+    c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the session cookie is __Host-, Secure, HttpOnly, host-only (S14)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ab-cloudops-'));
+  const c = await boot(dir);
+  try {
+    const kp = Ed25519Keypair.generate();
+    const ch = await (await c.post('/api/auth/challenge', { address: kp.toSuiAddress() })).json();
+    assert.match(ch.message, /antibody-memory\.netlify\.app/, 'the message names the configured site, not the Host header');
+    const sig = (await kp.signPersonalMessage(new TextEncoder().encode(ch.message))).signature;
+    const r = await c.post('/api/auth/wallet', { address: kp.toSuiAddress(), message: ch.message, signature: sig });
+    const set = r.headers.get('set-cookie')!;
+    assert.match(set, /^__Host-ab_session=/);
+    assert.match(set, /;\s*Secure/i);
+    assert.match(set, /;\s*HttpOnly/i);
+    assert.match(set, /;\s*Path=\//i);
+    assert.doesNotMatch(set, /Domain=/i);
+  } finally {
+    c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a refused world leaves no session behind (S8)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ab-cloudops-'));
+  const c = await boot(dir, { maxTenants: 1 });
+  try {
+    assert.equal((await c.signIn(Ed25519Keypair.generate())).status, 200);
+    const before = c.auth.sessionCount;
+    const r = await c.signIn(Ed25519Keypair.generate());
+    assert.equal(r.status, 503);
+    assert.equal(r.cookie, '', 'no cookie for a refused world');
+    assert.equal(c.auth.sessionCount, before, 'no session was opened');
+  } finally {
+    c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resets are budgeted per wallet (B16)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ab-cloudops-'));
+  const c = await boot(dir, { resetsPerHour: 1, newTenantsPerHour: 1 });
+  try {
+    const { cookie } = await c.signIn(Ed25519Keypair.generate());
+    assert.equal((await c.post('/api/sandbox/reset', {}, cookie)).status, 200, 'a reset does not count as a new world');
+    const second = await c.post('/api/sandbox/reset', {}, cookie);
+    assert.equal(second.status, 429);
+    assert.match((await second.json()).error, /resets an hour/);
+  } finally {
+    c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a duplicate payee and an empty quarantine are refused with 409 (B15, B18)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ab-cloudops-'));
+  const c = await boot(dir);
+  try {
+    const { cookie } = await c.signIn(Ed25519Keypair.generate());
+    const payee = { label: 'gym', address: '0x' + 'cd'.repeat(32), cap: '40' };
+    assert.equal((await c.post('/api/sandbox/payee', payee, cookie)).status, 200);
+    assert.equal((await c.post('/api/sandbox/payee', payee, cookie)).status, 409, 'same name');
+    assert.equal((await c.post('/api/sandbox/payee', { ...payee, label: 'gym two' }, cookie)).status, 409, 'same address');
+    const seed = { type: 'source', value: '0x' + 'ef'.repeat(32) };
+    assert.equal((await c.post('/api/quarantine', seed, cookie)).status, 409);
+    assert.equal((await c.post('/api/quarantine', { ...seed, force: true }, cookie)).status, 200);
+  } finally {
+    c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

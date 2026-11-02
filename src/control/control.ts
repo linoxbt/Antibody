@@ -146,6 +146,7 @@ export class Control {
   private readonly served = new Map<string, Set<string>>();
   private readonly now: () => number;
   private last: Snapshot | null = null;
+  private memo: { ledgerKey?: string; ledger?: LedgerResult; projectionKey?: string; projection?: Projection } = {};
 
   constructor(readonly d: ControlDeps) {
     this.cache = new TextCache(d.cacheDir);
@@ -170,10 +171,23 @@ export class Control {
     const [account, ckpt] = await Promise.all([this.d.chain.getAccount(this.d.acct), this.d.chain.latestCheckpoint()]);
     const known = this.d.noCache ? new Map<string, StoredMemory>() : this.cache.all();
     const led = await retrieveLedger(this.d.mem, known);
-    const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read(), writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])), ...(o.assumeRevoked ? { assumeRevoked: o.assumeRevoked } : {}) });
+    const hwm = this.hwm.read();
+    // Performance: verification and the projection are pure functions of these inputs, so an
+    // unchanged inventory (texts included), key set and high-water mark reuse the last result.
+    const fp = (ms: StoredMemory[]) => ms.map((m) => `${m.blobId}:${sha256Hex(m.text)}`).sort().join(',');
+    const ledgerKey = sha256Hex(JSON.stringify([fp(led.memories), led.inventory.map((e) => `${e.blobId}:${e.agentId}`).sort(), account, hwm, o.assumeRevoked ?? null]));
+    const ledger =
+      !this.d.noCache && this.memo.ledgerKey === ledgerKey && this.memo.ledger
+        ? this.memo.ledger
+        : verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm, writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])), ...(o.assumeRevoked ? { assumeRevoked: o.assumeRevoked } : {}) });
     const content = await retrieveContent(this.d.mem, known);
-    if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories]);
-    const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId), createdAt: new Map(content.inventory.map((e) => [e.blobId, e.createdAt])) });
+    if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories].filter((m) => !known.has(m.blobId)));
+    const projectionKey = sha256Hex(JSON.stringify([ledgerKey, fp(content.memories), content.inventory.map((e) => `${e.blobId}:${e.createdAt}`).sort()]));
+    const projection =
+      !this.d.noCache && this.memo.projectionKey === projectionKey && this.memo.projection
+        ? this.memo.projection
+        : buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId), createdAt: new Map(content.inventory.map((e) => [e.blobId, e.createdAt])) });
+    this.memo = { ledgerKey, ledger, projectionKey, projection };
     if (ledger.ok) this.hwm.advance(ledger.head);
     else {
       this.d.log.warn('ledger.unverified', { code: ledger.code, detail: ledger.detail });

@@ -132,6 +132,7 @@ async function createAccountAsOwner(chain: SdkChainReader, cfg: Config, session:
     const who = await session.sign({ kind: 'message', title: 'choose the owner wallet', lines: ['Next: one transaction creates your Walrus Memory account'], owner: null, message: hello });
     await verifyOwnerMessage(hello, who, who.address);
     const sender = normalizeSuiAddress(who.address);
+    await confirmOwner(sender);
     const bytes = await chain.buildCreateAccount({ sender, ...ids });
     const signed = await session.sign({ kind: 'transaction', title: 'create your Walrus Memory account', lines: [`Owner: ${sender}`, `Package: ${cfg.packageId}`], owner: sender, txBytes: Buffer.from(bytes).toString('base64'), chain: `sui:${cfg.network}` });
     const got = signed.bytes ? Buffer.from(signed.bytes, 'base64') : Buffer.from(bytes);
@@ -151,6 +152,24 @@ async function createAccountAsOwner(chain: SdkChainReader, cfg: Config, session:
   const accountId = await chain.createdAccountOf(digest);
   if (!accountId) throw new Error(`create_account ${digest} succeeded but no MemWalAccount was found in its effects (does this owner already have one? set MEMWAL_ACCOUNT_ID)`);
   return { accountId, digest };
+}
+
+/**
+ * S14: when the page told us who the owner is (setup), the human confirms the
+ * address in the terminal, so a leaked approval link cannot make someone else
+ * the owner. ANTIBODY_ASSUME_OWNER=<address> answers it non-interactively.
+ */
+async function confirmOwner(address: string): Promise<void> {
+  const preset = process.env.ANTIBODY_ASSUME_OWNER?.trim().toLowerCase();
+  if (preset) {
+    if (normalizeSuiAddress(preset) !== address) throw new Error(`the wallet that signed is ${address}, not ANTIBODY_ASSUME_OWNER`);
+    return;
+  }
+  if (!process.stdin.isTTY) throw new Error(`the owner wallet would be ${address}: confirm it by setting ANTIBODY_ASSUME_OWNER=${address}`);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const a = await rl.question(`Owner wallet: ${bold(address)}\nIs this your wallet? [y/N] `);
+  rl.close();
+  if (!/^y/i.test(a)) throw new Error('owner not confirmed; nothing was registered');
 }
 
 /** The owner approval page, opened in the default browser. */
@@ -266,6 +285,7 @@ async function main(argv: string[]): Promise<void> {
             const s = await session.sign({ kind: 'message', title: 'own this Antibody install', lines: ['Backend: offline (SIMULATED)', `Home: ${cfg.home}`], owner: null, message });
             await verifyOwnerMessage(message, s, s.address);
             ownerAddress = normalizeSuiAddress(s.address);
+            await confirmOwner(ownerAddress);
           }
           res = await setupOffline(cfg, { readKeyFile: read, ...(ownerAddress ? { ownerAddress } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY || undefined }) });
         } else {
@@ -833,6 +853,8 @@ async function main(argv: string[]): Promise<void> {
         globalRatePerMinute: num('ANTIBODY_CLOUD_GLOBAL_RATE'),
         newTenantsPerHour: num('ANTIBODY_CLOUD_NEW_PER_HOUR'),
         idleDays: num('ANTIBODY_CLOUD_IDLE_DAYS'),
+        resetsPerHour: num('ANTIBODY_CLOUD_RESETS_PER_HOUR'),
+        ...(env.ANTIBODY_PUBLIC_ORIGIN ? { publicOrigin: env.ANTIBODY_PUBLIC_ORIGIN } : {}),
         ...(env.ANTIBODY_METRICS_TOKEN ? { metricsToken: env.ANTIBODY_METRICS_TOKEN } : {}),
       });
       // Redeploys send SIGTERM: keep sessions, close worlds cleanly.

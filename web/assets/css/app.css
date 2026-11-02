@@ -135,6 +135,8 @@ a.action span { color: var(--muted); font-size: 14px; }
 .form-grid label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .form-grid label.full { grid-column: 1 / -1; }
 .form-grid input, .form-grid select { width: 100%; }
+.form-grid .static-field { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.form-grid .static-field b { display: flex; align-items: center; height: 48px; font-weight: 500; font-size: 14.5px; color: var(--text); }
 @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
 .hint { font-size: 13px; color: var(--muted); margin: 0; }
 .hint.err { color: var(--block); }
@@ -155,7 +157,15 @@ a.action span { color: var(--muted); font-size: 14px; }
   .topbar .burger-app { display: grid; }
   .step-select { max-width: 46vw; }
 }
-@media (max-width: 520px) { .topbar .crumbs span.sep, .topbar .crumbs span.root { display: none; } .tb-right .pill { display: none; } }
+/* the mode badge stays on phones, in its compact form (the full label is still read out) */
+.tb-right .pill .ps { display: none; }
+@media (max-width: 520px) {
+  .topbar .crumbs span.sep, .topbar .crumbs span.root { display: none; }
+  .topbar .crumbs b { overflow: hidden; text-overflow: ellipsis; }
+  .tb-right .pill { flex: none; }
+  .tb-right .pill .pl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tb-right .pill .ps { display: inline; }
+}
 
 /* tables scroll sideways on narrow screens instead of crushing their columns */
 .view .table-wrap .table { min-width: 640px; }
@@ -181,7 +191,6 @@ a.action span { color: var(--muted); font-size: 14px; }
 :root[data-theme='light'] .side a.nav-i[aria-current='page']::before { box-shadow: none; }
 :root[data-theme='light'] .dot { box-shadow: none; }
 .auth-top { gap: 14px; }
-.topbar .theme-btn { width: 36px; height: 36px; }
 :root[data-theme='light'] a.action { background: #fff; }
 
 /* sign-in states: a node behind the page (sign in) or the public site (demo only) */

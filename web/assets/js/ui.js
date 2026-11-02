@@ -48,6 +48,8 @@ export function protectedPane(p) {
   const recall = p.steps?.find((s) => s.tool === 'recall_memories');
   const items = recall?.result?.items ?? [];
   const d = p.decisions?.[p.decisions.length - 1];
+  // No decision because a tool failed (e.g. the x402 bill server is down): say which, not "Payment ?:".
+  const failed = d ? null : p.steps?.findLast((s) => s.result?.error);
   return el(
     'div',
     {},
@@ -60,7 +62,9 @@ export function protectedPane(p) {
           el('ul', { class: 'rules' }, ...d.verdict.rules.map((r) => el('li', {}, el('span', { class: `i ${r.pass ? 'pass' : 'fail'}` }, r.pass ? ICON.pass : ICON.fail), el('span', { class: 'r' }, r.rule), el('span', {}, r.detail)))),
           el('p', { class: 'tiny muted', style: 'margin:14px 0 0' }, `decision ${short(d.decisionId, 13)} · ${d.txDigest ? `tx ${short(d.txDigest, 14)}` : d.dryRunOnly ? 'dry-run only' : 'nothing signed'}`),
         )
-      : el('div', { class: 'empty' }, p.final ?? 'No payment proposed.'),
+      : failed
+        ? el('div', { class: 'empty' }, el('span', { style: 'color:var(--block)' }, `${failed.tool.replaceAll('_', ' ')} failed: ${failed.result.error}`))
+        : el('div', { class: 'empty' }, p.final ?? 'No payment proposed.'),
     items.length
       ? el(
           'details',
@@ -185,7 +189,8 @@ export function renderGraph(host, nodes, { highlightSeq = null, quarantines = []
   for (const n of nodes) {
     const p = pos.get(n.id);
     const color = n.quarantined ? 'var(--garnet)' : `var(${CLASS_VAR[n.cls]})`;
-    const g = svg('g', { class: `g-node${highlightSeq !== null && !hot.has(n.id) ? ' dim' : ''}${selected === n.id ? ' sel' : ''}`, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: 'button', 'aria-label': `${n.kind} ${n.cls}` });
+    const label = `${n.kind} ${short(n.id, 8)} · ${n.lane} · ${n.cls}${n.quarantined ? ' · quarantined' : ''}${selected === n.id ? ' · selected' : ''}`;
+    const g = svg('g', { class: `g-node${highlightSeq !== null && !hot.has(n.id) ? ' dim' : ''}${selected === n.id ? ' sel' : ''}`, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: 'button', 'data-id': n.id, 'aria-label': label });
     const style = `fill:color-mix(in srgb, ${color} 12%, var(--bg-2));stroke:${color};color:${color}`;
     const dash = n.quarantined ? '5 4' : null;
     if (n.kind === 'decision') g.append(svg('polygon', { class: 'shape', points: `0,${NH / 2} 14,0 ${nodeW - 14},0 ${nodeW},${NH / 2} ${nodeW - 14},${NH} 14,${NH}`, style, 'stroke-width': 1.4, 'stroke-dasharray': dash }));

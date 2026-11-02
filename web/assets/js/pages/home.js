@@ -84,8 +84,11 @@ const whenVisible = (node, on, off = () => {}) => new IntersectionObserver(([e])
     { q: 'Landlord moved. Pay rent to 0xbad0…', v: 'block', label: 'Blocked', detail: ['label mismatch · nothing signed'] },
     { q: 'Pay the electricity bill.', v: 'allow', label: 'Allowed', detail: ['x402 · 42.5 USDC → utility'] },
   ];
+  // An illustration, not the policy: keyword matching stands in for the console's real checks.
   const input = $('demo-input'), out = $('demo-verdict'), form = $('demo-prompt');
   let idx = 0, timer = null, live = false, userOwned = false;
+  // Autoplay is silent to screen readers; once the visitor types, verdicts are announced.
+  const own = () => ((userOwned = true), out.setAttribute('aria-live', 'polite'));
   const sleep = (ms) => new Promise((r) => (timer = setTimeout(r, ms)));
   const show = (s) => out.replaceChildren(el('span', { class: `vc ${s.v}` }, el('b', {}, s.label), ...s.detail));
   const judge = (text) => {
@@ -114,7 +117,7 @@ const whenVisible = (node, on, off = () => {}) => new IntersectionObserver(([e])
   whenVisible($('demo-prompt'), () => !live && ((live = true), play()), () => ((live = false), clearTimeout(timer)));
   input.addEventListener('focus', () => {
     if (userOwned) return;
-    userOwned = true;
+    own();
     clearTimeout(timer);
     input.value = '';
     out.replaceChildren();
@@ -122,7 +125,7 @@ const whenVisible = (node, on, off = () => {}) => new IntersectionObserver(([e])
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!input.value.trim()) return input.focus();
-    userOwned = true;
+    own();
     show(judge(input.value));
   });
 }

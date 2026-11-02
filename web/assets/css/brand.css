@@ -72,7 +72,9 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 /* Links inside running text are underlined, so colour is never the only cue (WCAG 1.4.1). */
 :where(p, li, td, dd, .auth-note, .wallet-empty) a:not(.btn) { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 code { color: var(--accent-lo); background: rgba(122, 177, 254, 0.08); border: 1px solid rgba(122, 177, 254, 0.14); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
-.hidden { display: none !important; }
+.hidden, [hidden] { display: none !important; }
+.skip { position: fixed; left: 12px; top: 12px; z-index: 100; padding: 10px 16px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--line-3); color: var(--text); font-size: 14px; transform: translateY(-160%); }
+.skip:focus { transform: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- sky: starfield canvas + ambient glow behind every page ---------------- */
@@ -387,10 +389,6 @@ details[open] summary::before { content: '– '; }
 :root[data-theme='light'] .pane.unprotected { box-shadow: inset 3px 0 0 var(--block); }
 
 /* ---- theme switch ---------------------------------------------------------------------- */
-.theme-btn { flex: none; width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line-2); background: rgba(var(--fg-rgb), 0.04); color: var(--text-2); display: grid; place-items: center; cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.3s var(--ease); }
-.theme-btn:hover { color: var(--text); border-color: var(--line-3); }
-.theme-btn:active { transform: rotate(-20deg) scale(0.95); }
-.theme-btn svg { width: 18px; height: 18px; }
 /* the white mark reads as navy with blue tips on soft white */
 :root[data-theme='light'] img[src$='mark.svg'] { filter: invert(1) hue-rotate(180deg) saturate(1.4); }
 .theme-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; border: 1px solid var(--line); background: rgba(var(--fg-rgb), 0.03); }

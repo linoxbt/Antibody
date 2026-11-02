@@ -41,14 +41,15 @@
     Fail "Node.js $(node -v) is too old; Antibody needs 22 or newer." @('Update it: winget upgrade OpenJS.NodeJS.LTS (or install from https://nodejs.org)', 'Then open a NEW PowerShell window and run this installer again.')
   }
   Ok "Node.js $(node -v)"
-  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Fail 'npm is missing.' @('npm ships with Node.js: reinstall Node.js 22 or newer.') }
-  Ok "npm $(npm -v)"
+  if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Fail 'npm is missing.' @('npm ships with Node.js: reinstall Node.js 22 or newer.') }
+  Ok "npm $(npm.cmd -v)"
 
   if (Test-Path (Join-Path $Dir '.git')) {
     Write-Host "Updating $Dir"
     git -C "$Dir" fetch --depth 1 origin $Ref
     if ($LASTEXITCODE -ne 0) { Fail 'Could not reach GitHub to update.' @('Check your internet connection, or a proxy/firewall blocking github.com.') }
     git -C "$Dir" checkout -q -B $Ref FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) { Fail "Could not switch $Dir to the new version." @("Local changes in $Dir? Move the folder away and run the installer again (your data in %USERPROFILE%\.antibody is not in it).") }
   } elseif (Test-Path $Dir) {
     Fail "$Dir exists but is not an Antibody install." @('Move it away, or choose another folder: $env:ANTIBODY_APP_DIR = "C:\antibody-app", then run the installer again.')
   } else {
@@ -62,7 +63,8 @@
   Write-Host 'Installing dependencies (about a minute)'
   Push-Location $Dir
   try {
-    npm ci --omit=dev --no-audit --no-fund --loglevel=error
+    # npm.cmd, not npm: npm.ps1 is refused under the default execution policy.
+    npm.cmd ci --omit=dev --no-audit --no-fund --loglevel=error
     if ($LASTEXITCODE -ne 0) { Fail 'npm could not install the dependencies.' @('Out of disk space? Free some and re-run.', 'Behind a proxy? npm config set proxy http://host:port', 'Then run this installer again; it picks up where it stopped.') }
   } finally { Pop-Location }
   Ok 'dependencies installed'
@@ -77,11 +79,20 @@
   Set-Content -Path $cmd -Encoding ASCII -Value "@echo off`r`nnode `"$Dir\bin\antibody.mjs`" %*"
   Ok "command installed at $cmd"
 
-  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-  if (-not (($userPath -split ';') -contains $Bin)) {
-    [Environment]::SetEnvironmentVariable('Path', ($(if ($userPath) { "$userPath;" } else { '' }) + $Bin), 'User')
-    Ok 'added to your PATH (new windows pick it up)'
-  }
+  # The user Path is read and written raw (REG_EXPAND_SZ), so entries such as
+  # %USERPROFILE%\bin keep working; [Environment]::SetEnvironmentVariable would
+  # expand them and store REG_SZ (B27).
+  $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+  try {
+    $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    if (-not (($userPath -split ';') -contains $Bin)) {
+      $envKey.SetValue('Path', ($(if ($userPath) { $userPath.TrimEnd(';') + ';' } else { '' }) + $Bin), [Microsoft.Win32.RegistryValueKind]::ExpandString)
+      # Tell open programs (Explorer) the environment changed, by touching a dummy variable.
+      [Environment]::SetEnvironmentVariable('ANTIBODY_PATH_REFRESH', '1', 'User')
+      [Environment]::SetEnvironmentVariable('ANTIBODY_PATH_REFRESH', $null, 'User')
+      Ok 'added to your PATH (new windows pick it up)'
+    }
+  } finally { $envKey.Close() }
   if (-not (($env:Path -split ';') -contains $Bin)) { $env:Path = "$env:Path;$Bin" }
 
   # Start menu and desktop shortcuts: open the console signed in (starting Antibody first if needed), no console window.

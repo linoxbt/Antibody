@@ -11,3 +11,7 @@ dist/
 site/
 .netlify/
 .claude/
+*.tgz
+*.enc
+antibody-*-home*
+antibody.env

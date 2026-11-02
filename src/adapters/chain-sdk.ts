@@ -18,7 +18,6 @@ export interface SdkChainOptions {
   url: string;
   apiKey: string | null;
   packageId: string;
-  gasBudget?: bigint;
 }
 
 /** Deadline for one chain call; without it a hung RPC held locks for minutes (undici's default is ~300 s). */
@@ -120,7 +119,6 @@ export class SdkChainReader implements ChainReader {
     } else {
       tx.transferObjects([coinWithBalance({ type: req.coinType, balance: req.amount })], req.recipient);
     }
-    if (this.o.gasBudget) tx.setGasBudget(this.o.gasBudget);
     return tx.build({ client: this.client });
   }
 
@@ -157,7 +155,6 @@ export class SdkChainReader implements ChainReader {
       target: `${req.packageId}::account::remove_delegate_key`,
       arguments: [tx.object(req.accountId), tx.object(req.registryId), tx.pure.vector('u8', Array.from(Buffer.from(req.publicKeyHex, 'hex')))],
     });
-    if (this.o.gasBudget) tx.setGasBudget(this.o.gasBudget);
     return tx.build({ client: this.client });
   }
 
@@ -166,7 +163,6 @@ export class SdkChainReader implements ChainReader {
     const tx = new Transaction();
     tx.setSender(req.sender);
     tx.moveCall({ target: `${req.packageId}::account::create_account`, arguments: [tx.object(req.registryId), tx.object('0x6')] });
-    if (this.o.gasBudget) tx.setGasBudget(this.o.gasBudget);
     return tx.build({ client: this.client });
   }
 

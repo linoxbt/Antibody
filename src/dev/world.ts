@@ -4,7 +4,7 @@
  * (direct transport instead of a Unix socket). Offline backend only, so
  * everything it produces is SIMULATED.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, USDC_MAINNET, type Config, type Role } from '../config.ts';

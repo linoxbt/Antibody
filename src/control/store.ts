@@ -4,7 +4,7 @@
  * rollback guard and survives a cache wipe (spec §7).
  */
 import { join } from 'node:path';
-import { JsonFileStore, withFileLock } from '../adapters/filestore.ts';
+import { JsonFileStore } from '../adapters/filestore.ts';
 import type { StoredMemory } from '../core/types.ts';
 
 export class TextCache {

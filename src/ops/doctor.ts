@@ -26,7 +26,7 @@ export interface DoctorDeps {
   /** Live probes; omitted in offline mode or when the prerequisite failed. */
   chain?: { latestCheckpoint(): Promise<number>; getAccount(id: string): Promise<import('../core/lanes.ts').AccountState> };
   relayerHealth?: () => Promise<unknown>;
-  ledger?: () => Promise<{ ok: true; head: number } | { ok: false; code: string; detail: string }>;
+  ledger?: () => Promise<{ ok: true; head: number; acknowledged?: boolean } | { ok: false; code: string; detail: string }>;
   fetchImpl?: typeof fetch;
   nodeVersion?: string;
   platform?: NodeJS.Platform;
@@ -172,7 +172,7 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
   if (d.ledger) {
     try {
       const l = await timed(d.ledger(), 60_000);
-      add(l.ok ? { name: 'Ledger', status: 'ok', detail: `verified, head #${l.head}` } : { name: 'Ledger', status: 'fail', detail: `${l.code}: ${l.detail} (every payment is blocked)`, fix: 'antibody verify-ledger; antibody restore-index' });
+      add(l.ok ? (l.acknowledged === false ? { name: 'Ledger', status: 'fail', detail: `verified, head #${l.head}, but first seen on this machine: payments are blocked until you confirm it`, fix: 'antibody verify-ledger --accept' } : { name: 'Ledger', status: 'ok', detail: `verified, head #${l.head}` }) : { name: 'Ledger', status: 'fail', detail: `${l.code}: ${l.detail} (every payment is blocked)`, fix: 'antibody verify-ledger; antibody restore-index' });
     } catch (e) {
       add({ name: 'Ledger', status: 'fail', detail: (e as Error).message, fix: 'antibody verify-ledger' });
     }

@@ -17,7 +17,7 @@ import { loadLaneKey, loadWalletSecret } from './keystore.ts';
 import { createRuntime, type Runtime } from './runtime.ts';
 import { Signer, type SignRequest } from './signer/signer.ts';
 import { ingestExternalText, scanWallet, type IngestDeps, type SentinelSink } from './ingest/scan.ts';
-import { loadGuardians } from './ingest/guardians.ts';
+import { loadGuardians, type GuardianLists } from './ingest/guardians.ts';
 import { watchWallet, type WatchOptions } from './ingest/watch.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
@@ -48,6 +48,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
   const cfg = rt.cfg;
   const key = loadLaneKey(cfg, 'control');
   const alerter = new Alerter(alertConfigFrom(), { log: rt.log, simulated: rt.simulated, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
+  let guardians: Promise<GuardianLists> | null = null;
   const signerTransport = opts.signer === undefined ? unixTransport(socketPath(cfg, 'signer')) : opts.signer;
   return new Control({
     acct: requireAccount(cfg),
@@ -64,7 +65,9 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
     x402Network: suiNetworkId(cfg.network, cfg.backend === 'offline'),
     cacheDir: opts.cacheDirOverride ?? cacheDir(cfg),
     autoQuarantineScore: cfg.autoQuarantineScore,
-    ...(alerter.enabled ? { alert: (a: Alert) => void alerter.send(a) } : {}),
+    x402Allow: cfg.x402Allow,
+    ...(alerter.enabled ? { alert: (a: Alert) => void alerter.send(a).catch(() => undefined) } : {}),
+    guardians: () => (guardians ??= loadGuardians(cacheDir(cfg), { offline: cfg.backend === 'offline' })),
     ...(opts.noCache ? { noCache: true } : {}),
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
   });
@@ -72,7 +75,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
 
 export function controlRoutes(control: Control): Record<string, Route> {
   return {
-    '/context/recall': { lanes: ['agent'], handler: async (p) => control.recallForAgent(String((p as { query?: string }).query ?? ''), 12) },
+    '/context/recall': { lanes: ['agent'], handler: async (p) => control.recallForAgent(String((p as { query?: string }).query ?? ''), 12, typeof (p as { turn?: unknown }).turn === 'string' ? (p as { turn: string }).turn : undefined) },
     '/propose': { lanes: ['agent'], handler: async (p) => control.propose(p as Parameters<Control['propose']>[0]) },
     '/x402/pay': { lanes: ['agent'], handler: async (p) => control.payX402(p as Parameters<Control['payX402']>[0]) },
     '/ledger/head': { lanes: ['user', 'antibody'], handler: async () => control.head() },
@@ -119,7 +122,7 @@ export function createModel(cfg: Config): ChatModel {
 /** Steward's view of control over IPC. */
 export function remoteStewardControl(client: IpcClient): StewardControl {
   return {
-    recall: (query) => client.call('/context/recall', { query }),
+    recall: (query, turn) => client.call('/context/recall', { query, turn }),
     propose: (args) => client.call('/propose', args),
     payX402: (args) => client.call('/x402/pay', args),
   };
@@ -136,6 +139,7 @@ export function stewardBase(rt: Runtime, execute: boolean, model?: ChatModel) {
     log: rt.log,
     currentCheckpoint: () => rt.chain.latestCheckpoint(),
     execute,
+    allowX402: rt.cfg.x402Allow.length > 0,
   };
 }
 
@@ -143,7 +147,8 @@ export async function runStewardRemote(rt: Runtime, instruction: string, execute
   const deps = stewardBase(rt, execute);
   await startupCheck(rt, 'agent', deps.key.publicKeyHex);
   const client = new IpcClient(deps.key, unixTransport(socketPath(rt.cfg, 'control')));
-  return runTurn({ ...deps, control: remoteStewardControl(client) }, instruction);
+  // M4: the agent reads the chain through control, not with its own Tatum key.
+  return runTurn({ ...deps, currentCheckpoint: () => client.call<number>('/checkpoint', {}), control: remoteStewardControl(client) }, instruction);
 }
 
 export async function serveAgent(rt: Runtime) {

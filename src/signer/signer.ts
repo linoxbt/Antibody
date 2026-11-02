@@ -7,6 +7,7 @@
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { fromBase64, normalizeCoinType, normalizeSuiAddress } from '../core/encoding.ts';
 import { checkSimulation } from '../core/policy.ts';
+import { checkTransferShape } from './shape.ts';
 import type { ChainReader, TxInfo } from '../adapters/chain.ts';
 import type { Logger } from '../log.ts';
 
@@ -38,6 +39,11 @@ export class Signer {
     const recipient = normalizeSuiAddress(req.expect.recipient);
     const coinType = normalizeCoinType(req.expect.coinType);
     if (!/^[1-9][0-9]*$/.test(req.expect.amount)) throw new Error('expected amount must be a positive integer');
+    const shape = checkTransferShape(bytes, recipient);
+    if (shape) {
+      this.log.warn('signer.refused', { reason: shape, recipient });
+      throw new Error(`signer refused: ${shape}`);
+    }
     const sim = await this.chain.simulate(bytes);
     const mismatch = checkSimulation({ ok: true, ckpt: 0, sender: this.address, simulation: sim, maxGas: this.maxGasMist }, recipient, coinType, BigInt(req.expect.amount));
     if (mismatch) {

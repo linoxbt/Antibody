@@ -5,7 +5,7 @@ import { verifyLedger, type LedgerState } from '../src/core/ledger.ts';
 import { evaluatePayment, type ChainState, type SimulationResult } from '../src/core/policy.ts';
 import { NS_LEDGER } from '../src/core/types.ts';
 import { toBaseUnits, formatUnits } from '../src/core/units.ts';
-import { STEWARD_TOOLS } from '../src/steward/turn.ts';
+import { PAY_X402_TOOL, STEWARD_TOOLS } from '../src/steward/turn.ts';
 import { account, ACCT, ATTACKER, genesisStep, LANDLORD, ledgerChain, makeKeys, payeeStep, stored, USDC } from './helpers.ts';
 
 const k = makeKeys();
@@ -83,9 +83,10 @@ test('determinism: the same inputs always give the same verdict', () => {
 });
 
 test('T-07: the model has no tool to add a payee, change a cap, sign or broadcast (I-4)', () => {
+  // FR-04: three tools by default; pay_x402 only when the operator allow-lists bill hosts (M3).
   const names = STEWARD_TOOLS.map((t) => t.name).sort();
-  assert.deepEqual(names, ['pay_x402', 'propose_payment', 'recall_memories', 'write_note']);
-  for (const t of STEWARD_TOOLS) assert.doesNotMatch(`${t.name} ${JSON.stringify(t.parameters)}`, /payee_add|add_payee|capPerTx|cap_per|sign|broadcast|execute/i);
+  assert.deepEqual(names, ['propose_payment', 'recall_memories', 'write_note']);
+  for (const t of [...STEWARD_TOOLS, PAY_X402_TOOL]) assert.doesNotMatch(`${t.name} ${JSON.stringify(t.parameters)}`, /payee_add|add_payee|capPerTx|cap_per|sign|broadcast|execute/i);
 });
 
 test('units: decimal display amounts ⇄ base units without floating point', () => {

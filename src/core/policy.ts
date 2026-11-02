@@ -49,7 +49,11 @@ export type BlockCode =
   | 'ASSET_MISMATCH'
   | 'OVER_CAP'
   | 'BAD_AMOUNT'
-  | 'SIMULATION_MISMATCH';
+  | 'SIMULATION_MISMATCH'
+  /** Set by control, not this pure function: the same payment already went out (or its outcome is unknown). */
+  | 'DUPLICATE_PAYMENT'
+  /** Set by control: first sync on this machine; the ledger head has not been confirmed by a human yet (S10). */
+  | 'LEDGER_UNACKNOWLEDGED';
 
 export type RuleId = 'R0' | 'R1' | 'R2' | 'R3' | 'R4' | 'R5';
 export type RuleOutcome = { rule: RuleId; pass: boolean; detail: string };
@@ -100,7 +104,9 @@ export function evaluatePayment(proposal: PaymentProposal, ledger: LedgerState |
   // R2 + R3. When the recipient is unknown but the label names a registered
   // payee, report the more specific LABEL_MISMATCH: same block, clearer story.
   const labelled = proposal.payeeLabel !== undefined ? findByLabel(ledger.payees, proposal.payeeLabel) : undefined;
-  const payee = ledger.payees.find((p) => p.address === proposal.recipient);
+  // Several payees may share an address (e.g. different coins): prefer the one the label names.
+  const atAddress = ledger.payees.filter((p) => p.address === proposal.recipient);
+  const payee = atAddress.find((p) => p.payeeId === labelled?.payeeId) ?? atAddress.find((p) => normalizeCoinTypeSafe(proposal.coinType) === p.coinType) ?? atAddress[0];
   if (!payee) {
     rules.push({ rule: 'R2', pass: false, detail: 'recipient is not an active payee in the ledger' });
     if (labelled) {
@@ -145,6 +151,14 @@ export function evaluatePayment(proposal: PaymentProposal, ledger: LedgerState |
   if (r5 !== null) return block('SIMULATION_MISMATCH', rules, [r5], payee.payeeId);
 
   return { decision: 'ALLOW', code: 'OK', reasons: [`pay ${payee.label} (${payee.payeeId})`], rules, payeeId: payee.payeeId };
+}
+
+function normalizeCoinTypeSafe(t: string): string | null {
+  try {
+    return normalizeCoinType(t);
+  } catch {
+    return null;
+  }
 }
 
 function findByLabel(payees: ActivePayee[], label: string): ActivePayee | undefined {

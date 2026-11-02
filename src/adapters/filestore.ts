@@ -1,9 +1,47 @@
 /** Tiny JSON file store with a cross-process lock, for the offline backend. */
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { dirname } from 'node:path';
 
 function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Mark a lock directory with its holder, so a live holder's lock is never broken (B5). */
+function claim(lock: string): void {
+  writeFileSync(`${lock}/owner`, `${process.pid}\n${hostname()}\n`);
+}
+
+/**
+ * A lock may be broken only when its holder is gone: a dead pid on this host,
+ * or no heartbeat for `staleMs` (holders refresh the lock's mtime while they
+ * run). A slow holder that is still alive keeps its lock.
+ */
+function breakIfAbandoned(lock: string, staleMs: number): void {
+  try {
+    const st = statSync(lock);
+    let pid = 0;
+    let host = '';
+    try {
+      [pid, host] = ((s) => [Number(s[0]), s[1] ?? ''] as const)(readFileSync(`${lock}/owner`, 'utf8').split('\n'));
+    } catch {
+      /* not written yet (just created) or a lock from an older build */
+    }
+    const sameHost = host === hostname();
+    const dead = sameHost && pid > 0 && !alive(pid);
+    if (dead || Date.now() - st.mtimeMs > staleMs) rmSync(lock, { recursive: true, force: true });
+  } catch {
+    /* released meanwhile */
+  }
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
 }
 
 export class JsonFileStore<T> {
@@ -19,29 +57,38 @@ export class JsonFileStore<T> {
     return JSON.parse(readFileSync(this.path, 'utf8')) as T;
   }
 
-  /** Read-modify-write under an exclusive lock (mkdir is atomic). */
-  update<R>(fn: (state: T) => R): R {
+  clear(): void {
+    rmSync(this.path, { force: true });
+  }
+
+  /**
+   * Read-modify-write under an exclusive lock (mkdir is atomic). fn mutates the
+   * state in place; with `replace`, fn's return value (unless undefined) becomes
+   * the new state instead.
+   */
+  update<R>(fn: (state: T) => R, replace = false): R {
     const lock = `${this.path}.lock`;
     const deadline = Date.now() + 10_000;
     for (;;) {
       try {
         mkdirSync(lock);
+        claim(lock);
         break;
       } catch {
-        // Break locks left by a crashed process.
-        try {
-          if (Date.now() - statSync(lock).mtimeMs > 15_000) rmSync(lock, { recursive: true, force: true });
-        } catch {
-          /* raced with the owner releasing it */
-        }
+        // Break locks left by a crashed process (never a live one).
+        breakIfAbandoned(lock, 15_000);
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${lock}`);
         sleepSync(5);
       }
     }
     try {
-      const state = this.read();
+      let state = this.read();
       const out = fn(state);
-      const tmp = `${this.path}.${process.pid}.tmp`;
+      if (replace) {
+        if (out === undefined) return out;
+        state = out as unknown as T;
+      }
+      const tmp = `${this.path}.${process.pid}.${Date.now()}.tmp`;
       writeFileSync(tmp, JSON.stringify(state, null, 1), { mode: 0o600 });
       renameSync(tmp, this.path);
       return out;
@@ -56,6 +103,7 @@ export class JsonFileStore<T> {
  * spec §7). Also serialises callers inside this process.
  */
 const chains = new Map<string, Promise<unknown>>();
+const HEARTBEAT_STALE_MS = 30_000;
 
 export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, timeoutMs = 60_000): Promise<T> {
   const prev = chains.get(lockPath) ?? Promise.resolve();
@@ -65,20 +113,28 @@ export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, ti
     for (;;) {
       try {
         mkdirSync(lockPath);
+        claim(lockPath);
         break;
       } catch {
-        try {
-          if (Date.now() - statSync(lockPath).mtimeMs > timeoutMs) rmSync(lockPath, { recursive: true, force: true });
-        } catch {
-          /* released meanwhile */
-        }
+        breakIfAbandoned(lockPath, HEARTBEAT_STALE_MS);
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${lockPath}`);
         await new Promise((r) => setTimeout(r, 20));
       }
     }
+    // Heartbeat: a long append (slow relayer, retries) keeps its lock.
+    const beat = setInterval(() => {
+      try {
+        const t = new Date();
+        utimesSync(lockPath, t, t);
+      } catch {
+        /* lock dir gone */
+      }
+    }, 5_000);
+    beat.unref();
     try {
       return await fn();
     } finally {
+      clearInterval(beat);
       rmSync(lockPath, { recursive: true, force: true });
     }
   });

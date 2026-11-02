@@ -6,12 +6,13 @@
  */
 import { join } from 'node:path';
 import { bodyContent, buildEnvelope, parseEnvelope } from '../core/envelope.ts';
-import { fromBase64, isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, SUI_COIN_TYPE, toBase64, uuidv7, UUID_RE } from '../core/encoding.ts';
+import { fromBase64, isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, sha256Hex, SUI_COIN_TYPE, toBase64, uuidv7, UUID_RE } from '../core/encoding.ts';
 import type { LaneKey } from '../core/keys.ts';
 import type { AccountState } from '../core/lanes.ts';
 import {
   activeSeeds,
   GENESIS_PREV,
+  LEDGER_CAP,
   LEDGER_SIGNER,
   ledgerBodyText,
   nextAppend,
@@ -24,10 +25,13 @@ import {
   type LedgerType,
 } from '../core/ledger.ts';
 import { deriveLesson, matchLessons } from '../core/lessons.ts';
+import { scoreText } from '../ingest/heuristics.ts';
+import { blocklisted, type GuardianLists } from '../ingest/guardians.ts';
+import { z } from 'zod';
 import { blastRadius, computeLineage, type BlastRadius, type VerifiedInput } from '../core/lineage.ts';
 import { evaluatePayment, type ChainState, type PaymentProposal, type Verdict } from '../core/policy.ts';
 import { buildProjection, contextEligible, toContextItem, type ContextItem, type Projection } from '../core/projection.ts';
-import { normalizeSeed, seedKey } from '../core/seeds.ts';
+import { normalizeIdentifier, normalizeSeed, seedKey, srcIdentifiers } from '../core/seeds.ts';
 import { formatUnits, toBaseUnits } from '../core/units.ts';
 import { verifyEnvelope } from '../core/verify.ts';
 import { LABEL_LANE, LANE_LABEL, NS_CONTENT, NS_LEDGER, type Lane, type QuarantineSeed, type StoredMemory } from '../core/types.ts';
@@ -38,9 +42,39 @@ import type { ReportStore } from '../adapters/storage-tatum.ts';
 import type { IpcClient } from '../ipc.ts';
 import type { Logger } from '../log.ts';
 import type { Alert } from '../ops/alerts.ts';
-import { decodeHeader, encodeHeader, HDR_REQUIRED, HDR_RESPONSE, HDR_SIGNATURE, paymentRequiredSchema, selectRequirement, type PaymentPayload, type SettlementResponse } from '../payments/x402.ts';
+import { decodeHeader, encodeHeader, HDR_REQUIRED, HDR_RESPONSE, HDR_SIGNATURE, paymentRequiredSchema, selectRequirement, settlementResponseSchema, type PaymentPayload, type SettlementResponse } from '../payments/x402.ts';
 import { retrieveContent, retrieveLedger } from './retrieve.ts';
-import { HighWaterMark, IncidentStore, ReportLog, TextCache, type Incident } from './store.ts';
+import { HighWaterMark, IncidentStore, PaymentLog, ReportLog, TextCache, type Incident } from './store.ts';
+
+/** Auto-quarantines per hour, and ledger records kept free for the human (S4). */
+const AUTO_QUARANTINE_PER_HOUR = 30;
+/** A repeat of an executed payment within this window is refused (B6). */
+const DUPLICATE_WINDOW_MS = 10 * 60_000;
+/** Envelope header limit on parents. */
+const MAX_DECISION_PARENTS = 64;
+const LEDGER_USER_RESERVE = 250;
+
+const incidentSchema = z
+  .object({
+    objectId: z.string().min(1).max(256),
+    observationId: z.string().regex(UUID_RE).nullable(),
+    coinType: z.string().max(512).optional(),
+    sender: z.string().max(80).optional(),
+    score: z.number().finite().min(0).max(1),
+    rules: z.array(z.string().max(200)).max(32),
+    lessonMatches: z.array(z.object({ lessonSeq: z.number().int().nonnegative(), indicator: z.string().max(16), value: z.string().max(512) }).strict()).max(32),
+    blocklisted: z.boolean(),
+    proposedSeed: z.object({ type: z.literal('source'), value: z.string().min(1).max(256) }).strict(),
+  })
+  .strict();
+
+const normalizeIdentifierSafe = (v: string) => {
+  try {
+    return normalizeIdentifier(v);
+  } catch {
+    return v;
+  }
+};
 
 export interface ControlDeps {
   acct: string;
@@ -65,6 +99,10 @@ export interface ControlDeps {
   noCache?: boolean;
   /** Best-effort human alerts (webhook / Telegram); never awaited on the payment path. */
   alert?: (a: Alert) => void;
+  /** Sui Guardians lists, so control recomputes blocklist hits itself (S2). */
+  guardians?: () => Promise<GuardianLists>;
+  /** host[:port] values pay_x402 may fetch; empty or absent disables it (M3). */
+  x402Allow?: string[];
 }
 
 export interface Snapshot {
@@ -103,6 +141,9 @@ export class Control {
   readonly hwm: HighWaterMark;
   readonly incidents: IncidentStore;
   readonly reportLog: ReportLog;
+  readonly payments: PaymentLog;
+  /** Memory ids served to each turn by recallForAgent (M6), most recent 200 turns. */
+  private readonly served = new Map<string, Set<string>>();
   private readonly now: () => number;
   private last: Snapshot | null = null;
 
@@ -111,6 +152,7 @@ export class Control {
     this.hwm = new HighWaterMark(join(d.home, 'hwm.json'));
     this.incidents = new IncidentStore(d.cacheDir);
     this.reportLog = new ReportLog(d.cacheDir);
+    this.payments = new PaymentLog(d.home);
     this.now = d.now ?? Date.now;
   }
 
@@ -128,7 +170,7 @@ export class Control {
     const [account, ckpt] = await Promise.all([this.d.chain.getAccount(this.d.acct), this.d.chain.latestCheckpoint()]);
     const known = this.d.noCache ? new Map<string, StoredMemory>() : this.cache.all();
     const led = await retrieveLedger(this.d.mem, known);
-    const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read() });
+    const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read(), writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])) });
     const content = await retrieveContent(this.d.mem, known);
     if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories]);
     const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId), createdAt: new Map(content.inventory.map((e) => [e.blobId, e.createdAt])) });
@@ -202,6 +244,9 @@ export class Control {
       const snap = await this.snapshot();
       if (snap.ledger.ok) throw new Error('ledger already has a genesis record');
       if (snap.ledger.code !== 'LEDGER_EMPTY') throw new Error(`ledger is not empty: ${snap.ledger.code} ${snap.ledger.detail}`);
+      // B11: an empty listing after this machine has already verified a ledger is a relayer problem, not a new account.
+      const seen = this.hwm.read();
+      if (seen) throw new Error(`this machine has verified ledger head #${seen.seq} before; refusing to write a second genesis on an empty listing (run antibody restore-index)`);
       const lanes = (['user', 'agent', 'wallet-objects', 'antibody'] as const).map((lane) => {
         const k = snap.account.delegateKeys.filter((x) => x.label === LANE_LABEL[lane]);
         if (k.length !== 1) throw new Error(`lane ${lane} needs exactly one key on-chain before genesis (found ${k.length})`);
@@ -216,6 +261,7 @@ export class Control {
       this.cache.put([{ blobId, namespace: NS_LEDGER, text: env.text }]);
       const after = await this.snapshot();
       if (!after.ledger.ok) throw new Error(`ledger did not verify after genesis: ${after.ledger.code} ${after.ledger.detail}`);
+      this.hwm.acknowledge(after.ledger.head); // this machine wrote genesis itself: nothing to take on trust
       this.d.log.info('ledger.genesis', { blobId, envelopeId: env.header.id });
       return { seq: 0, blobId, envelopeId: env.header.id };
     });
@@ -236,7 +282,7 @@ export class Control {
    * Recall for Steward: semantic recall, then only verified, unquarantined,
    * resolved memories, each labelled by trust class (spec §4 context labels).
    */
-  async recallForAgent(query: string, limit = 12): Promise<ContextItem[]> {
+  async recallForAgent(query: string, limit = 12, turn?: string): Promise<ContextItem[]> {
     const snap = await this.snapshot();
     if (!snap.ledger.ok) {
       // I-7: quarantines are unknown without a verified ledger; give Steward nothing rather than poison.
@@ -257,7 +303,14 @@ export class Control {
       out.push(toContextItem(n));
       if (out.length >= limit) break;
     }
-    this.d.log.info('context.recall', { query, returned: out.map((c) => c.id), digest: snap.projection.digest });
+    if (turn && UUID_RE.test(turn)) {
+      const set = this.served.get(turn) ?? new Set<string>();
+      for (const c of out) set.add(c.id);
+      this.served.delete(turn);
+      this.served.set(turn, set);
+      while (this.served.size > 200) this.served.delete(this.served.keys().next().value!);
+    }
+    this.d.log.info('context.recall', { query, turn, returned: out.map((c) => c.id), digest: snap.projection.digest });
     return out;
   }
 
@@ -303,6 +356,12 @@ export class Control {
       proposal = { recipient: p.recipient.trim(), amount: '0', coinType: p.coinType ?? 'invalid', ...(p.payeeLabel ? { payeeLabel: p.payeeLabel } : {}), reason: `${p.reason} (${(e as Error).message})` };
     }
     let chain: ChainState = { ok: true, ckpt: snap.ckpt, sender: normalizeSuiAddress(this.d.wallet), maxGas: this.d.maxGasMist };
+    if (snap.ledger.ok && !this.hwm.acknowledged()) {
+      // S10: this machine learned the ledger head from the relayer alone (trust on first use).
+      const detail = `first sync on this machine: confirm ledger head #${snap.ledger.head.seq} with \`antibody verify-ledger --accept\``;
+      const verdict: Verdict = { decision: 'BLOCK', code: 'LEDGER_UNACKNOWLEDGED', reasons: [detail], rules: [{ rule: 'R0', pass: false, detail }] };
+      return { verdict, txBytes: null, coinType, base, decimals, snap };
+    }
     let verdict = evaluatePayment(proposal, snap.ledger, chain);
     let txBytes: Uint8Array | null = null;
     if (verdict.code === 'SIMULATION_MISMATCH' && verdict.rules.every((r) => r.rule === 'R5' || r.pass) && coinType && base !== null) {
@@ -318,74 +377,128 @@ export class Control {
     return { verdict, txBytes, coinType, base, decimals, snap };
   }
 
-  /** propose_payment: evaluate, execute through the signer when allowed, record the decision. */
+  /** One payment at a time in this process (B6): two proposals never race through policy and the signer. */
+  private payChain: Promise<unknown> = Promise.resolve();
+  private serialPayment<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.payChain.catch(() => undefined).then(fn);
+    this.payChain = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * B6: refuse a payment that is a repeat of one pending, of unknown outcome, or
+   * executed within the last 10 minutes (same recipient, coin and amount), or a
+   * repeat inside the same turn. Returns the replacement verdict, or null.
+   */
+  private duplicateVerdict(turn: string, recipient: string, coinType: string, base: bigint, v: Verdict): { verdict: Verdict; key: string } {
+    const key = sha256Hex(`${turn}|${recipient}|${coinType}|${base}`);
+    const dup = this.payments.duplicate({ key, recipient, coinType, amount: base.toString() }, this.now(), DUPLICATE_WINDOW_MS);
+    if (!dup) return { verdict: v, key };
+    const why = dup.status === 'executed' ? `the same payment went out ${Math.round((this.now() - dup.at) / 1000)} s ago (tx ${dup.digest ?? '?'})` : `an identical payment is ${dup.status === 'pending' ? 'still in flight' : 'of unknown outcome; check the wallet before paying again'}`;
+    return { key, verdict: { decision: 'BLOCK', code: 'DUPLICATE_PAYMENT', reasons: [why], rules: [...v.rules, { rule: 'R4', pass: false, detail: `duplicate: ${why}` }], ...(v.payeeId ? { payeeId: v.payeeId } : {}) } };
+  }
+
+  /** propose_payment: evaluate, execute through the signer when allowed, record the decision (always, M8). */
   async propose(args: { turn: string; readSet: string[]; proposal: ModelProposal; execute: boolean }): Promise<DecisionResult> {
-    const ev = await this.evaluate(args.proposal);
-    let txDigest: string | null = null;
-    let executed = false;
-    if (ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute) {
-      if (!this.d.signer) throw new Error('no signer configured');
-      const r = await this.d.signer.call<{ digest: string; tx: TxInfo }>('/sign', {
-        mode: 'execute',
-        txB64: toBase64(ev.txBytes),
-        expect: { recipient: args.proposal.recipient.trim(), coinType: ev.coinType, amount: ev.base!.toString() },
-      });
-      txDigest = r.digest;
-      executed = r.tx.ok;
-    }
-    const dec = await this.writeDecision({ turn: args.turn, readSet: args.readSet, proposal: args.proposal, ev, txDigest, executed, channel: 'transfer' });
-    return { ...dec, verdict: ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: ev.verdict.decision === 'ALLOW' && !args.execute, simulated: this.d.simulated };
+    return this.serialPayment(async () => {
+      let ev = await this.evaluate(args.proposal);
+      let txDigest: string | null = null;
+      let executed = false;
+      let error: string | null = null;
+      if (ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute) {
+        const recipient = args.proposal.recipient.trim();
+        const d = this.duplicateVerdict(args.turn, recipient, ev.coinType!, ev.base!, ev.verdict);
+        if (d.verdict.decision === 'BLOCK') ev = { ...ev, verdict: d.verdict, txBytes: null };
+        else if (!this.d.signer) error = 'no signer configured';
+        else {
+          const entry = { key: d.key, turn: args.turn, recipient, coinType: ev.coinType!, amount: ev.base!.toString(), at: this.now() };
+          this.payments.put({ ...entry, status: 'pending' });
+          try {
+            const r = await this.d.signer.call<{ digest: string; tx: TxInfo }>('/sign', { mode: 'execute', txB64: toBase64(ev.txBytes), expect: { recipient, coinType: ev.coinType, amount: ev.base!.toString() } });
+            txDigest = r.digest;
+            executed = r.tx.ok;
+            this.payments.put({ ...entry, status: executed ? 'executed' : 'failed', digest: r.digest, ...(r.tx.ok ? {} : { error: r.tx.error ?? 'failed on-chain' }) });
+          } catch (e) {
+            // The signer may have broadcast before failing: the outcome is unknown, and a retry is refused until a human checks.
+            error = `signer: ${(e as Error).message}`;
+            this.payments.put({ ...entry, status: /signer refused/.test(error) ? 'failed' : 'unknown', error });
+          }
+        }
+      }
+      const dec = await this.writeDecision({ turn: args.turn, readSet: args.readSet, proposal: args.proposal, ev, txDigest, executed, channel: 'transfer', error });
+      return { ...dec, verdict: dec.verdict ?? ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: ev.verdict.decision === 'ALLOW' && !args.execute, simulated: this.d.simulated, ...(error ? { error } : {}) };
+    });
   }
 
   /**
    * pay_x402: fetch the resource, turn its 402 requirements into a proposal,
    * evaluate it like any payment, sign (not execute) when allowed, and retry
-   * with PAYMENT-SIGNATURE. The facilitator settles on Sui. The resource body
-   * is external content, so it is not returned to the model.
+   * with PAYMENT-SIGNATURE. The facilitator settles on Sui; the settlement is
+   * confirmed on-chain before it counts. Only hosts on the operator's allowlist
+   * (ANTIBODY_X402_ALLOW) are ever fetched (M3: no SSRF from the key holder).
+   * The resource body and description are external content and never reach
+   * the model or the decision text.
    */
   async payX402(args: { turn: string; readSet: string[]; url: string; payeeLabel?: string; reason: string }): Promise<DecisionResult & { httpStatus: number; settlement: SettlementResponse | null }> {
-    const f = this.d.fetchImpl ?? fetch;
-    const u = new URL(args.url);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('x402 URL must be http(s)');
-    const first = await f(args.url);
-    if (first.status !== 402) throw new Error(`expected 402 Payment Required, got ${first.status}`);
-    const header = first.headers.get(HDR_REQUIRED);
-    if (!header) throw new Error(`402 without a ${HDR_REQUIRED} header`);
-    const pr = decodeHeader(header, paymentRequiredSchema);
-    const req = selectRequirement(pr, this.d.x402Network);
-    if (!req) throw new Error(`no exact-scheme requirement for ${this.d.x402Network}`);
-    const coinType = normalizeCoinType(req.asset);
-    const meta = await this.d.chain.getCoinMetadata(coinType);
-    if (!meta) throw new Error(`no coin metadata for ${coinType}`);
-    const proposal: ModelProposal = {
-      recipient: req.payTo,
-      amount: formatUnits(req.amount, meta.decimals),
-      coinType,
-      ...(args.payeeLabel ? { payeeLabel: args.payeeLabel } : {}),
-      reason: `${args.reason} (x402: ${pr.resource.description ?? pr.resource.url})`,
-    };
-    const ev = await this.evaluate(proposal);
-    let settlement: SettlementResponse | null = null;
-    let httpStatus = 402;
-    let txDigest: string | null = null;
-    if (ev.verdict.decision === 'ALLOW' && ev.txBytes) {
-      if (!this.d.signer) throw new Error('no signer configured');
-      const s = await this.d.signer.call<{ signature: string }>('/sign', {
-        mode: 'sign',
-        txB64: toBase64(ev.txBytes),
-        expect: { recipient: req.payTo, coinType, amount: req.amount },
-      });
-      const payload: PaymentPayload = { x402Version: 2, resource: pr.resource, accepted: req, payload: { signature: s.signature, transaction: toBase64(ev.txBytes) } };
-      const second = await f(args.url, { headers: { [HDR_SIGNATURE]: encodeHeader(payload) } });
-      httpStatus = second.status;
-      const rh = second.headers.get(HDR_RESPONSE);
-      if (rh) settlement = decodeHeader<SettlementResponse>(rh);
-      await second.arrayBuffer(); // drain; the body is never shown to the model
-      if (settlement?.success) txDigest = settlement.transaction;
-    }
-    const executed = !!settlement?.success;
-    const dec = await this.writeDecision({ turn: args.turn, readSet: args.readSet, proposal, ev, txDigest, executed, channel: `x402 ${args.url}` });
-    return { ...dec, verdict: ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: false, simulated: this.d.simulated, httpStatus, settlement };
+    return this.serialPayment(async () => {
+      const u = new URL(args.url);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('x402 URL must be http(s)');
+      if (!(this.d.x402Allow ?? []).includes(u.host)) throw new Error(`x402 host ${u.host} is not on the allowlist (ANTIBODY_X402_ALLOW)`);
+      const f = this.d.fetchImpl ?? fetch;
+      const get = (headers?: Record<string, string>) => f(u.toString(), { redirect: 'error', signal: AbortSignal.timeout(15_000), ...(headers ? { headers } : {}) });
+      const first = await get();
+      await first.arrayBuffer().catch(() => undefined);
+      if (first.status !== 402) throw new Error(`expected 402 Payment Required, got ${first.status}`);
+      const header = first.headers.get(HDR_REQUIRED);
+      if (!header) throw new Error(`402 without a ${HDR_REQUIRED} header`);
+      const pr = decodeHeader(header, paymentRequiredSchema);
+      const req = selectRequirement(pr, this.d.x402Network);
+      if (!req) throw new Error(`no exact-scheme requirement for ${this.d.x402Network}`);
+      if (!/^[1-9][0-9]{0,30}$/.test(req.amount)) throw new Error('x402 amount must be a positive integer without leading zeros');
+      const coinType = normalizeCoinType(req.asset);
+      const meta = await this.d.chain.getCoinMetadata(coinType);
+      if (!meta) throw new Error('the bill names a coin type with no metadata on-chain');
+      const proposal: ModelProposal = { recipient: req.payTo, amount: formatUnits(req.amount, meta.decimals), coinType, ...(args.payeeLabel ? { payeeLabel: args.payeeLabel } : {}), reason: `${args.reason} (x402 bill at ${u.host}${u.pathname})` };
+      let ev = await this.evaluate(proposal);
+      let settlement: SettlementResponse | null = null;
+      let httpStatus = 402;
+      let txDigest: string | null = null;
+      let executed = false;
+      let error: string | null = null;
+      if (ev.verdict.decision === 'ALLOW' && ev.txBytes) {
+        const d = this.duplicateVerdict(args.turn, req.payTo, coinType, BigInt(req.amount), ev.verdict);
+        if (d.verdict.decision === 'BLOCK') ev = { ...ev, verdict: d.verdict, txBytes: null };
+        else if (!this.d.signer) error = 'no signer configured';
+        else {
+          const entry = { key: d.key, turn: args.turn, recipient: req.payTo, coinType, amount: req.amount, at: this.now() };
+          this.payments.put({ ...entry, status: 'pending' });
+          try {
+            const s = await this.d.signer.call<{ signature: string }>('/sign', { mode: 'sign', txB64: toBase64(ev.txBytes), expect: { recipient: req.payTo, coinType, amount: req.amount } });
+            const payload: PaymentPayload = { x402Version: 2, resource: pr.resource, accepted: req, payload: { signature: s.signature, transaction: toBase64(ev.txBytes) } };
+            const second = await get({ [HDR_SIGNATURE]: encodeHeader(payload) });
+            httpStatus = second.status;
+            await second.arrayBuffer().catch(() => undefined); // drain; the body is never shown to the model
+            const rh = second.headers.get(HDR_RESPONSE);
+            settlement = rh ? decodeHeader(rh, settlementResponseSchema) : null;
+            if (settlement?.success) {
+              // B7: the facilitator's word is not enough: the digest must show this exact transfer on-chain.
+              const tx = await this.d.chain.getTransaction(settlement.transaction).catch(() => null);
+              const credited = tx?.balanceChanges.some((b) => b.address === normalizeSuiAddress(req.payTo) && b.coinType === coinType && BigInt(b.amount) === BigInt(req.amount));
+              if (tx?.ok && credited && tx.sender === normalizeSuiAddress(this.d.wallet)) {
+                txDigest = settlement.transaction;
+                executed = true;
+              } else error = `facilitator reported settlement ${settlement.transaction}, but it does not show this transfer on-chain`;
+            } else error = `settlement failed (HTTP ${httpStatus})`;
+            this.payments.put({ ...entry, status: executed ? 'executed' : 'unknown', ...(txDigest ? { digest: txDigest } : {}), ...(error ? { error } : {}) });
+          } catch (e) {
+            error = `x402: ${(e as Error).message}`;
+            this.payments.put({ ...entry, status: /signer refused/.test(error) ? 'failed' : 'unknown', error });
+          }
+        }
+      }
+      const dec = await this.writeDecision({ turn: args.turn, readSet: args.readSet, proposal, ev, txDigest, executed, channel: `x402 ${u.host}${u.pathname}`, error });
+      return { ...dec, verdict: dec.verdict ?? ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: false, simulated: this.d.simulated, httpStatus, settlement, ...(error ? { error } : {}) };
+    });
   }
 
   /**
@@ -400,9 +513,19 @@ export class Control {
     txDigest: string | null;
     executed: boolean;
     channel: string;
-  }): Promise<{ decisionId: string; decisionBlobId: string }> {
-    const v = a.ev.verdict;
-    const parents = [...new Set(a.readSet.filter((id) => UUID_RE.test(id)))].sort().slice(0, 64);
+    error?: string | null;
+  }): Promise<{ decisionId: string; decisionBlobId: string; verdict?: Verdict }> {
+    let v = a.ev.verdict;
+    // M6: the parents are what control itself served this turn, not what the agent says it read.
+    const served = this.served.get(a.turn);
+    const ids = [...new Set([...(served ?? []), ...a.readSet].filter((id) => UUID_RE.test(id)))];
+    let parents = ids.sort();
+    if (parents.length > MAX_DECISION_PARENTS) {
+      // Never drop lineage silently: keep the least trusted parents (taint wins) and refuse to pay.
+      const rank = (id: string) => ({ unverified: 0, untrusted: 1, derived: 2, trusted: 3 })[this.last?.projection.lineage.nodes.get(id)?.cls ?? 'unverified'];
+      parents = [...parents].sort((x, y) => rank(x) - rank(y) || x.localeCompare(y)).slice(0, MAX_DECISION_PARENTS).sort();
+      if (v.decision === 'ALLOW' && !a.txDigest) v = { decision: 'BLOCK', code: 'LEDGER_UNVERIFIED', reasons: [`this turn read ${ids.length} memories; a decision can cite at most ${MAX_DECISION_PARENTS}, so its lineage would be incomplete`], rules: [...v.rules, { rule: 'R0', pass: false, detail: 'lineage too large to record' }], ...(v.payeeId ? { payeeId: v.payeeId } : {}) };
+    }
     const amount = a.ev.base !== null && a.ev.decimals !== null ? `${formatUnits(a.ev.base, a.ev.decimals)} (${a.ev.base} base units)` : a.proposal.amount;
     const lines = [
       `Payment decision: ${v.decision}${v.code === 'OK' ? '' : ` ${v.code}`}`,
@@ -412,7 +535,7 @@ export class Control {
       `Rules: ${v.rules.map((r) => `${r.rule} ${r.pass ? 'pass' : 'FAIL'} (${r.detail})`).join(' | ')}`,
       `Ledger head: ${!a.ev.snap ? 'unavailable' : a.ev.snap.ledger.ok ? `#${a.ev.snap.ledger.head.seq}` : a.ev.snap.ledger.code}; checkpoint ${a.ev.snap?.ckpt ?? 'unavailable'}; turn ${a.turn}`,
       a.proposal.cites?.length ? `Model citations (display only, never policy input): ${a.proposal.cites.join(', ')}` : 'Model citations: none',
-      a.txDigest ? `Transaction: ${a.txDigest} (${a.executed ? 'executed' : 'not executed'})` : v.decision === 'ALLOW' ? 'Transaction: none (dry-run only)' : 'Transaction: none (blocked, nothing signed)',
+      a.txDigest ? `Transaction: ${a.txDigest} (${a.executed ? 'executed' : 'not executed'})` : a.error ? `Transaction: outcome ${/refused/.test(a.error) ? 'refused' : 'unknown'} (${a.error.slice(0, 200)})` : v.decision === 'ALLOW' ? 'Transaction: none (dry-run only)' : 'Transaction: none (blocked, nothing signed)',
     ];
     const id = uuidv7(this.now());
     const src = a.txDigest ? [{ t: 'tx', digest: a.txDigest }] : [];
@@ -422,7 +545,7 @@ export class Control {
     this.cache.put([{ blobId, namespace: NS_CONTENT, text: env.text }]);
     this.d.log.info('decision', { envelopeId: id, blobId, verdict: v.decision, code: v.code, txDigest: a.txDigest, turn: a.turn });
     if (v.decision === 'BLOCK') this.d.alert?.({ kind: 'payment-blocked', severity: 'warning', key: `block:${id}`, title: `payment blocked (${v.code})`, text: `${a.proposal.amount} to ${a.proposal.recipient}: ${v.reasons.join('; ').slice(0, 400)}`, data: { decisionId: id, code: v.code, turn: a.turn } });
-    return { decisionId: id, decisionBlobId: blobId };
+    return { decisionId: id, decisionBlobId: blobId, verdict: v };
   }
 
   // ---- quarantine, lessons, blast radius ---------------------------------
@@ -487,26 +610,86 @@ export class Control {
    * Guardians blocklist hit or a strong match against a learned lesson;
    * releasing always needs a human user signature.
    */
-  async incident(i: Omit<Incident, 'id' | 'at' | 'status'>): Promise<Incident> {
-    const inc: Incident = { ...i, id: `inc-${this.now().toString(36)}-${i.objectId.slice(2, 10)}`, at: new Date(this.now()).toISOString(), status: 'open' };
+  async incident(raw: unknown): Promise<Incident> {
+    // S2: the wallet-objects lane is untrusted. Its payload is validated, tied to a verified
+    // observation it actually wrote, and every auto-quarantine input is recomputed here.
+    const parsed = incidentSchema.safeParse(raw);
+    if (!parsed.success) throw new Error(`incident rejected: ${parsed.error.issues[0]?.path.join('.')} ${parsed.error.issues[0]?.message}`);
+    const i = parsed.data;
+    if (i.proposedSeed.value !== i.objectId) throw new Error('incident rejected: the proposed seed must be the observed object itself');
+    const snap = await this.snapshot();
+    const obs = i.observationId ? snap.projection.lineage.nodes.get(i.observationId) : undefined;
+    const h = obs?.env.header;
+    if (!obs || !h || h.lane !== 'wallet-objects' || h.kind !== 'observation' || !h.src.some((r) => srcIdentifiers(r).includes(normalizeIdentifierSafe(i.objectId)))) {
+      throw new Error('incident rejected: it does not cite a verified wallet-objects observation of that object');
+    }
+    const sender = h.src.find((r) => r.t === 'sender')?.addr;
+    const coinType = h.src.find((r) => r.t === 'coin-type')?.type;
+    const objectType = h.src.find((r) => r.t === 'sui-object')?.type;
+    const text = bodyContent(obs.env.body);
+    const lessons = snap.ledger.ok ? snap.ledger.lessons : [];
+    const lm = matchLessons({ ...(sender ? { sender } : {}), ...(coinType ? { coinType } : {}), ...(objectType ? { objectType } : {}), text }, lessons);
+    const guardians = this.d.guardians ? await this.d.guardians().catch(() => null) : null;
+    const isBlocked = !!guardians && blocklisted(guardians, coinType ?? objectType ?? '');
+    const score = isBlocked ? 1 : 1 - (1 - scoreText(text).score) * (1 - lm.score);
+    const inc: Incident = {
+      ...i,
+      score: Math.round(score * 1000) / 1000,
+      blocklisted: isBlocked,
+      lessonMatches: lm.matches.map((m) => ({ lessonSeq: m.lessonSeq, indicator: m.indicator, value: m.value })),
+      ...(sender ? { sender } : {}),
+      id: `inc-${this.now().toString(36)}-${i.objectId.replace(/^0x/, '').slice(0, 8)}`,
+      at: new Date(this.now()).toISOString(),
+      status: 'open',
+    };
     this.incidents.upsert(inc);
-    const strongLesson = inc.lessonMatches.some((m) => m.indicator !== 'keywords');
-    if (inc.blocklisted || (strongLesson && inc.score >= this.d.autoQuarantineScore)) {
-      const why = inc.blocklisted
-        ? `auto: ${inc.objectId} is on the Sui Guardians blocklist`
-        : `auto: matches lesson(s) ${[...new Set(inc.lessonMatches.map((m) => `#${m.lessonSeq}`))].join(', ')} learned from an earlier quarantine (${inc.lessonMatches.map((m) => `${m.indicator} ${m.value.slice(0, 20)}`).join('; ')})`;
-      try {
-        const q = await this.quarantine(inc.proposedSeed, why, [inc.objectId, ...(inc.observationId ? [inc.observationId] : [])], true);
+    const strong = lm.matches.filter((m) => m.indicator !== 'keywords');
+    if (isBlocked || (strong.length > 0 && score >= this.d.autoQuarantineScore)) {
+      if (obs.quarantined) {
+        // S4: an existing seed (e.g. this sender) already covers it: no new ledger record.
         inc.status = 'auto-quarantined';
-        inc.quarantineSeq = q.seq;
+        inc.quarantineSeq = obs.seedHits[0];
         this.incidents.upsert(inc);
-      } catch (e) {
-        this.d.log.warn('incident.auto_quarantine_failed', { id: inc.id, error: (e as Error).message });
+      } else if (this.autoQuarantineBudget(snap)) {
+        // S4: one record per attacker, not per object: a matched sender is quarantined as a whole.
+        const bySender = strong.find((m) => m.indicator === 'sender');
+        const seed = { type: 'source' as const, value: bySender ? bySender.value : i.objectId };
+        const why = isBlocked
+          ? `auto: ${coinType ?? objectType ?? i.objectId} is on the Sui Guardians blocklist`
+          : `auto: matches lesson(s) ${[...new Set(strong.map((m) => `#${m.lessonSeq}`))].join(', ')} learned from an earlier quarantine (${strong.map((m) => `${m.indicator} ${m.value.slice(0, 20)}`).join('; ')})${bySender ? '; quarantining that sender as a whole' : ''}`;
+        try {
+          const q = await this.quarantine(seed, why, [i.objectId, ...(i.observationId ? [i.observationId] : [])], true);
+          inc.status = 'auto-quarantined';
+          inc.quarantineSeq = q.seq;
+          this.incidents.upsert(inc);
+        } catch (e) {
+          this.d.log.warn('incident.auto_quarantine_failed', { id: inc.id, error: (e as Error).message });
+        }
       }
     }
     this.d.log.info('incident', { id: inc.id, objectId: inc.objectId, score: inc.score, status: inc.status });
     if (inc.status === 'open') this.d.alert?.({ kind: 'incident', severity: 'warning', key: `inc:${inc.objectId}`, title: `suspicious object in Steward's wallet (score ${inc.score.toFixed(2)})`, text: `${inc.objectId}\n${inc.rules.join(' · ').slice(0, 300)}\nReview it in the console: Incidents.`, data: { id: inc.id, objectId: inc.objectId, score: inc.score } });
     return inc;
+  }
+
+  private autoTimes: number[] = [];
+
+  /**
+   * S4: auto-quarantines are capped per hour and stop well before the ledger cap,
+   * so an attacker flooding the wallet can never fill the ledger and lock out the
+   * human's own records (payee removal, release, revoke).
+   */
+  private autoQuarantineBudget(snap: Snapshot): boolean {
+    const now = this.now();
+    this.autoTimes = this.autoTimes.filter((t) => now - t < 3_600_000);
+    const head = snap.ledger.ok ? snap.ledger.head.seq : LEDGER_CAP;
+    if (this.autoTimes.length >= AUTO_QUARANTINE_PER_HOUR || head >= LEDGER_CAP - LEDGER_USER_RESERVE) {
+      this.d.log.warn('incident.auto_quarantine_budget', { head, lastHour: this.autoTimes.length });
+      this.d.alert?.({ kind: 'incident', severity: 'critical', key: 'auto-budget', title: 'auto-quarantine paused: too many incidents', text: `${this.autoTimes.length} automatic quarantines in the last hour (ledger head #${head}). New incidents stay open for you to review.` });
+      return false;
+    }
+    this.autoTimes.push(now);
+    return true;
   }
 
   // ---- revocation ----------------------------------------------------------
@@ -518,9 +701,9 @@ export class Control {
   async recordRevoke(pub: string, lane: Lane, digest: string): Promise<{ seq: number }> {
     const account = await this.d.chain.getAccount(this.d.acct);
     if (account.delegateKeys.some((k) => k.publicKeyHex === pub)) throw new Error('key is still in delegate_keys on-chain; revocation not confirmed');
-    const tx = await this.d.chain.getTransaction(digest);
-    if (!tx || !tx.ok) throw new Error(`remove_delegate_key transaction ${digest} not found or failed`);
-    const ckpt = await this.d.chain.latestCheckpoint();
+    const tx = await this.ownerTx(digest, account.owner, 'remove_delegate_key');
+    // M7: bound the key at the removal's own checkpoint, not "now" (which would widen its window).
+    const ckpt = tx.checkpoint ?? (await this.d.chain.latestCheckpoint());
     return this.writeOwn('lane.revoke', { pub, label: LANE_LABEL[lane], digest, ckpt });
   }
 
@@ -528,8 +711,16 @@ export class Control {
     const account = await this.d.chain.getAccount(this.d.acct);
     const k = account.delegateKeys.find((x) => x.publicKeyHex === pub);
     if (!k || k.label !== LANE_LABEL[lane]) throw new Error(`new key is not on-chain with label ${LANE_LABEL[lane]}`);
-    const ckpt = await this.d.chain.latestCheckpoint();
-    return this.writeOwn('lane.rotate', { pub, label: LANE_LABEL[lane], digest, ckpt });
+    const tx = await this.ownerTx(digest, account.owner, 'add_delegate_key');
+    return this.writeOwn('lane.rotate', { pub, label: LANE_LABEL[lane], digest, ckpt: tx.checkpoint ?? (await this.d.chain.latestCheckpoint()) });
+  }
+
+  /** M7: the digest must be a successful transaction sent by the account owner. */
+  private async ownerTx(digest: string, owner: string, what: string): Promise<TxInfo> {
+    const tx = await this.d.chain.getTransaction(digest);
+    if (!tx || !tx.ok) throw new Error(`${what} transaction ${digest} not found or failed`);
+    if (tx.sender && normalizeSuiAddress(tx.sender) !== normalizeSuiAddress(owner)) throw new Error(`${what} transaction ${digest} was not sent by the account owner`);
+    return tx;
   }
 
   // ---- reporting -----------------------------------------------------------
@@ -550,7 +741,9 @@ export class Control {
       quarantine: { seq, seed: q.seed, reason: q.reason, evidence: q.evidence, auto: q.auto, released: q.released, ledgerBlobIds: rec.blobIds, envelopeId: rec.env.header.id },
       blastRadius: {
         sources: radius.sources,
-        memories: radius.memories.map((m) => ({ id: m.id, blobIds: m.blobIds, lane: m.env.header.lane, kind: m.env.header.kind, cls: m.cls, text: bodyContent(m.env.body) })),
+        // S9: reports are public on Walrus. Only external (wallet-objects) text — the poison itself — is published verbatim;
+        // the user's own statements, notes and decisions are redacted to their size.
+        memories: radius.memories.map((m) => ({ id: m.id, blobIds: m.blobIds, lane: m.env.header.lane, kind: m.env.header.kind, cls: m.cls, text: m.env.header.lane === 'wallet-objects' ? bodyContent(m.env.body) : `[redacted: ${bodyContent(m.env.body).length} characters of ${m.env.header.lane} ${m.env.header.kind}]` })),
         decisions: radius.decisions.map((m) => m.id),
         txDigests: radius.txDigests,
         edges: radius.edges,

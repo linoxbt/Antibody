@@ -513,8 +513,23 @@ async function main(argv: string[]): Promise<void> {
 
     case 'verify-ledger': {
       const r = rt('control');
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { accept: { type: 'boolean', default: false } });
       const control = buildControl(r, { signer: null });
       const snap = await control.snapshot();
+      if (values.accept) {
+        if (!snap.ledger.ok) throw new Error(`cannot accept: ${snap.ledger.code} ${snap.ledger.detail}`);
+        printLedger(snap.ledger);
+        // S10: the human looks at the head above and confirms it; payments were blocked until now.
+        if (process.stdin.isTTY) {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          const a = await rl.question(`Accept ledger head #${snap.ledger.head.seq} (${short(snap.ledger.head.hash, 16)}) as this machine's starting point? [y/N] `);
+          rl.close();
+          if (!/^y/i.test(a)) return;
+        }
+        control.hwm.acknowledge(snap.ledger.head);
+        console.log(green(`accepted ledger head #${snap.ledger.head.seq}; payments may proceed`));
+        return;
+      }
       if (!snap.ledger.ok) {
         console.log(red(bold(`${snap.ledger.code}: ${snap.ledger.detail}`)) + '\nFail closed: every payment is blocked until this is resolved.');
         process.exitCode = 2;
@@ -653,8 +668,9 @@ async function main(argv: string[]): Promise<void> {
       if (setUp && cfg.accountId && cfg.stewardWallet) {
         deps.ledger = async () => {
           const r = createRuntime({ ...cfg, role: null, keyIsolation: 'simulated' }, 'cli');
-          const snap = await buildControl(r, { signer: null }).snapshot();
-          return snap.ledger.ok ? { ok: true, head: snap.ledger.head.seq } : { ok: false, code: snap.ledger.code, detail: snap.ledger.detail };
+          const c = buildControl(r, { signer: null });
+          const snap = await c.snapshot();
+          return snap.ledger.ok ? { ok: true, head: snap.ledger.head.seq, acknowledged: c.hwm.acknowledged() } : { ok: false, code: snap.ledger.code, detail: snap.ledger.detail };
         };
       }
       const checks = await runDoctor(cfg, deps);
@@ -1001,7 +1017,7 @@ Control (antibody key)
   antibody revoke --lane <lane> [--rotate] [--wallet]   owner removes the key on-chain; lane.revoke record
   antibody rotate --lane <lane> [--wallet]    owner adds a fresh key after a revocation; lane.rotate record
   antibody rebuild --fresh                    reconstruct from Walrus + Sui alone; projection digest
-  antibody verify-ledger                      completeness, integrity, rollback
+  antibody verify-ledger [--accept]           completeness, integrity, rollback; --accept confirms a first sync
   antibody report <seq>                       incident JSON via the Tatum Storage API
   antibody lessons | incidents | restore-index
 

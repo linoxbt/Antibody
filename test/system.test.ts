@@ -197,7 +197,9 @@ test('fail closed: a relayer that returns altered ledger text blocks every payme
 });
 
 test('x402: a registered payee is paid over HTTP 402 and settled; a rogue payTo is blocked', async () => {
+  process.env.ANTIBODY_X402_ALLOW = '127.0.0.1:7591,127.0.0.1:7592';
   const w = await world();
+  delete process.env.ANTIBODY_X402_ALLOW;
   await w.addPayee({ payeeId: 'utility', label: 'utility', address: CAST.utility, capDisplay: '150' });
   const net = suiNetworkId('mainnet', true);
   const good = await startBillServer({ chain: w.rt.chain, network: net, payTo: CAST.utility, asset: CAST.usdc, amount: '42500000', serviceName: 'Power', port: 7591 });

@@ -148,7 +148,22 @@ test('S1: a lane.revoke signed by a key that is not on-chain cannot authorise it
     { type: 'payee.add', payload: payeeStep('evil', ATTACKER, '999999999999').payload, lane: 'user', key: Y },
   ]);
   const r = verifyLedger({ acct: ACCT, account: account(kk), inventory: s.map((x) => x.blobId), recalled: s, hwm: null });
-  assert.equal(!r.ok && r.code, 'LEDGER_CORRUPT');
+  // B11: records signed by keys outside the account are noise, set aside; the attacker's payee never appears.
+  assert.ok(r.ok, !r.ok ? r.detail : '');
+  assert.deepEqual(r.ok && r.payees.map((p) => p.payeeId), ['landlord']);
+  assert.equal(r.ok && r.ignored.length, 3);
+  assert.equal(r.ok && r.head.seq, 1);
+});
+
+test('B11: garbage written by a non-Antibody key is ignored; garbage from a lane writer or an unknown writer fails closed', () => {
+  const kk = makeKeys();
+  const envs = ledgerChain(kk, [genesisStep(kk), payeeStep()]);
+  const s = [...envs.map((e) => stored(e, NS_LEDGER)), { blobId: 'junk', namespace: NS_LEDGER, text: 'buy my token' }];
+  const run = (writer: string | null) => verifyLedger({ acct: ACCT, account: account(kk), inventory: s.map((x) => x.blobId), recalled: s, hwm: null, writers: new Map([['junk', writer]]) });
+  const outsider = run('0x' + '99'.repeat(32));
+  assert.ok(outsider.ok && outsider.ignored.length === 1);
+  assert.equal(!run(kk.lane.agent.publicKeyHex).ok && 'corrupt', 'corrupt');
+  assert.equal(run(null).ok, false);
 });
 
 test('S1: even the control key cannot revoke a key nobody bound, revoke the control lane, or backdate past its own checkpoint', () => {

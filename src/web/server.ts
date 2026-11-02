@@ -26,6 +26,7 @@ import { zkLoginClient } from '../adapters/zklogin.ts';
 import { CrossCheckedChain } from '../adapters/chain-crosscheck.ts';
 import { symbolOf } from '../adapters/rates.ts';
 import { processHealth } from '../ops/resilience.ts';
+import { laneServer } from '../services.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const WEB = join(ROOT, 'web');
@@ -231,7 +232,7 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         const instruction = String(body.instruction ?? '');
         const execute = body.execute === true;
         // Protected: the agent daemon runs the real Steward turn (agent key + LLM key live there).
-        const agent = new IpcClient(control.d.key, unixTransport(ipcPath(rt.cfg, 'agent'), 300_000));
+        const agent = new IpcClient(control.d.key, unixTransport(ipcPath(rt.cfg, 'agent'), 300_000), Date.now, laneServer(rt, 'agent'));
         const [prot, unprot] = await Promise.allSettled([
           agent.call('/turn', { instruction, execute }),
           runUnprotectedTurn({ mem: control.d.mem, chain: rt.chain, wallet: rt.cfg.stewardWallet ?? '', model: createModel(rt.cfg) }, instruction),

@@ -3,7 +3,7 @@
 import { strict as assert } from 'node:assert';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Health, isTransient, resilient, withRetry } from '../src/ops/resilience.ts';
@@ -190,4 +190,27 @@ test('doctor: a fresh offline install passes with warnings; a world-readable key
   } finally {
     w.dispose();
   }
+});
+
+test('B3: a channel that fails fast while another is still pending never crashes the process', async () => {
+  let slowResolve!: (r: Response) => void;
+  const fetchImpl = ((url: string) => (String(url).includes('telegram') ? Promise.reject(new Error('fetch failed')) : new Promise<Response>((r) => (slowResolve = r)))) as unknown as typeof fetch;
+  const a = new Alerter({ webhook: 'https://hooks.example/x', telegram: { token: 't', chatId: '1' } }, { fetchImpl });
+  const p = a.send({ kind: 'test', severity: 'info', key: 'k', title: 't', text: 'x' });
+  await new Promise((r) => setTimeout(r, 20)); // the Telegram rejection lands first
+  slowResolve(new Response('ok'));
+  assert.deepEqual(await p, ['webhook']);
+});
+
+test('B8: config rejects typos instead of silently disabling protection; blanks never override saved setup', () => {
+  const base = { ANTIBODY_HOME: mkdtempSync(join(tmpdir(), 'ab-cfg-')) } as NodeJS.ProcessEnv;
+  assert.throws(() => loadConfig({ ...base, ANTIBODY_SENTINEL_THRESHOLD: 'O.6' }), /ANTIBODY_SENTINEL_THRESHOLD must be a number/);
+  assert.throws(() => loadConfig({ ...base, ANTIBODY_AUTO_QUARANTINE_SCORE: '7' }), /between 0 and 1/);
+  assert.throws(() => loadConfig({ ...base, ANTIBODY_CHAIN_TRANSPORT: 'grcp' }), /must be one of grpc, jsonrpc/);
+  assert.equal(loadConfig({ ...base, ANTIBODY_CHAIN_TRANSPORT: 'GRPC' }).chainTransport, 'grpc');
+  assert.throws(() => loadConfig({ ...base, ANTIBODY_BACKEND: 'live', SUI_NETWORK: 'testnet' }), /testnet needs/);
+  writeFileSync(join(base.ANTIBODY_HOME!, 'antibody.json'), JSON.stringify({ accountId: '0x' + 'ab'.repeat(32), stewardWallet: '0x' + 'cd'.repeat(32) }));
+  const c = loadConfig({ ...base, MEMWAL_ACCOUNT_ID: '', STEWARD_WALLET_ADDRESS: '  ' });
+  assert.equal(c.accountId, '0x' + 'ab'.repeat(32), 'an empty line in antibody.env keeps the saved account');
+  assert.equal(loadConfig({ ANTIBODY_HOME: '~/.antibody-x' } as NodeJS.ProcessEnv).home, join(homedir(), '.antibody-x'), '~ expands');
 });

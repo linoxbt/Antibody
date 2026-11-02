@@ -23,6 +23,7 @@ import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, readKeyText, s
 import { createRuntime, type Runtime } from '../runtime.ts';
 import { setupLive, setupOffline } from '../setup.ts';
 import {
+  laneServer,
   buildControl,
   buildSigner,
   createModel,
@@ -84,7 +85,7 @@ async function confirmLast6(address: string, provided?: string): Promise<void> {
 
 function controlClient(r: Runtime, role: 'user' | 'agent' | 'ingest'): { client: IpcClient; key: ReturnType<typeof loadLaneKey> } {
   const key = loadLaneKey(r.cfg, role);
-  return { client: new IpcClient(key, unixTransport(socketPath(r.cfg, 'control'))), key };
+  return { client: new IpcClient(key, unixTransport(socketPath(r.cfg, 'control')), Date.now, laneServer(r, 'antibody')), key };
 }
 
 function seedFrom(v: Record<string, string | boolean | undefined>): QuarantineSeed {

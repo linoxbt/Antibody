@@ -209,6 +209,13 @@ export interface LedgerInput {
   inventory: string[];
   /** Texts recalled from antibody.ledger. */
   recalled: StoredMemory[];
+  /**
+   * A revocation being recorded right now: the key is already gone on-chain but
+   * its lane.revoke is not written yet. Without assuming it, every record that
+   * key signed would fail SIGNER_REMOVED and the revoke itself could never be
+   * appended. Only honoured for a bound key that is no longer on-chain.
+   */
+  assumeRevoked?: { pub: string; lane: Lane; ckpt: number }[];
   /** Writer of each blob as the relayer reports it (B11: tells outside noise from tampering). */
   writers?: ReadonlyMap<string, string | null>;
   /** Highest verified head this machine has seen (rollback guard). */
@@ -252,7 +259,7 @@ function laneKeysOf(candidates: { record: LedgerRecord; pub: string; sigOk: bool
  * touch the control lane, and a revoke's checkpoint cannot be later than the
  * record that carries it.
  */
-function trustedHistory(parsed: { text: string; record: LedgerRecord }[], account: AccountState, acct: string): LaneHistory | string {
+function trustedHistory(parsed: { text: string; record: LedgerRecord }[], account: AccountState, acct: string, assume: { pub: string; lane: Lane; ckpt: number }[] = []): LaneHistory | string {
   const known: LaneHistory['known'] = [];
   const revoked: LaneHistory['revoked'] = [];
   const geneses = parsed.filter((p) => p.record.seq === 0 && p.record.type === 'genesis');
@@ -294,6 +301,12 @@ function trustedHistory(parsed: { text: string; record: LedgerRecord }[], accoun
       if (existing && existing.lane !== lane) return `seq ${p.record.seq}: lane.rotate names a ${existing.lane} key as ${lane}`;
       known.push({ pub: pl.pub, lane });
     }
+  }
+  const onChain = new Set(account.delegateKeys.map((k) => k.publicKeyHex.toLowerCase()));
+  for (const a of assume) {
+    if (onChain.has(a.pub) || revoked.some((r) => r.pub === a.pub)) continue;
+    if (!known.some((k) => k.pub === a.pub && k.lane === a.lane) || a.lane === 'antibody') return `cannot assume a revocation of ${a.pub.slice(0, 12)}…: not a known ${a.lane} key`;
+    revoked.push(a);
   }
   return { known, revoked };
 }
@@ -348,7 +361,7 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
     else parsed.push(c); // includes bad signatures from lane writers: tampering fails closed below
   }
   if (parsed.length === 0) return fail('LEDGER_EMPTY', `no ledger records from this account's lane keys (${ignored.length} other blob(s) ignored): run \`antibody setup\` to write genesis`);
-  const history = trustedHistory(parsed, input.account, input.acct);
+  const history = trustedHistory(parsed, input.account, input.acct, input.assumeRevoked);
   if (typeof history === 'string') return fail('LEDGER_CORRUPT', history);
   const bound = bindLanes(input.account, history);
   if (!bound.ok) return fail('LEDGER_CORRUPT', bound.error);

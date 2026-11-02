@@ -38,8 +38,9 @@ export interface Runtime {
   banners: string[];
 }
 
-export function createRuntime(cfg: Config, role: Role | 'cli'): Runtime {
-  ensureState(cfg.home);
+export function createRuntime(cfg: Config, role: Role | 'cli', o: { readOnly?: boolean } = {}): Runtime {
+  // readOnly (doctor): never migrate files; doctor reports the state version instead.
+  if (!o.readOnly) ensureState(cfg.home);
   const offline = cfg.backend === 'offline';
   const banners: string[] = [];
   if (offline) banners.push(SIMULATED_BANNER);

@@ -17,8 +17,6 @@ import { LANE_LABEL, type QuarantineSeed } from '../core/types.ts';
 import type { Control } from '../control/control.ts';
 import { IpcClient, unixTransport } from '../ipc.ts';
 import type { Runtime } from '../runtime.ts';
-import { createModel } from '../services.ts';
-import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { Auth, AuthError } from './auth.ts';
 import { ipcPath } from '../config.ts';
 import { RevokeFlow } from './revoke.ts';
@@ -235,7 +233,7 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         const agent = new IpcClient(control.d.key, unixTransport(ipcPath(rt.cfg, 'agent'), 300_000), Date.now, laneServer(rt, 'agent'));
         const [prot, unprot] = await Promise.allSettled([
           agent.call('/turn', { instruction, execute }),
-          runUnprotectedTurn({ mem: control.d.mem, chain: rt.chain, wallet: rt.cfg.stewardWallet ?? '', model: createModel(rt.cfg) }, instruction),
+          agent.call('/compare', { instruction }),
         ]);
         return send(200, {
           protected: prot.status === 'fulfilled' ? prot.value : { error: (prot.reason as Error).message },

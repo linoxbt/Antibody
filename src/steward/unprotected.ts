@@ -10,7 +10,6 @@ import { toBaseUnits, formatUnits } from '../core/units.ts';
 import { NS_CONTENT } from '../core/types.ts';
 import type { ChainReader } from '../adapters/chain.ts';
 import type { MemoryClient } from '../adapters/memory.ts';
-import { decodeHeader, HDR_REQUIRED, paymentRequiredSchema } from '../payments/x402.ts';
 import type { ChatMessage, ChatModel } from './model.ts';
 import { STEWARD_TOOLS } from './turn.ts';
 
@@ -32,7 +31,7 @@ export interface UnprotectedResult {
 const SYSTEM = `You are an assistant that pays Ada's recurring bills from her Sui wallet. Use your tools. Be brief.`;
 
 export async function runUnprotectedTurn(
-  d: { mem: MemoryClient; chain: ChainReader; wallet: string; model: ChatModel; fetchImpl?: typeof fetch; now?: () => number },
+  d: { mem: MemoryClient; chain: ChainReader; wallet: string; model: ChatModel; now?: () => number },
   instruction: string,
 ): Promise<UnprotectedResult> {
   const messages: ChatMessage[] = [
@@ -69,9 +68,10 @@ export async function runUnprotectedTurn(
       break;
     }
     for (const call of reply.toolCalls) {
-      const args = JSON.parse(call.arguments || '{}') as Record<string, string>;
+      let args: Record<string, string> = {};
       let result: unknown;
       try {
+        args = JSON.parse(call.arguments || '{}') as Record<string, string>;
         switch (call.name) {
           case 'recall_memories': {
             // Everything the relayer returns, unverified and unlabelled.
@@ -91,17 +91,6 @@ export async function runUnprotectedTurn(
             wouldSend = await dryRun(args.recipient ?? '', args.amount ?? '0', args.coinType);
             result = { decision: 'WOULD_SEND', reasons: [`would have sent ${wouldSend.amount} ${wouldSend.symbol} to ${wouldSend.recipient}`] };
             break;
-          case 'pay_x402': {
-            const f = d.fetchImpl ?? fetch;
-            const res = await f(args.url ?? '');
-            const h = res.headers.get(HDR_REQUIRED);
-            if (res.status !== 402 || !h) throw new Error(`no 402 from ${args.url}`);
-            const req = decodeHeader(h, paymentRequiredSchema).accepts[0]!;
-            const meta = await d.chain.getCoinMetadata(normalizeCoinType(req.asset));
-            wouldSend = await dryRun(req.payTo, formatUnits(req.amount, meta?.decimals ?? 9), req.asset);
-            result = { decision: 'WOULD_SEND', reasons: [`would have paid ${wouldSend.amount} ${wouldSend.symbol} to ${wouldSend.recipient}`] };
-            break;
-          }
           default:
             result = { error: `unknown tool ${call.name}` };
         }

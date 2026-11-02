@@ -10,7 +10,7 @@
  */
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { laneKeyFromSeedHex } from './core/keys.ts';
 import { ROLES, type Config, type Role } from './config.ts';
 
@@ -35,14 +35,28 @@ export function keyPath(home: string, role: Role): string {
 // files keep working; `antibody keys encrypt` converts them in place.
 
 const ENC_PREFIX = 'antibody-key:v1:scrypt:';
-const SCRYPT = { logN: 15, r: 8, p: 1 };
+/** scrypt cost for new files (N = 2^17, OWASP's recommendation). Files keep the parameters they were written with. */
+const SCRYPT = { logN: 17, r: 8, p: 1 };
 
 export const isEncryptedKeyText = (text: string) => text.trimStart().startsWith(ENC_PREFIX);
 
-/** The passphrase from the environment, if any (a file wins so it stays out of `ps` and shell history). */
-export function keyPassphrase(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.ANTIBODY_KEY_PASSPHRASE_FILE) return readFileSync(env.ANTIBODY_KEY_PASSPHRASE_FILE, 'utf8').replace(/\r?\n$/, '');
-  return env.ANTIBODY_KEY_PASSPHRASE || null;
+/** Environment variable suffix for a role's own passphrase, e.g. ANTIBODY_KEY_PASSPHRASE_SIGNER. */
+export const passphraseVars = (role: Role) => [`ANTIBODY_KEY_PASSPHRASE_${role.toUpperCase()}_FILE`, `ANTIBODY_KEY_PASSPHRASE_${role.toUpperCase()}`];
+
+/**
+ * The passphrase from the environment, if any. S16: a role's own variable
+ * (ANTIBODY_KEY_PASSPHRASE_<ROLE>[_FILE]) wins over the shared one, so each key
+ * can have its own passphrase and each daemon is given only its own. A file
+ * wins over a value, so it stays out of `ps` and shell history.
+ */
+export function keyPassphrase(env: NodeJS.ProcessEnv = process.env, role?: Role): string | null {
+  const names = [...(role ? passphraseVars(role) : []), 'ANTIBODY_KEY_PASSPHRASE_FILE', 'ANTIBODY_KEY_PASSPHRASE'];
+  for (const n of names) {
+    const v = env[n];
+    if (!v) continue;
+    return n.endsWith('_FILE') ? readFileSync(v, 'utf8').replace(/\r?\n$/, '') : v;
+  }
+  return null;
 }
 
 const kdf = (pass: string, salt: Buffer, o = SCRYPT) => scryptSync(pass.normalize('NFKC'), salt, 32, { N: 2 ** o.logN, r: o.r, p: o.p, maxmem: 256 * 2 ** o.logN * o.r });
@@ -72,31 +86,42 @@ export function decryptKeyText(text: string, pass: string): string {
 }
 
 /** What goes on disk for a key: encrypted when a passphrase is configured. */
-export function sealKeyText(plain: string, env: NodeJS.ProcessEnv = process.env): string {
-  const pass = keyPassphrase(env);
+export function sealKeyText(plain: string, env: NodeJS.ProcessEnv = process.env, role?: Role): string {
+  const pass = keyPassphrase(env, role);
   return (pass ? encryptKeyText(plain, pass) : plain.trim()) + '\n';
 }
 
 /** A key file's secret, decrypting when needed. */
-export function readKeyText(p: string, env: NodeJS.ProcessEnv = process.env): string {
+export function readKeyText(p: string, env: NodeJS.ProcessEnv = process.env, role?: Role): string {
   const raw = readFileSync(p, 'utf8');
   if (!isEncryptedKeyText(raw)) return raw.trim();
-  const pass = keyPassphrase(env);
-  if (!pass) throw new Error(`${p} is encrypted: set ANTIBODY_KEY_PASSPHRASE (or ANTIBODY_KEY_PASSPHRASE_FILE) to unlock it`);
+  const pass = keyPassphrase(env, role ?? roleOfKeyPath(p));
+  if (!pass) throw new Error(`${p} is encrypted: set ANTIBODY_KEY_PASSPHRASE (or ANTIBODY_KEY_PASSPHRASE_<ROLE>, or a _FILE variant) to unlock it`);
   return decryptKeyText(raw, pass).trim();
 }
 
 /** Encrypt existing plaintext key files in place (atomic per file). Returns the files converted. */
-export function encryptKeysInPlace(home: string, pass: string): string[] {
+/** The role a key file belongs to, from its path (keys/<role>/…). */
+function roleOfKeyPath(p: string): Role | undefined {
+  const role = basename(dirname(p)) as Role;
+  return ROLES.includes(role) ? role : undefined;
+}
+
+/**
+ * Encrypt existing plaintext key files in place (atomic per file). Each file
+ * uses its role's own passphrase when one is set (S16), else `pass`.
+ */
+export function encryptKeysInPlace(home: string, pass: string, env: NodeJS.ProcessEnv = process.env): string[] {
   const done: string[] = [];
   for (const role of ROLES) {
     const p = keyPath(home, role);
     if (!existsSync(p)) continue;
     const raw = readFileSync(p, 'utf8');
     if (isEncryptedKeyText(raw)) continue;
+    const own = keyPassphrase(env, role) ?? pass;
     const tmp = `${p}.tmp-${process.pid}`;
-    writeFileSync(tmp, encryptKeyText(raw, pass) + '\n', { mode: 0o600, flag: 'wx' });
-    if (decryptKeyText(readFileSync(tmp, 'utf8'), pass).trim() !== raw.trim()) throw new Error(`round-trip check failed for ${p}; left unchanged`);
+    writeFileSync(tmp, encryptKeyText(raw, own) + '\n', { mode: 0o600, flag: 'wx' });
+    if (decryptKeyText(readFileSync(tmp, 'utf8'), own).trim() !== raw.trim()) throw new Error(`round-trip check failed for ${p}; left unchanged`);
     renameSync(tmp, p);
     done.push(p);
   }
@@ -108,7 +133,7 @@ export function writeKeyFile(home: string, role: Role, contents: string): string
   mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
   chmodSync(dirname(p), 0o700);
   if (existsSync(p)) throw new Error(`refusing to overwrite existing key ${p}`);
-  writeFileSync(p, sealKeyText(contents), { mode: 0o600, flag: 'wx' });
+  writeFileSync(p, sealKeyText(contents, process.env, role), { mode: 0o600, flag: 'wx' });
   return p;
 }
 

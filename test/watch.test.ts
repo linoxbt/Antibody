@@ -99,3 +99,25 @@ test('offline end-to-end: an airdropped poisoned coin is observed and raises an 
   assert.ok(hit.incident, 'the sentinel raised an incident on its own');
   assert.ok(w.control.incidents.list().some((i) => i.objectId === coin.objectId));
 });
+
+test('B24: polling does not accumulate abort listeners, and a stream that keeps ending falls back to polling', async () => {
+  const ac = new AbortController();
+  let opened = 0;
+  let polls = 0;
+  const chain = {
+    latestCheckpoint: async () => (++polls, 1),
+    watchCheckpoints: async () => {
+      opened++;
+    },
+  };
+  const logs: string[] = [];
+  const p = watchWallet({ chain: chain as never, wallet: '0x1', scan: async () => ({ items: [], skipped: 0, checkpoint: 1 }), signal: ac.signal, pollMs: 5, minScanGapMs: 0, retryStreamMs: 60_000, log: (e) => logs.push(e) });
+  await new Promise((r) => setTimeout(r, 4_000));
+  const { getEventListeners } = (await import('node:events')) as unknown as { getEventListeners(t: EventTarget, n: string): unknown[] };
+  assert.ok(getEventListeners(ac.signal, 'abort').length <= 2, 'one live sleep at most, not one per tick');
+  ac.abort();
+  await p;
+  assert.ok(opened <= 3, `stream reopened ${opened} times`);
+  assert.ok(logs.includes('stream.flapping'));
+  assert.ok(polls > 10, 'fell back to polling');
+});

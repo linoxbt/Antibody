@@ -28,11 +28,13 @@ export interface WatchOptions {
   onScan?: (r: ScanResult, why: string) => void;
 }
 
+/** Abortable sleep that removes its abort listener when the timer fires (B24: no listener per tick). */
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((res) => {
     if (signal.aborted) return res();
-    const t = setTimeout(res, ms);
-    signal.addEventListener('abort', () => (clearTimeout(t), res()), { once: true });
+    const onAbort = () => (clearTimeout(t), res());
+    const t = setTimeout(() => (signal.removeEventListener('abort', onAbort), res()), ms);
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 
 export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mode: 'stream' | 'poll' }> {
@@ -72,13 +74,22 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
   };
 
   trigger(0, 'startup'); // catch up on anything that landed while we were down
+  let quickEnds = 0;
   while (!o.signal.aborted) {
     if (o.chain.watchCheckpoints && mode === 'stream') {
       log('stream.open', { wallet: o.wallet });
+      const opened = Date.now();
       try {
         await o.chain.watchCheckpoints(o.wallet, (seq) => trigger(seq, 'stream'), o.signal);
         if (o.signal.aborted) break;
         log('stream.end');
+        // B24: a stream that keeps ending at once must not spin: back off, then fall back to polling.
+        quickEnds = Date.now() - opened < 5_000 ? quickEnds + 1 : 0;
+        if (quickEnds >= 3) {
+          log('stream.flapping', { fallback: 'poll' });
+          mode = 'poll';
+          quickEnds = 0;
+        } else await sleep(Math.min(30_000, 500 * 2 ** (quickEnds - 1)), o.signal);
       } catch (e) {
         if (o.signal.aborted) break;
         log('stream.error', { error: (e as Error).message, fallback: 'poll' });

@@ -64,9 +64,67 @@ test('sandbox: a wallet signs in, sends a poisoned coin, and quarantines it from
     await page.goto(stack.base + '/app/settings', { waitUntil: 'networkidle' });
     const found = await axe(page);
     assert.equal(found.length, 0, fmt(found));
+
+    // Execute is for one run only: the checkbox is clear again once the run is back.
+    await page.goto(stack.base + '/app/steward', { waitUntil: 'networkidle' });
+    await page.locator('#execute').check();
+    await page.getByRole('textbox', { name: 'Instruction to Steward' }).fill("Pay this month's rent.");
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    const context = page.locator('.pane.protected details');
+    await context.waitFor();
+    assert.equal(await page.locator('#execute').isChecked(), false, 'execute resets after a run');
+
+    // Auto refresh re-renders only when the state changed, and keeps an open <details> open.
+    await context.locator('summary').click();
+    assert.equal(await page.evaluate(() => (window as unknown as { __abRefreshNow(): Promise<boolean> }).__abRefreshNow()), false, 'unchanged state: no re-render');
+    await page.evaluate(() => fetch('/api/sandbox/payee', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: JSON.stringify({ label: 'gym', address: '0x' + 'ab'.repeat(32), cap: '25' }) }).then((r) => r.json()));
+    assert.equal(await page.evaluate(() => (window as unknown as { __abRefreshNow(): Promise<boolean> }).__abRefreshNow()), true, 'changed state: re-rendered');
+    assert.equal(await page.locator('.pane.protected details').evaluate((d) => (d as HTMLDetailsElement).open), true, 'the open <details> stays open');
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'SUMMARY', 'focus stays on the summary');
     assert.deepEqual(errors, []);
   } finally {
     await ctx.close();
+  }
+});
+
+test('console navigation: focus moves to the view heading; the closed phone drawer is inert', async () => {
+  for (const mobile of [false, true]) {
+    const ctx = await newContext(stack.browser, { mobile });
+    try {
+      const page = await ctx.newPage();
+      const errors = watchErrors(page);
+      await page.goto(stack.base + '/login', { waitUntil: 'networkidle' });
+      await page.locator('#demo').click();
+      await page.waitForURL(/\/app/);
+      await page.locator('#view h1').waitFor();
+      const side = page.locator('#side');
+      const burger = page.locator('.burger-app');
+      const inert = () => side.evaluate((e) => (e as HTMLElement).inert);
+      assert.ok(await page.locator('.tb-right .pill').first().isVisible(), 'the mode badge is visible');
+      if (mobile) {
+        assert.equal(await inert(), true, 'closed drawer is inert');
+        await burger.click();
+        assert.equal(await inert(), false, 'open drawer is not inert');
+        assert.equal(await burger.getAttribute('aria-label'), 'Close navigation');
+        assert.ok(await side.evaluate((e) => e.contains(document.activeElement)), 'focus moves into the drawer');
+        await page.keyboard.press('Escape');
+        assert.equal(await inert(), true, 'closed again: inert');
+        assert.ok(await burger.evaluate((e) => e === document.activeElement), 'focus returns to the burger');
+        await burger.click();
+      } else {
+        assert.equal(await inert(), false, 'desktop sidebar is never inert');
+      }
+      await side.locator('a[href="/app/ledger"]').click();
+      await page.waitForURL(/\/app\/ledger$/);
+      await page.waitForFunction(() => document.activeElement?.matches('#view h1'));
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('[role="status"]')).some((e) => e.textContent === 'Ledger loaded'));
+      if (mobile) assert.equal(await inert(), true, 'navigating closes the drawer');
+      await page.goBack();
+      await page.waitForFunction(() => location.pathname === '/app' && document.activeElement?.matches('#view h1'));
+      assert.deepEqual(errors, []);
+    } finally {
+      await ctx.close();
+    }
   }
 });
 

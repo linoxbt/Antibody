@@ -1,8 +1,9 @@
 import { el, protectedPane, unprotectedPane, plural } from '../../ui.js';
 import { head } from '../kit.js';
 
-const PRESETS = ["Pay this month's rent.", "Pay Maya's allowance.", 'Pay the electricity bill at http://127.0.0.1:7403/bill/2026-11'];
-// Live results survive re-renders (auto refresh, navigation back to this view).
+const BILL = 'Pay the electricity bill at http://127.0.0.1:7403/bill/2026-11';
+const PRESETS = ["Pay this month's rent.", "Pay Maya's allowance.", BILL];
+// Live results survive re-renders (auto refresh, navigation back to this view); execute is one run only.
 let live = { instruction: PRESETS[0], execute: false, out: null, running: false };
 
 function lastRecordedRun(src) {
@@ -37,6 +38,8 @@ export default {
         ctx.rerender();
         return ctx.toast(`Replaying the recorded run from chapter ${to + 1}: “${src.steps[to].title}”.`);
       }
+      const s = ctx.state;
+      if (live.execute && s.backend === 'live' && !s.simulated && !confirm(`Execute on ${s.network ?? 'mainnet'}?\n\nIf the policy allows this payment, a real payment may be signed and sent from Steward's wallet. It cannot be undone.`)) return;
       ctx.act(async () => {
         live.running = true;
         live.instruction = input.value;
@@ -46,6 +49,7 @@ export default {
           await src.refresh();
         } finally {
           live.running = false;
+          live.execute = false;
           ctx.rerender();
         }
       });
@@ -77,6 +81,7 @@ export default {
             el('div', { class: 'pane protected' }, el('div', { class: 'pane-head' }, el('span', { class: 'kicker' }, 'Steward + Antibody'), model ? el('span', { class: 'pill live plain' }, model) : null), protectedPane(run?.protected)),
             el('div', { class: 'pane unprotected' }, el('div', { class: 'pane-head' }, el('span', { class: 'kicker' }, 'Unprotected agent'), el('span', { class: 'pill bad plain' }, 'no policy')), unprotectedPane(run?.unprotected)),
           ),
+      !recorded && presetList.includes(BILL) ? el('p', { class: 'hint' }, 'The electricity bill preset needs ', el('code', {}, 'antibody dev bill-server --payto 0x…'), ' running.') : null,
       run ? el('p', { class: 'hint' }, `Steward read ${plural(ctxItems, 'memory')} through Antibody; quarantined and unresolved memories never reached it.`) : null,
     );
   },

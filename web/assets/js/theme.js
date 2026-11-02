@@ -22,24 +22,6 @@ const SUN = ['M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0', 'M12 2v2M12 20v2M4.9 4.9
 const MOON = ['M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'];
 const icon = (paths) => svg('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, ...paths.map((d) => svg('path', { d })));
 
-/** A button that flips the theme; shows the sun in dark (go light) and the moon in light. */
-export function themeButton() {
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'theme-btn';
-  const paint = () => {
-    const light = theme() === 'light';
-    b.replaceChildren(icon(light ? MOON : SUN));
-    b.setAttribute('aria-label', light ? 'Switch to dark theme' : 'Switch to soft light theme');
-    b.title = light ? 'Dark theme' : 'Soft light theme';
-  };
-  b.addEventListener('click', () => setTheme(theme() === 'light' ? 'dark' : 'light'));
-  addEventListener('themechange', paint);
-  paint();
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', META[theme()]);
-  return b;
-}
-
 /** A two-way Dark / Light control for menus and footers. */
 export function themeSwitch() {
   const wrap = document.createElement('div');

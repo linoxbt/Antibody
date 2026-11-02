@@ -1,5 +1,6 @@
 import { el } from '../../ui.js';
 import { icon, stat, card, navLink, shortAddr, decisionVerdict, usd } from '../kit.js';
+import { lastRebuild } from './keys.js';
 
 /** The proposal a decision memory recorded: amount, coin symbol, recipient, label. */
 export function proposal(n) {
@@ -44,9 +45,22 @@ export default {
     const open = s.incidents.filter((i) => i.status === 'open');
     const qs = s.ledger.ok ? s.ledger.quarantines.filter((q) => !q.released) : [];
     const decisions = s.nodes.filter((n) => n.kind === 'decision').slice(-5).reverse();
-    const healthy = s.ledger.ok && s.lanes.every((l) => l.status === 'active');
+    // What policy itself checks before any payment (R0 ledger, the delegate set cross-check, dependency health).
+    const xcheckOk = s.crossCheck?.agreed !== false;
+    const held = !s.ledger.ok || !xcheckOk || !!s.health?.degraded;
+    const revoked = s.lanes.filter((l) => l.status !== 'active');
+    const status = !s.ledger.ok
+      ? `Ledger unreadable (${s.ledger.code}): every payment is blocked until it verifies.`
+      : !xcheckOk
+        ? `The second Sui RPC disagrees on the delegate set${s.crossCheck.detail ? ` (${s.crossCheck.detail})` : ''}: every payment is blocked until they agree.`
+        : s.health?.degraded
+          ? 'A connection is failing: payments that need it are blocked until it recovers (Settings → Connections).'
+          : `Ledger #${s.ledger.head.seq} verified · ${s.lanes.length - revoked.length} of ${s.lanes.length} lanes active · checkpoint ${s.checkpoint}`;
+    const laneNotice = revoked.length ? `A lane is revoked: ${revoked.map((l) => l.label ?? l.lane).join(', ')}. ${s.sandbox ? 'Reset your sandbox in Settings for fresh keys.' : 'Rotate in a new key from Keys.'}` : null;
 
-    const rb = ctx.src.mode === 'recorded' ? ctx.src.steps.slice(0, ctx.src.index + 1).reverse().find((x) => x.rebuildDigest && x.state.digest === s.digest)?.rebuildDigest : null;
+    // Restoration: compare only digests taken at this same moment (recorded step, or the last live rebuild).
+    const live = lastRebuild();
+    const rb = ctx.src.mode === 'recorded' ? ctx.src.steps.slice(0, ctx.src.index + 1).reverse().find((x) => x.rebuildDigest && x.state.digest === s.digest)?.rebuildDigest : live?.live === s.digest ? live.digest : null;
 
     return el(
       'div',
@@ -57,8 +71,9 @@ export default {
         el(
           'div',
           {},
-          el('h1', {}, `${greeting()}.`, ' ', el('span', { class: 'tail' }, healthy ? 'Steward is guarded.' : 'Payments are held.')),
-          el('div', { class: 'health' }, el('span', { class: `dot ${healthy ? 'g' : 'r'}` }), healthy ? `Ledger #${s.ledger.head.seq} verified · ${s.lanes.length} lanes active · checkpoint ${s.checkpoint}` : s.ledger.ok ? 'A lane is revoked: rotate it from Keys.' : `Ledger unreadable (${s.ledger.code}): every payment is blocked until it verifies.`),
+          el('h1', {}, `${greeting()}.`, ' ', el('span', { class: 'tail' }, held ? 'Payments are held.' : 'Steward is guarded.')),
+          el('div', { class: 'health' }, el('span', { class: `dot ${held ? 'r' : 'g'}` }), status),
+          laneNotice ? el('div', { class: 'health', style: 'display:flex' }, el('span', { class: 'dot y' }), laneNotice) : null,
         ),
         el('div', { class: 'actions' }, s.sandbox ? attackButton(ctx) : null, navLink('/app/steward', 'Run Steward', `btn ${s.sandbox ? 'btn-ghost' : 'btn-primary'} btn-sm`)),
       ),

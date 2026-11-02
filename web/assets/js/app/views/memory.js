@@ -1,7 +1,8 @@
 import { el, plural, renderGraph, nodeDetail } from '../../ui.js';
-import { head } from '../kit.js';
+import { head, quarantine } from '../kit.js';
 
-// View state survives re-renders; it resets when the recorded moment changes.
+// View state survives re-renders; it resets when the recorded moment changes, and the
+// selection is read from ?node= again on every real navigation.
 let selected = null;
 let highlight;
 let seenIndex = null;
@@ -20,11 +21,12 @@ export default {
   render(ctx) {
     const src = ctx.src;
     const s = src.state;
-    if (seenIndex !== src.index || highlight === undefined) {
+    const moved = seenIndex !== src.index || highlight === undefined;
+    if (moved) {
       seenIndex = src.index;
       highlight = defaultHighlight(src);
-      selected = ctx.params().get('node') ?? null;
     }
+    if (moved || ctx.navigated) selected = ctx.params().get('node') ?? null;
     const qs = s.ledger.ok ? s.ledger.quarantines.filter((q) => !q.released) : [];
 
     const seed = el('select', { 'aria-label': 'Highlight a quarantine', style: 'height:40px;font-size:14px' }, el('option', { value: '' }, 'No highlight'), ...qs.map((q) => el('option', { value: String(q.seq), ...(q.seq === highlight ? { selected: true } : {}) }, `Quarantine #${q.seq} · ${q.seed.type}${q.auto ? ' · auto' : ''}`)));
@@ -45,8 +47,10 @@ export default {
       onSelect: (n) => {
         selected = n.id;
         history.replaceState(null, '', `/app/memory?node=${encodeURIComponent(n.id)}`);
-        ctx.rerender();
-        requestAnimationFrame(() => document.getElementById('node-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+        ctx.rerender().then(() => {
+          document.querySelector(`.graph [data-id="${CSS.escape(n.id)}"]`)?.focus({ preventScroll: true });
+          document.getElementById('node-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
       },
     });
 
@@ -58,16 +62,15 @@ export default {
             {
               class: 'btn btn-ghost btn-sm',
               style: 'margin-top:16px',
-              onclick: () =>
+              onclick: (e) => {
+                const button = e.currentTarget;
                 ctx.act(async () => {
-                  const pv = await src.api('/api/preview', { type: 'memory', value: n.id });
-                  if (!confirm(`Quarantine this ${n.kind}?\n\n${plural(pv.memories - pv.decisions, 'memory')} and ${plural(pv.decisions, 'decision')} leave Steward's context. They stay on Walrus as evidence.`)) return;
-                  const r = await src.api('/api/quarantine', { type: 'memory', value: n.id, reason: 'quarantined from the console' });
+                  const r = await quarantine(ctx, { type: 'memory', value: n.id, reason: 'quarantined from the console', what: `this ${n.kind}`, button });
+                  if (!r) return;
                   highlight = r.seq;
-                  await src.refresh();
-                  ctx.toast(`Quarantine written as ledger #${r.seq}.`);
                   ctx.rerender();
-                }),
+                });
+              },
             },
             'Quarantine',
           )

@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { buildEnvelope } from '../src/core/envelope.ts';
 import { uuidv7 } from '../src/core/encoding.ts';
 import { laneKeyFromSeedHex } from '../src/core/keys.ts';
-import { NS_CONTENT } from '../src/core/types.ts';
+import { NS_CONTENT, NS_LEDGER } from '../src/core/types.ts';
 import { CAST, createWorld, POISON_COIN, seedBaseline, type World } from '../src/dev/world.ts';
 import { IpcClient } from '../src/ipc.ts';
 import { buildControl } from '../src/services.ts';
@@ -264,4 +264,26 @@ test('FR-14: an incident report covers the blast radius, is logged per quarantin
   const state = await stateJson(w.rt, w.control);
   assert.equal(state.reports.at(-1)!.url, upload.url);
   await assert.rejects(w.control.report(0), /not a quarantine record/);
+});
+
+test('I-7 (B1): when the ledger stops verifying, quarantined memories do not come back into Steward context', async () => {
+  const w = await createWorld();
+  try {
+    await seedBaseline(w);
+    const coin = w.airdrop(POISON_COIN);
+    await w.scan();
+    await w.quarantine({ type: 'source', value: coin.objectId });
+    const before = await w.control.recallForAgent('landlord moved new wallet rent', 50);
+    assert.ok(!before.some((c) => /SYSTEM NOTE/.test(c.text)), 'quarantined while the ledger verifies');
+    // Tamper with one ledger record the way a lying relayer could, then read with a fresh cache.
+    const ledgerBlob = (await w.rt.memory(laneKeyFromSeedHex(w.readKey('control'))).inventory(NS_LEDGER))[1]!.blobId;
+    w.rt.relayer!.tamper(ledgerBlob, (t) => t.replace('landlord', 'landlorx'));
+    const fresh = buildControl(w.rt, { signer: null, noCache: true, cacheDirOverride: mkdtempSync(join(tmpdir(), 'ab-i7-')) });
+    const snap = await fresh.snapshot();
+    assert.equal(snap.ledger.ok, false);
+    assert.deepEqual(await fresh.recallForAgent('landlord moved new wallet rent', 50), [], 'no context at all');
+    assert.ok([...snap.projection.lineage.nodes.values()].every((n) => !contextEligible(n)), 'nothing eligible anywhere');
+  } finally {
+    w.dispose();
+  }
 });

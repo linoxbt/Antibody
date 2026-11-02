@@ -131,7 +131,7 @@ export class Control {
     const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read() });
     const content = await retrieveContent(this.d.mem, known);
     if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories]);
-    const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId) });
+    const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId), createdAt: new Map(content.inventory.map((e) => [e.blobId, e.createdAt])) });
     if (ledger.ok) this.hwm.advance(ledger.head);
     else {
       this.d.log.warn('ledger.unverified', { code: ledger.code, detail: ledger.detail });
@@ -238,6 +238,11 @@ export class Control {
    */
   async recallForAgent(query: string, limit = 12): Promise<ContextItem[]> {
     const snap = await this.snapshot();
+    if (!snap.ledger.ok) {
+      // I-7: quarantines are unknown without a verified ledger; give Steward nothing rather than poison.
+      this.d.log.warn('context.refused', { query, ledger: snap.ledger.code });
+      return [];
+    }
     const hits = await this.d.mem.recall(query, NS_CONTENT, 50);
     const byBlob = new Map<string, string>();
     for (const n of snap.projection.lineage.nodes.values()) for (const b of n.blobIds) byBlob.set(b, n.id);

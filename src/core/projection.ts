@@ -20,6 +20,42 @@ export interface ProjectionInput {
   content: StoredMemory[];
   /** blob ids listed for steward.mem; used to report coverage. */
   contentInventory: string[];
+  /** Relayer-reported creation time per blob id (inventory), used to catch backdated checkpoints (S3). */
+  createdAt?: ReadonlyMap<string, string>;
+}
+
+/**
+ * How far (in checkpoints, ≈15 min on Sui) a key's later write may claim an
+ * earlier checkpoint than its own earlier writes before it counts as backdated.
+ */
+export const BACKDATE_SLACK = 3600;
+
+/**
+ * S3: header.ckpt is chosen by the signer. Ordered by the relayer's own
+ * creation time, one key's writes must not jump backwards in checkpoint by more
+ * than BACKDATE_SLACK; a key that does so is trying to slip outside a signer
+ * window or revocation bound, and those envelopes are treated as unverified.
+ */
+export function findBackdated(verified: VerifiedInput[], createdAt: ReadonlyMap<string, string>): Map<string, string> {
+  const byPub = new Map<string, { v: VerifiedInput; t: number }[]>();
+  for (const v of verified) {
+    const t = Date.parse(createdAt.get(v.blobId) ?? '');
+    if (!Number.isFinite(t)) continue;
+    const list = byPub.get(v.env.header.pub);
+    if (list) list.push({ v, t });
+    else byPub.set(v.env.header.pub, [{ v, t }]);
+  }
+  const out = new Map<string, string>();
+  for (const list of byPub.values()) {
+    list.sort((a, b) => a.t - b.t || a.v.env.header.ckpt - b.v.env.header.ckpt);
+    let max = -Infinity;
+    for (const { v } of list) {
+      const c = v.env.header.ckpt;
+      if (c + BACKDATE_SLACK < max) out.set(v.blobId, `checkpoint ${c} is far below ${max}, which this key already used in an earlier write`);
+      max = Math.max(max, c);
+    }
+  }
+  return out;
 }
 
 export interface Projection {
@@ -47,7 +83,21 @@ export function buildProjection(input: ProjectionInput): Projection {
     else unverified.push({ blobId: m.blobId, code: v.code, reason: v.reason, ...(v.parsed ? { header: v.parsed.header } : {}) });
   }
   const seeds = input.ledger.ok ? activeSeeds(input.ledger) : [];
-  const lineage = computeLineage(verified, unverified, seeds);
+  const backdated = input.createdAt ? findBackdated(verified, input.createdAt) : new Map<string, string>();
+  const kept = backdated.size ? verified.filter((v) => !backdated.has(v.blobId)) : verified;
+  for (const v of verified) {
+    const why = backdated.get(v.blobId);
+    if (why) unverified.push({ blobId: v.blobId, code: 'BACKDATED', reason: why, header: v.env.header });
+  }
+  const lineage = computeLineage(kept, unverified, seeds);
+  if (!input.ledger.ok) {
+    // I-7: without a verified ledger the quarantine set is unknown, so nothing may
+    // enter model context (payments are already blocked by R0).
+    for (const n of lineage.nodes.values()) {
+      n.unresolved = true;
+      n.notes.push(`ledger not verified (${input.ledger.code}): quarantines unknown, excluded from context`);
+    }
+  }
   const inv = new Set(input.contentInventory);
   const missing = [...inv].filter((b) => !seen.has(b)).sort();
   return {

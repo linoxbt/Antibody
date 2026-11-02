@@ -100,8 +100,10 @@ export function bindLanes(account: AccountState, history: LaneHistory = { known:
     if (keys.length !== 1) issues.push(`lane ${lane} has ${keys.length} active keys on-chain (expected exactly 1)`);
   }
 
+  // A revocation only bounds a key the ledger already named; it never introduces one.
+  const knownPubs = new Set(history.known.map((k) => k.pub));
   for (const r of history.revoked) {
-    if (!bindings.has(r.pub)) bindings.set(r.pub, { pub: r.pub, lane: r.lane, status: 'revoked', maxCkpt: revokedCkpt.get(r.pub)! });
+    if (!bindings.has(r.pub) && knownPubs.has(r.pub)) bindings.set(r.pub, { pub: r.pub, lane: r.lane, status: 'revoked', maxCkpt: revokedCkpt.get(r.pub)! });
   }
   for (const k of history.known) {
     if (!bindings.has(k.pub)) {

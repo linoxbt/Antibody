@@ -210,18 +210,61 @@ export interface LedgerInput {
   hwm?: { seq: number; hash: string } | null;
 }
 
-function historyFrom(records: { record: LedgerRecord; lane?: Lane }[]): LaneHistory {
+/**
+ * Key history the ledger contributes, built only from records the control key
+ * signed (S1: a record must never authorise its own signer).
+ *
+ * The control (antibody) key is fixed by genesis: genesis names the four lane
+ * keys and must be signed by the antibody key it names, which must also be an
+ * antibody:control key on-chain (otherwise bindLanes marks it removed and
+ * nothing verifies). lane.rotate and lane.revoke records are applied in seq
+ * order and only after they verify as signed by that control key; a revoke may
+ * only name a key that is already bound (on-chain, in genesis, or by an
+ * earlier rotate) under the same lane, and never creates a binding; neither may
+ * touch the control lane, and a revoke's checkpoint cannot be later than the
+ * record that carries it.
+ */
+function trustedHistory(parsed: { text: string; record: LedgerRecord }[], account: AccountState, acct: string): LaneHistory | string {
   const known: LaneHistory['known'] = [];
   const revoked: LaneHistory['revoked'] = [];
-  for (const { record } of records) {
-    if (record.type === 'genesis') {
-      for (const l of (record.payload as LedgerPayload<'genesis'>).lanes) known.push({ pub: l.pub, lane: l.lane });
-    } else if (record.type === 'lane.rotate' || record.type === 'lane.revoke') {
-      const p = record.payload as LedgerPayload<'lane.rotate'>;
-      const lane = LABEL_LANE[p.label];
-      if (!lane) continue;
-      if (record.type === 'lane.rotate') known.push({ pub: p.pub, lane });
-      else revoked.push({ pub: p.pub, lane, ckpt: p.ckpt });
+  const geneses = parsed.filter((p) => p.record.seq === 0 && p.record.type === 'genesis');
+  // No (or several) genesis: the integrity checks below fail closed with a precise reason.
+  if (geneses.length !== 1) return { known, revoked };
+  const g = geneses[0]!;
+  const gp = g.record.payload as LedgerPayload<'genesis'>;
+  const controlPub = gp.lanes.find((l) => l.lane === 'antibody')?.pub;
+  if (!controlPub) return 'genesis names no antibody:control key';
+  for (const l of gp.lanes) known.push({ pub: l.pub, lane: l.lane });
+  const bindNow = () => {
+    const b = bindLanes(account, { known, revoked });
+    return b.ok ? b.bindings : b.error;
+  };
+  const gb = bindNow();
+  if (typeof gb === 'string') return gb;
+  const gv = verifyEnvelope(g.text, { acct, ns: NS_LEDGER, bindings: gb });
+  if (!gv.ok) return `genesis: ${gv.code} ${gv.reason}`;
+  if (gv.envelope.header.lane !== 'antibody' || gv.envelope.header.pub !== controlPub) return 'genesis must be signed by the antibody:control key it names';
+
+  const keyRecords = parsed.filter((p) => p.record.type === 'lane.rotate' || p.record.type === 'lane.revoke').sort((a, b) => a.record.seq - b.record.seq);
+  for (const p of keyRecords) {
+    const bindings = bindNow();
+    if (typeof bindings === 'string') return bindings;
+    const v = verifyEnvelope(p.text, { acct, ns: NS_LEDGER, bindings });
+    if (!v.ok) return `seq ${p.record.seq}: ${v.code} ${v.reason}`;
+    if (v.envelope.header.lane !== 'antibody' || v.envelope.header.pub !== controlPub) return `seq ${p.record.seq}: ${p.record.type} must be signed by the genesis antibody:control key`;
+    const pl = p.record.payload as LedgerPayload<'lane.revoke'>;
+    const lane = LABEL_LANE[pl.label];
+    if (!lane) return `seq ${p.record.seq}: unknown lane label ${pl.label}`;
+    if (lane === 'antibody') return `seq ${p.record.seq}: the control lane cannot be revoked or rotated in this build`;
+    const existing = bindings.get(pl.pub);
+    if (p.record.type === 'lane.revoke') {
+      if (!existing) return `seq ${p.record.seq}: lane.revoke names key ${pl.pub.slice(0, 12)}… that is not a bound lane key`;
+      if (existing.lane !== lane) return `seq ${p.record.seq}: lane.revoke names a ${existing.lane} key as ${lane}`;
+      if (pl.ckpt > v.envelope.header.ckpt) return `seq ${p.record.seq}: lane.revoke checkpoint ${pl.ckpt} is after the record's own checkpoint ${v.envelope.header.ckpt}`;
+      revoked.push({ pub: pl.pub, lane, ckpt: pl.ckpt });
+    } else {
+      if (existing && existing.lane !== lane) return `seq ${p.record.seq}: lane.rotate names a ${existing.lane} key as ${lane}`;
+      known.push({ pub: pl.pub, lane });
     }
   }
   return { known, revoked };
@@ -253,7 +296,9 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
       return fail('LEDGER_CORRUPT', `blob ${blobId}: ${(e as Error).message}`);
     }
   }
-  const bound = bindLanes(input.account, historyFrom(parsed));
+  const history = trustedHistory(parsed, input.account, input.acct);
+  if (typeof history === 'string') return fail('LEDGER_CORRUPT', history);
+  const bound = bindLanes(input.account, history);
   if (!bound.ok) return fail('LEDGER_CORRUPT', bound.error);
   const bindings = bound.bindings;
 

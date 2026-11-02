@@ -72,43 +72,71 @@ export function computeLineage(verified: VerifiedInput[], unverified: Unverified
   // Group by envelope id. Byte-identical copies are one memory stored twice;
   // differing texts claiming one id are a conflict and none of them is trusted.
   const groups = new Map<string, VerifiedInput[]>();
-  for (const v of verified) groups.set(v.env.header.id, [...(groups.get(v.env.header.id) ?? []), v]);
+  for (const v of verified) {
+    const g = groups.get(v.env.header.id);
+    if (g) g.push(v);
+    else groups.set(v.env.header.id, [v]);
+  }
 
   const nodeEnv = new Map<string, { env: Envelope; blobIds: string[] }>();
   const unverifiedIds = new Map<string, ParentInfo>();
+  /** Parents claimed by records that failed verification, so seeds still flow through them. */
+  const unverifiedParents = new Map<string, Set<string>>();
+  const claimParents = (id: string, h: EnvelopeHeader) => {
+    const set = unverifiedParents.get(id) ?? new Set<string>();
+    for (const p of h.parents) set.add(p);
+    unverifiedParents.set(id, set);
+  };
   for (const [id, copies] of groups) {
     const texts = new Set(copies.map((c) => c.env.text));
     if (texts.size === 1) {
       nodeEnv.set(id, { env: copies[0]!.env, blobIds: copies.map((c) => c.blobId).sort() });
     } else {
       for (const c of copies) {
+        claimParents(id, c.env.header);
         const hits = directHits(c.env.header);
         forensic.push({ blobId: c.blobId, code: 'DUPLICATE_ID', reason: `${texts.size} different envelopes claim id ${id}`, header: c.env.header, seedHits: [...hits] });
       }
-      unverifiedIds.set(id, { cls: 'unverified', seedHits: new Set(copies.flatMap((c) => [...directHits(c.env.header)])), unresolved: false });
+      // unresolved: a conflicting id hides which parents the memory really had, so a
+      // quarantine could not be followed through it (B2). Its descendants stay out of context.
+      unverifiedIds.set(id, { cls: 'unverified', seedHits: new Set(copies.flatMap((c) => [...directHits(c.env.header)])), unresolved: true });
     }
   }
   for (const u of unverified) {
     const hits = u.header ? directHits(u.header) : new Set<number>();
     forensic.push({ blobId: u.blobId, code: u.code, reason: u.reason, ...(u.header ? { header: u.header } : {}), seedHits: [...hits] });
     if (u.header && !nodeEnv.has(u.header.id)) {
+      claimParents(u.header.id, u.header);
       const prev = unverifiedIds.get(u.header.id);
-      unverifiedIds.set(u.header.id, { cls: 'unverified', seedHits: new Set([...(prev?.seedHits ?? []), ...hits]), unresolved: false });
+      unverifiedIds.set(u.header.id, { cls: 'unverified', seedHits: new Set([...(prev?.seedHits ?? []), ...hits]), unresolved: true });
     }
   }
 
-  // Kahn's algorithm over verified nodes; edges run parent → child.
+  /** Verified ancestors reached through unverified records' claimed parents. */
+  const throughUnverified = (pid: string, seen = new Set<string>()): string[] => {
+    if (seen.has(pid)) return [];
+    seen.add(pid);
+    return [...(unverifiedParents.get(pid) ?? [])].flatMap((q) => (nodeEnv.has(q) ? [q] : throughUnverified(q, seen)));
+  };
+
+  // Kahn's algorithm over verified nodes; edges run parent → child (including
+  // verified ancestors reached through an unverified parent's claimed parents).
   const children = new Map<string, string[]>();
   const indegree = new Map<string, number>();
+  const depsOf = new Map<string, Set<string>>();
   for (const [id, { env }] of nodeEnv) {
-    let d = 0;
+    const deps = new Set<string>();
+    depsOf.set(id, deps);
     for (const p of env.header.parents) {
-      if (nodeEnv.has(p)) {
-        d++;
-        children.set(p, [...(children.get(p) ?? []), id]);
-      }
+      if (nodeEnv.has(p)) deps.add(p);
+      else for (const q of throughUnverified(p)) if (q !== id) deps.add(q);
     }
-    indegree.set(id, d);
+    for (const p of deps) {
+      const list = children.get(p);
+      if (list) list.push(id);
+      else children.set(p, [id]);
+    }
+    indegree.set(id, deps.size);
   }
 
   const nodes = new Map<string, LineageNode>();
@@ -135,7 +163,13 @@ export function computeLineage(verified: VerifiedInput[], unverified: Unverified
         continue;
       }
       for (const s of p.seedHits) hits.add(s);
-      if (p.unresolved) unresolved = true;
+      if (p.cls === 'unverified' && !nodes.has(pid)) {
+        for (const q of throughUnverified(pid)) for (const s of nodes.get(q)?.seedHits ?? []) hits.add(s);
+      }
+      if (p.unresolved) {
+        unresolved = true;
+        if (p.cls === 'unverified') notes.push(`parent ${pid} failed verification; its ancestry cannot be followed`);
+      }
       if (p.ckpt !== undefined && p.ckpt > h.ckpt) forcedUnverified.set(id, `parent ${pid} has a later checkpoint`);
       // A validly signed child of an unverified parent is untrusted, not unverified.
       parentsLowest = lowerOf(parentsLowest, p.cls === 'unverified' ? 'untrusted' : p.cls);
@@ -159,9 +193,10 @@ export function computeLineage(verified: VerifiedInput[], unverified: Unverified
     return unverifiedIds.get(pid);
   };
 
+  let head = 0;
   const drain = () => {
-    while (ready.length > 0) {
-      const id = ready.shift()!;
+    while (head < ready.length) {
+      const id = ready[head++]!;
       finish(id);
       for (const c of (children.get(id) ?? []).sort()) {
         const d = indegree.get(c)! - 1;
@@ -176,7 +211,7 @@ export function computeLineage(verified: VerifiedInput[], unverified: Unverified
   // their descendants are then processed normally (and inherit the taint).
   while (nodes.size < nodeEnv.size) {
     const remaining = [...nodeEnv.keys()].filter((id) => !nodes.has(id));
-    const inCycle = cycleMembers(remaining, (id) => nodeEnv.get(id)!.env.header.parents.filter((p) => nodeEnv.has(p) && !nodes.has(p)));
+    const inCycle = cycleMembers(remaining, (id) => [...depsOf.get(id)!].filter((p) => !nodes.has(p)));
     const cycleSet = new Set(inCycle);
     // Cycle members are unverified; they are finished against their final
     // parents only, then their children continue through Kahn's algorithm.

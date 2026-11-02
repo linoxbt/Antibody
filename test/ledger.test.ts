@@ -5,7 +5,8 @@ import { sha256Hex, uuidv7 } from '../src/core/encoding.ts';
 import { ledgerBodyText, verifyLedger, type LedgerRecord } from '../src/core/ledger.ts';
 import { evaluatePayment } from '../src/core/policy.ts';
 import { NS_LEDGER } from '../src/core/types.ts';
-import { account, ACCT, genesisStep, ledgerChain, makeKeys, payeeStep, stored, LANDLORD, USDC, tick } from './helpers.ts';
+import { account, ACCT, ATTACKER, genesisStep, ledgerChain, makeKeys, payeeStep, stored, LANDLORD, USDC, tick } from './helpers.ts';
+import { generateSeedHex, laneKeyFromSeedHex } from '../src/core/keys.ts';
 
 const k = makeKeys();
 const acct = account(k);
@@ -112,11 +113,66 @@ test('lessons retire when the quarantine they came from is released', () => {
 
 test('records signed by a revoked key after its revocation checkpoint fail closed', () => {
   // The user key is revoked at checkpoint 150 and removed from the account.
-  const steps = [genesisStep(k), { type: 'lane.revoke' as const, lane: 'antibody' as const, payload: { pub: k.lane.user.publicKeyHex, label: 'antibody:user', digest: 'D'.repeat(44), ckpt: 150 } }, { ...payeeStep(), ckpt: 200 }];
+  const steps = [genesisStep(k), { type: 'lane.revoke' as const, lane: 'antibody' as const, payload: { pub: k.lane.user.publicKeyHex, label: 'antibody:user', digest: 'D'.repeat(44), ckpt: 150 }, ckpt: 160 }, { ...payeeStep(), ckpt: 200 }];
   const acctNoUser = { ...acct, delegateKeys: acct.delegateKeys.filter((d) => d.publicKeyHex !== k.lane.user.publicKeyHex) };
   const envs = ledgerChain(k, steps);
   const all = envs.map((e) => stored(e, NS_LEDGER));
   const r = verifyLedger({ acct: ACCT, account: acctNoUser, inventory: all.map((m) => m.blobId), recalled: all, hwm: null });
   assert.equal(!r.ok && r.code, 'LEDGER_CORRUPT');
   assert.match(!r.ok ? r.detail : '', /SIGNER_REVOKED/);
+});
+
+// ---- S1: key history only from control-signed records -----------------------------
+
+/** Append records signed by arbitrary keys onto a legitimate chain (attacker with relayer write access). */
+function forge(kk: ReturnType<typeof makeKeys>, extra: { type: LedgerRecord['type']; payload: unknown; lane: 'antibody' | 'user'; key: { publicKeyHex: string; sign(m: Uint8Array): Uint8Array }; ckpt?: number }[]) {
+  const legit = ledgerChain(kk, [genesisStep(kk), payeeStep()]);
+  let prev = sha256Hex(legit[legit.length - 1]!.text);
+  const out = [...legit];
+  extra.forEach((x, i) => {
+    const rec = { seq: legit.length + i, prev, type: x.type, payload: x.payload } as LedgerRecord;
+    const env = buildEnvelope({ id: uuidv7(tick()), acct: ACCT, ns: NS_LEDGER, lane: x.lane, kind: 'ledger', ckpt: x.ckpt ?? 500, ts: 'x', text: ledgerBodyText(rec) }, x.key as never);
+    out.push(env);
+    prev = sha256Hex(env.text);
+  });
+  return out.map((e) => stored(e, NS_LEDGER));
+}
+
+test('S1: a lane.revoke signed by a key that is not on-chain cannot authorise itself or a new user key', () => {
+  const kk = makeKeys();
+  const X = laneKeyFromSeedHex(generateSeedHex());
+  const Y = laneKeyFromSeedHex(generateSeedHex());
+  const s = forge(kk, [
+    { type: 'lane.revoke', payload: { pub: X.publicKeyHex, label: 'antibody:control', digest: 'x'.repeat(32), ckpt: 1e15 }, lane: 'antibody', key: X },
+    { type: 'lane.revoke', payload: { pub: Y.publicKeyHex, label: 'antibody:user', digest: 'x'.repeat(32), ckpt: 1e15 }, lane: 'antibody', key: X },
+    { type: 'payee.add', payload: payeeStep('evil', ATTACKER, '999999999999').payload, lane: 'user', key: Y },
+  ]);
+  const r = verifyLedger({ acct: ACCT, account: account(kk), inventory: s.map((x) => x.blobId), recalled: s, hwm: null });
+  assert.equal(!r.ok && r.code, 'LEDGER_CORRUPT');
+});
+
+test('S1: even the control key cannot revoke a key nobody bound, revoke the control lane, or backdate past its own checkpoint', () => {
+  const kk = makeKeys();
+  const stranger = laneKeyFromSeedHex(generateSeedHex());
+  const cases: [string, unknown, RegExp][] = [
+    ['unbound key', { pub: stranger.publicKeyHex, label: 'antibody:user', digest: 'x'.repeat(32), ckpt: 10 }, /not a bound lane key/],
+    ['control lane', { pub: kk.lane.antibody.publicKeyHex, label: 'antibody:control', digest: 'x'.repeat(32), ckpt: 10 }, /control lane cannot be revoked/],
+    ['wrong lane', { pub: kk.lane.agent.publicKeyHex, label: 'antibody:user', digest: 'x'.repeat(32), ckpt: 10 }, /names a agent key as user/],
+    ['future ckpt', { pub: kk.lane.agent.publicKeyHex, label: 'antibody:agent', digest: 'x'.repeat(32), ckpt: 9999 }, /after the record's own checkpoint/],
+  ];
+  for (const [name, payload, re] of cases) {
+    const s = forge(kk, [{ type: 'lane.revoke', payload, lane: 'antibody', key: kk.lane.antibody }]);
+    const r = verifyLedger({ acct: ACCT, account: account(kk), inventory: s.map((x) => x.blobId), recalled: s, hwm: null });
+    assert.equal(!r.ok && r.code, 'LEDGER_CORRUPT', name);
+    assert.match(!r.ok ? r.detail : '', re, name);
+  }
+});
+
+test('S1: a forged genesis naming a key that is not antibody:control on-chain never verifies', () => {
+  const kk = makeKeys();
+  const fake = makeKeys(); // attacker's own four keys; only the account's real keys are on-chain
+  const envs = ledgerChain(fake, [genesisStep(fake), payeeStep('evil', ATTACKER)]);
+  const s = envs.map((e) => stored(e, NS_LEDGER));
+  const r = verifyLedger({ acct: ACCT, account: account(kk), inventory: s.map((x) => x.blobId), recalled: s, hwm: null });
+  assert.equal(r.ok, false);
 });

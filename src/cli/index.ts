@@ -92,6 +92,7 @@ function seedFrom(v: Record<string, string | boolean | undefined>): QuarantineSe
   if (typeof v.memory === 'string') return { type: 'memory', value: v.memory };
   if (typeof v.turn === 'string') return { type: 'turn', value: v.turn };
   if (typeof v['signer-window'] === 'string') {
+    if (Number(v.from ?? 0) > 0) console.error(yellow('warning: --from trusts the checkpoint each envelope claims; a leaked key can backdate. Prefer the default (from 0).'));
     return { type: 'signer-window', value: v['signer-window'], from: Number(v.from ?? 0), ...(v.to !== undefined ? { to: Number(v.to) } : {}) };
   }
   throw new Error('give one of --source, --memory, --turn or --signer-window <pub> [--from N --to N]');

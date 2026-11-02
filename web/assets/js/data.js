@@ -11,12 +11,42 @@ const DEMO_KEY = 'antibody.demo';
 export class ReadOnlyError extends Error {}
 export class AuthRequired extends Error {}
 
+// The local console wants a per-session secret alongside the cookie (S11): a
+// cookie alone is sent by any page that can reach 127.0.0.1, this header is not.
+const SESSION_KEY = 'antibody.session';
+const sessionSecret = {
+  get() {
+    try {
+      return localStorage.getItem(SESSION_KEY) || '';
+    } catch {
+      return '';
+    }
+  },
+  set(v) {
+    try {
+      if (v) localStorage.setItem(SESSION_KEY, v);
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* storage blocked: the hosted sandbox needs no header; the local console asks to sign in again */
+    }
+  },
+};
+
 async function getJson(path, body) {
-  const res = await fetch(path, body === undefined ? { cache: 'no-store', credentials: 'same-origin' } : { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: JSON.stringify(body) });
+  const headers = {};
+  const secret = sessionSecret.get();
+  if (secret) headers['x-antibody-session'] = secret;
+  const init = body === undefined ? { cache: 'no-store', credentials: 'same-origin', headers } : { method: 'POST', credentials: 'same-origin', headers: { ...headers, 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: JSON.stringify(body) };
+  const res = await fetch(path, init);
   const ct = res.headers.get('content-type') ?? '';
   if (!ct.includes('json')) throw new Error(`HTTP ${res.status}`);
   const j = await res.json();
-  if (res.status === 401 && !path.startsWith('/api/auth/')) throw new AuthRequired(j.error ?? 'sign in required');
+  if (res.ok && path.startsWith('/api/auth/') && typeof j.csrf === 'string') sessionSecret.set(j.csrf);
+  if (path === '/api/auth/logout') sessionSecret.set('');
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    sessionSecret.set('');
+    throw new AuthRequired(j.error ?? 'sign in required');
+  }
   if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
   return j;
 }

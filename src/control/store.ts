@@ -3,9 +3,8 @@
  * source of truth: rebuild --fresh ignores them). The high-water mark is the
  * rollback guard and survives a cache wipe (spec §7).
  */
-import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { JsonFileStore } from '../adapters/filestore.ts';
+import { JsonFileStore, withFileLock } from '../adapters/filestore.ts';
 import type { StoredMemory } from '../core/types.ts';
 
 export class TextCache {
@@ -30,27 +29,94 @@ export class TextCache {
 export interface Hwm {
   seq: number;
   hash: string;
+  /**
+   * S10: false when the head was first learned from the relayer on this machine
+   * (trust on first use). Payments stay blocked until a human confirms it
+   * (`antibody verify-ledger --accept`). Absent on homes written before this
+   * field existed, which counts as confirmed.
+   */
+  acknowledged?: boolean;
 }
 
 export class HighWaterMark {
-  constructor(private readonly path: string) {}
+  private readonly store: JsonFileStore<Hwm | null>;
 
-  read(): Hwm | null {
-    return existsSync(this.path) ? (JSON.parse(readFileSync(this.path, 'utf8')) as Hwm) : null;
+  constructor(path: string) {
+    this.store = new JsonFileStore<Hwm | null>(path, () => null);
   }
 
-  /** Only ever moves forward. */
-  advance(head: Hwm): void {
+  read(): Hwm | null {
+    return this.store.read();
+  }
+
+  /** Only ever moves forward. Locked and written atomically (two processes may advance it). */
+  advance(head: { seq: number; hash: string }, opts: { firstSyncAcknowledged?: boolean } = {}): void {
     const cur = this.read();
     if (cur && cur.seq >= head.seq) return;
-    mkdirSync(join(this.path, '..'), { recursive: true });
-    const tmp = `${this.path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(head), { mode: 0o600 });
-    renameSync(tmp, this.path);
+    this.store.update((s) => {
+      if (s && s.seq >= head.seq) return;
+      const acknowledged = s ? s.acknowledged !== false : !!opts.firstSyncAcknowledged;
+      return { ...head, acknowledged };
+    }, true);
+  }
+
+  acknowledged(): boolean {
+    const h = this.read();
+    return !!h && h.acknowledged !== false;
+  }
+
+  /** The human confirmed this head (verify-ledger --accept, or the setup that wrote genesis itself). */
+  acknowledge(head: { seq: number; hash: string }): void {
+    this.store.update((s) => {
+      if (s && s.seq > head.seq) throw new Error(`refusing to acknowledge #${head.seq}: this machine already verified #${s.seq}`);
+      return { ...head, acknowledged: true };
+    }, true);
   }
 
   clear(): void {
-    rmSync(this.path, { force: true });
+    this.store.clear();
+  }
+}
+
+/** S10/B6: every signing attempt, so a payment is never sent twice and an unknown outcome is never retried blindly. */
+export interface PaymentEntry {
+  key: string;
+  turn: string;
+  recipient: string;
+  coinType: string;
+  amount: string;
+  status: 'pending' | 'executed' | 'failed' | 'unknown';
+  digest?: string;
+  error?: string;
+  at: number;
+}
+
+export class PaymentLog {
+  private readonly store: JsonFileStore<PaymentEntry[]>;
+
+  constructor(dir: string) {
+    this.store = new JsonFileStore(join(dir, 'payments.json'), () => []);
+  }
+
+  list(): PaymentEntry[] {
+    return this.store.read();
+  }
+
+  /** A payment of the same amount and coin to the same recipient that is pending, unknown, or went out within `windowMs`. */
+  duplicate(e: Pick<PaymentEntry, 'key' | 'recipient' | 'coinType' | 'amount'>, now: number, windowMs: number): PaymentEntry | undefined {
+    return this.list().find(
+      (x) => x.key === e.key && x.status !== 'failed' || (x.recipient === e.recipient && x.coinType === e.coinType && x.amount === e.amount && (x.status === 'pending' || x.status === 'unknown' || (x.status === 'executed' && now - x.at < windowMs))),
+    );
+  }
+
+  put(e: PaymentEntry): void {
+    this.store.update((s) => {
+      const i = s.findIndex((x) => x.key === e.key);
+      if (i >= 0) s[i] = e;
+      else s.push(e);
+      // Bounded: keep the most recent 1000 entries.
+      if (s.length > 1000) s.splice(0, s.length - 1000);
+    });
   }
 }
 

@@ -55,13 +55,17 @@ export const paymentPayloadSchema = z
   .passthrough();
 export type PaymentPayload = z.infer<typeof paymentPayloadSchema>;
 
-export interface SettlementResponse {
-  success: boolean;
-  transaction: string;
-  network: string;
-  payer: string;
-  errorReason?: string;
-}
+/** Facilitator's answer (B7): validated, with a Sui digest shape (base58, 32 bytes) when it claims success. */
+export const settlementResponseSchema = z
+  .object({
+    success: z.boolean(),
+    transaction: z.string().max(64),
+    network: z.string().max(64),
+    payer: z.string().max(80),
+    errorReason: z.string().max(300).optional(),
+  })
+  .refine((s) => !s.success || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.transaction), 'transaction must be a Sui digest when success is true');
+export type SettlementResponse = z.infer<typeof settlementResponseSchema>;
 
 export function encodeHeader(v: unknown): string {
   return toBase64(utf8(JSON.stringify(v)));

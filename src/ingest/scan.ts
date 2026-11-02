@@ -6,7 +6,8 @@
  * from earlier quarantines. Scores at or above the threshold raise incidents.
  */
 import { join } from 'node:path';
-import { buildEnvelope } from '../core/envelope.ts';
+import { buildEnvelope, parseEnvelope, signingMessage } from '../core/envelope.ts';
+import { verifyEd25519 } from '../core/keys.ts';
 import { normalizeCoinType, uuidv7 } from '../core/encoding.ts';
 import type { LaneKey } from '../core/keys.ts';
 import type { LessonEntry } from '../core/ledger.ts';
@@ -70,8 +71,56 @@ function objectText(o: OwnedObject): { name: string; description: string; extra:
   return { name: pick('name'), description: pick('description'), extra: [pick('url'), pick('image_url'), pick('link')].filter(Boolean).join(' ') };
 }
 
+type IncidentPayload = Omit<Incident, 'id' | 'at' | 'status'>;
+
+/**
+ * B4: an incident control did not receive is kept here and retried on the next
+ * scan, so a control restart never loses one (the object is already marked seen).
+ */
+function outbox(d: IngestDeps) {
+  return new JsonFileStore<IncidentPayload[]>(join(d.cacheDir, 'ingest-outbox.json'), () => []);
+}
+
+async function deliver(d: IngestDeps, p: IncidentPayload): Promise<Incident | null> {
+  if (!d.sink) return null;
+  try {
+    return await d.sink.incident(p);
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (/incident rejected/.test(msg)) {
+      d.log.warn('ingest.incident_rejected', { objectId: p.objectId, error: msg });
+      return null;
+    }
+    outbox(d).update((q) => {
+      if (!q.some((x) => x.observationId === p.observationId)) q.push(p);
+    });
+    d.log.warn('ingest.incident_queued', { objectId: p.objectId, error: msg });
+    return null;
+  }
+}
+
+/** Retry queued incidents (oldest first); keeps what still fails. */
+export async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
+  if (!d.sink) return [];
+  const box = outbox(d);
+  const out: Incident[] = [];
+  for (const p of box.read()) {
+    try {
+      out.push(await d.sink.incident(p));
+    } catch (e) {
+      if (!/incident rejected/.test((e as Error).message)) break; // control still unreachable: keep the rest
+    }
+    box.update((q) => {
+      const i = q.findIndex((x) => x.observationId === p.observationId);
+      if (i >= 0) q.splice(i, 1);
+    });
+  }
+  return out;
+}
+
 export async function scanWallet(d: IngestDeps): Promise<ScanResult> {
   const now = d.now ?? Date.now;
+  await flushOutbox(d);
   const seen = new JsonFileStore<Record<string, string>>(join(d.cacheDir, 'ingest-seen.json'), () => ({}));
   const [objects, ckpt, lessons] = await Promise.all([d.chain.listOwnedObjects(d.wallet), d.chain.latestCheckpoint(), d.sink ? d.sink.lessons() : Promise.resolve([] as LessonEntry[])]);
   const items: ScanItem[] = [];
@@ -83,12 +132,13 @@ export async function scanWallet(d: IngestDeps): Promise<ScanResult> {
     // Coins are observed once per coin type (the metadata is the carrier);
     // every other object is observed once per object.
     const key = coinType ? `coin:${coinType}` : `object:${o.objectId}`;
-    if (seen.read()[key] || (await alreadyObserved(d.mem, o.objectId, coinType))) {
+    if (seen.read()[key] || (await alreadyObserved(d, o.objectId, coinType))) {
       skipped++;
       continue;
     }
 
-    const sender = o.previousTransaction ? ((await d.chain.getTransaction(o.previousTransaction))?.sender ?? null) : null;
+    // B10: pruned history returns null, and system transactions throw on some nodes; neither may stop the scan.
+    const sender = o.previousTransaction ? ((await d.chain.getTransaction(o.previousTransaction).catch(() => null))?.sender ?? null) : null;
     const src: SrcRef[] = [{ t: 'sui-object', id: o.objectId, ver: o.version, type: coinType ?? o.type }];
     if (coinType) src.push({ t: 'coin-type', type: coinType });
     if (sender) src.push({ t: 'sender', addr: sender });
@@ -131,8 +181,9 @@ export async function scanWallet(d: IngestDeps): Promise<ScanResult> {
     const score = isBlocked ? 1 : 1 - (1 - h.score) * (1 - lm.score);
     const rules = [...h.hits.map((x) => `${x.rule}:${x.match}`), ...(isBlocked ? ['guardians-blocklist'] : []), ...lm.matches.map((m) => `lesson#${m.lessonSeq}:${m.indicator}`)];
     let incident: Incident | null = null;
-    if (score >= d.threshold && d.sink) {
-      incident = await d.sink.incident({
+    // B10: an unknown sender is itself suspicious (fresh or pruned history hides who sent it).
+    if (score >= d.threshold || (!sender && o.previousTransaction && score >= d.threshold / 2)) {
+      incident = await deliver(d, {
         objectId: o.objectId,
         observationId: id,
         ...(coinType ? { coinType } : {}),
@@ -150,11 +201,22 @@ export async function scanWallet(d: IngestDeps): Promise<ScanResult> {
   return { items, skipped, checkpoint: ckpt };
 }
 
-/** After a cache wipe, ask the relayer whether this object was already written. */
-async function alreadyObserved(mem: MemoryClient, objectId: string, coinType: string | null): Promise<boolean> {
-  const hits = await mem.recall(coinType ?? objectId, NS_CONTENT, 20);
+/**
+ * After a cache wipe, ask the relayer whether this object was already written.
+ * Only this lane's own signed observations count: text another lane wrote that
+ * merely quotes an observation must not suppress scanning.
+ */
+async function alreadyObserved(d: IngestDeps, objectId: string, coinType: string | null): Promise<boolean> {
+  const hits = await d.mem.recall(coinType ?? objectId, NS_CONTENT, 20);
   const needle = coinType ? `of type ${coinType}.` : `object ${objectId} `;
-  return hits.some((h) => h.text.includes('[lane:wallet-objects kind:observation') && h.text.includes(needle));
+  return hits.some((h) => {
+    try {
+      const p = parseEnvelope(h.text);
+      return p.header.lane === 'wallet-objects' && p.header.kind === 'observation' && p.header.pub === d.key.publicKeyHex && verifyEd25519(p.sig, signingMessage(p.header), p.header.pub) && p.body.includes(needle);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -176,8 +238,8 @@ export async function ingestExternalText(d: IngestDeps, text: string, origin: st
   const score = 1 - (1 - h.score) * (1 - lm.score);
   const rules = [...h.hits.map((x) => `${x.rule}:${x.match}`), ...lm.matches.map((m) => `lesson#${m.lessonSeq}:${m.indicator}`)];
   let incident: Incident | null = null;
-  if (score >= d.threshold && d.sink) {
-    incident = await d.sink.incident({ objectId: origin, observationId: id, score: Math.round(score * 1000) / 1000, rules, lessonMatches: lm.matches.map((m) => ({ lessonSeq: m.lessonSeq, indicator: m.indicator, value: m.value })), blocklisted: false, proposedSeed: { type: 'source', value: origin } });
+  if (score >= d.threshold) {
+    incident = await deliver(d, { objectId: origin, observationId: id, score: Math.round(score * 1000) / 1000, rules, lessonMatches: lm.matches.map((m) => ({ lessonSeq: m.lessonSeq, indicator: m.indicator, value: m.value })), blocklisted: false, proposedSeed: { type: 'source', value: origin } });
   }
   d.log.info('ingest.external_text', { envelopeId: id, blobId, origin, score });
   return { objectId: origin, observationId: id, blobId, kind: 'object', type: 'external-text', sender: null, score, rules, lessonMatches: lm.matches, blocklisted: false, incident };

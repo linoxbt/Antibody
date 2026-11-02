@@ -11,7 +11,8 @@
  *   <JCS JSON {seq, prev, type, payload}>
  */
 import { z } from 'zod';
-import { bodyContent, parseEnvelope } from './envelope.ts';
+import { bodyContent, parseEnvelope, signingMessage } from './envelope.ts';
+import { verifyEd25519 } from './keys.ts';
 import { canonicalJson, isCoinType, normalizeCoinType, SUI_ADDRESS_RE, sha256Hex } from './encoding.ts';
 import { bindLanes, type AccountState, type LaneBindings, type LaneHistory } from './lanes.ts';
 import { seedMatches, normalizeSeed } from './seeds.ts';
@@ -195,6 +196,8 @@ export interface LedgerState {
   bindings: LaneBindings;
   /** "first sync" when no high-water mark existed yet. */
   firstSync: boolean;
+  /** Blobs in the ledger namespace that are not records from this account's lane keys (B11). */
+  ignored: { blobId: string; reason: string }[];
 }
 
 export type LedgerResult = LedgerState | LedgerFailure;
@@ -206,8 +209,33 @@ export interface LedgerInput {
   inventory: string[];
   /** Texts recalled from antibody.ledger. */
   recalled: StoredMemory[];
+  /** Writer of each blob as the relayer reports it (B11: tells outside noise from tampering). */
+  writers?: ReadonlyMap<string, string | null>;
   /** Highest verified head this machine has seen (rollback guard). */
   hwm?: { seq: number; hash: string } | null;
+}
+
+/**
+ * Every key that has ever been one of this account's lane keys: on-chain keys
+ * with an antibody:* label, the four keys named by a genesis that the on-chain
+ * antibody:control key signed, and keys named by lane.rotate records that key
+ * signed. Anything else writing into the ledger namespace is not Antibody.
+ */
+function laneKeysOf(candidates: { record: LedgerRecord; pub: string; sigOk: boolean }[], account: AccountState): Set<string> {
+  const keys = new Set<string>();
+  const control = new Set<string>();
+  for (const k of account.delegateKeys) {
+    const lane = LABEL_LANE[k.label];
+    if (!lane) continue;
+    keys.add(k.publicKeyHex.toLowerCase());
+    if (lane === 'antibody') control.add(k.publicKeyHex.toLowerCase());
+  }
+  for (const c of candidates) {
+    if (!c.sigOk || !control.has(c.pub)) continue;
+    if (c.record.type === 'genesis') for (const l of (c.record.payload as LedgerPayload<'genesis'>).lanes) keys.add(l.pub);
+    if (c.record.type === 'lane.rotate') keys.add((c.record.payload as LedgerPayload<'lane.rotate'>).pub);
+  }
+  return keys;
 }
 
 /**
@@ -287,15 +315,39 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
   if (byBlob.size === 0) return fail('LEDGER_EMPTY', 'no ledger records: run `antibody setup` to write genesis');
 
   // Pass 1: parse without trusting anything, to learn historical key bindings.
-  const parsed: { blobId: string; text: string; record: LedgerRecord }[] = [];
+  // B11: a blob that is not a well-formed record signed by one of this account's
+  // lane keys is noise (garbage, a dashboard key, a forger): it is set aside for
+  // forensics and cannot block the ledger. A record a lane key really signed that
+  // breaks the rules still fails closed: that key is compromised.
+  const ignored: LedgerState['ignored'] = [];
+  const candidates: { blobId: string; text: string; record: LedgerRecord; pub: string; sigOk: boolean }[] = [];
+  const unreadable: { blobId: string; reason: string }[] = [];
   for (const [blobId, text] of byBlob) {
     try {
       const env = parseEnvelope(text);
-      parsed.push({ blobId, text, record: parseLedgerBody(bodyContent(env.body)) });
+      candidates.push({ blobId, text, record: parseLedgerBody(bodyContent(env.body)), pub: env.header.pub, sigOk: verifyEd25519(env.sig, signingMessage(env.header), env.header.pub) });
     } catch (e) {
-      return fail('LEDGER_CORRUPT', `blob ${blobId}: ${(e as Error).message}`);
+      unreadable.push({ blobId, reason: (e as Error).message });
     }
   }
+  const accountKeys = laneKeysOf(candidates, input.account);
+  // Who wrote a blob, per the relayer: a lane key (by public key or Sui address), someone else, or unknown.
+  const laneAddresses = new Set(input.account.delegateKeys.filter((k) => LABEL_LANE[k.label]).map((k) => k.suiAddress.toLowerCase()));
+  const byOutsider = (blobId: string) => {
+    const w = input.writers?.get(blobId)?.toLowerCase();
+    return !!w && !accountKeys.has(w.replace(/^0x/, '')) && !laneAddresses.has(w);
+  };
+  for (const u of unreadable) {
+    if (byOutsider(u.blobId)) ignored.push({ blobId: u.blobId, reason: `not a ledger record (written by a non-Antibody key): ${u.reason}` });
+    else return fail('LEDGER_CORRUPT', `blob ${u.blobId}: ${u.reason}`);
+  }
+  const parsed: { blobId: string; text: string; record: LedgerRecord }[] = [];
+  for (const c of candidates) {
+    if (c.sigOk && !accountKeys.has(c.pub)) ignored.push({ blobId: c.blobId, reason: `signed by ${c.pub.slice(0, 12)}…, which is not a lane key of this account` });
+    else if (!c.sigOk && byOutsider(c.blobId)) ignored.push({ blobId: c.blobId, reason: 'bad signature, written by a non-Antibody key' });
+    else parsed.push(c); // includes bad signatures from lane writers: tampering fails closed below
+  }
+  if (parsed.length === 0) return fail('LEDGER_EMPTY', `no ledger records from this account's lane keys (${ignored.length} other blob(s) ignored): run \`antibody setup\` to write genesis`);
   const history = trustedHistory(parsed, input.account, input.acct);
   if (typeof history === 'string') return fail('LEDGER_CORRUPT', history);
   const bound = bindLanes(input.account, history);
@@ -415,6 +467,7 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
     lessons,
     bindings,
     firstSync: !hwm,
+    ignored,
   };
 }
 

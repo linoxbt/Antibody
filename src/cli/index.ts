@@ -4,7 +4,7 @@
  * role's key; commands that need another role talk to its daemon over IPC.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { connect as netConnect } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -12,14 +12,14 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { ipcPath, isPipe, loadConfig, requireAccount, runDir, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
+import { ipcPath, isPipe, loadConfig, requireAccount, ROLES, runDir, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
 import { isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, sha256Hex, SUI_COIN_TYPE } from '../core/encoding.ts';
 import { generateSeedHex, laneKeyFromSeedHex } from '../core/keys.ts';
 import type { LedgerState } from '../core/ledger.ts';
 import { toBaseUnits, formatUnits } from '../core/units.ts';
 import { LANES, LANE_LABEL, type Lane, type QuarantineSeed } from '../core/types.ts';
 import { IpcClient, unixTransport } from '../ipc.ts';
-import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, readKeyText, sealKeyText } from '../keystore.ts';
+import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, passphraseVars, readKeyText, sealKeyText } from '../keystore.ts';
 import { createRuntime, type Runtime } from '../runtime.ts';
 import { setupLive, setupOffline } from '../setup.ts';
 import {
@@ -175,18 +175,58 @@ async function withOwner<T>(o: { session: OwnerSession | null }, fn: () => Promi
   }
 }
 
-/** Owner adds a fresh key for the lane; the role's key file is replaced (the old one kept aside); lane.rotate recorded. */
-async function rotateLane(r: Runtime, control: ReturnType<typeof buildControl>, admin: AccountAdmin, lane: Lane) {
-  const role = (Object.entries({ user: 'user', agent: 'agent', 'wallet-objects': 'ingest' }) as [Lane, Role][]).find(([l]) => l === lane)![1];
+const LANE_ROLE: Record<Exclude<Lane, 'antibody'>, Role> = { user: 'user', agent: 'agent', 'wallet-objects': 'ingest' };
+
+/**
+ * A fresh key for a lane (M4, B9). Runs as the lane's own role: the key is
+ * generated and sealed into that role's own directory BEFORE the owner
+ * registers it on-chain, so a failed write can never leave a registered key
+ * nobody holds. Then control records lane.rotate, asked over IPC with the new
+ * key (control never writes another role's key file). If control is not
+ * running and every role shares one OS user (simulated isolation), it is
+ * recorded in-process.
+ */
+async function rotateLane(r: Runtime, admin: AccountAdmin, lane: Exclude<Lane, 'antibody'>): Promise<{ seq: number }> {
+  const role = LANE_ROLE[lane];
+  if (r.cfg.keyIsolation === 'enforce' && r.role !== role) {
+    throw new Error(`a ${lane} key must be created by the ${role} role: run \`sudo -u antibody-${role} env ANTIBODY_ROLE=${role} antibody rotate --lane ${lane}\``);
+  }
   const p = keyPath(r.cfg.home, role);
+  const pending = `${p}.new`;
+  if (existsSync(pending)) throw new Error(`${pending} exists from an interrupted rotation: if its key is registered on-chain run \`antibody rotate --lane ${lane} --record-only --digest <add_delegate_key digest>\`, otherwise delete it`);
   const seed = generateSeedHex();
   const pub = laneKeyFromSeedHex(seed).publicKeyHex;
-  const add = await admin.addDelegateKey(pub, LANE_LABEL[lane]);
-  if (existsSync(p)) renameSync(p, `${p}.revoked-${Date.now()}`);
   mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
-  writeFileSync(p, sealKeyText(seed), { mode: 0o600, flag: 'wx' });
-  const rot = await control.recordRotate(pub, lane, add.digest);
-  console.log(green(`lane.rotate written as ledger #${rot.seq}`) + dim(` new key ${pub} (add_delegate_key ${add.digest})`));
+  writeFileSync(pending, sealKeyText(seed, process.env, role), { mode: 0o600, flag: 'wx' });
+  let digest: string;
+  try {
+    digest = (await admin.addDelegateKey(pub, LANE_LABEL[lane])).digest;
+  } catch (e) {
+    rmSync(pending, { force: true });
+    throw e;
+  }
+  if (existsSync(p)) renameSync(p, `${p}.revoked-${Date.now()}`);
+  renameSync(pending, p);
+  console.log(green(`new ${LANE_LABEL[lane]} key ${pub}`) + dim(` registered (add_delegate_key ${digest}) and saved to ${p}`));
+  return recordRotation(r, lane, digest);
+}
+
+/** Ask control (as the lane's new key) to write lane.rotate; fall back to in-process control under simulated isolation. */
+async function recordRotation(r: Runtime, lane: Exclude<Lane, 'antibody'>, digest: string): Promise<{ seq: number }> {
+  const key = laneKeyFromSeedHex(readKeyText(keyPath(r.cfg.home, LANE_ROLE[lane])));
+  try {
+    const rec = await new IpcClient(key, unixTransport(socketPath(r.cfg, 'control')), Date.now, laneServer(r, 'antibody')).call<{ seq: number }>('/lane/rotated', { digest });
+    console.log(green(`lane.rotate written as ledger #${rec.seq}`));
+    return rec;
+  } catch (e) {
+    if (!/cannot reach/.test((e as Error).message) || r.cfg.keyIsolation === 'enforce') {
+      throw new Error(`${(e as Error).message}\n  the key is registered; record it later with: antibody rotate --lane ${lane} --record-only --digest ${digest}`);
+    }
+    const c = buildControl(createRuntime({ ...r.cfg, role: null }, 'control'), { signer: null });
+    const rec = await c.recordRotate(key.publicKeyHex, lane, digest);
+    console.log(green(`lane.rotate written as ledger #${rec.seq}`) + dim(' (control not running: recorded in-process)'));
+    return rec;
+  }
 }
 
 function printLedger(l: LedgerState) {
@@ -445,11 +485,18 @@ async function main(argv: string[]): Promise<void> {
 
     case 'revoke': {
       const r = rt('control');
-      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, rotate: { type: 'boolean', default: false }, wallet: { type: 'boolean', default: false } });
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, rotate: { type: 'boolean', default: false }, wallet: { type: 'boolean', default: false }, 'record-only': { type: 'boolean', default: false }, digest: { type: 'string' }, pub: { type: 'string' } });
       const lane = String(values.lane) as Lane;
       if (!LANES.includes(lane)) throw new Error(`--lane must be one of ${LANES.join(', ')}`);
       if (lane === 'antibody') throw new Error('revoking the control lane needs rotate-first by the owner; not supported in this build');
       const control = buildControl(r, { signer: null });
+      if (values['record-only']) {
+        // B9 recovery: the key was removed on-chain but lane.revoke was never written.
+        if (!values.digest || !values.pub) throw new Error('usage: antibody revoke --lane <lane> --record-only --digest <remove_delegate_key digest> --pub <the removed key>');
+        const rev = await control.recordRevoke(String(values.pub).toLowerCase(), lane, String(values.digest));
+        console.log(green(`lane.revoke written as ledger #${rev.seq}`));
+        return;
+      }
       const account = await r.chain.getAccount(requireAccount(r.cfg));
       const old = account.delegateKeys.find((k) => k.label === LANE_LABEL[lane]);
       if (!old) throw new Error(`no active ${LANE_LABEL[lane]} key on-chain`);
@@ -459,26 +506,39 @@ async function main(argv: string[]): Promise<void> {
         o,
         async () => {
           const rm = await o.admin.removeDelegateKey(old.publicKeyHex);
-          const rev = await control.recordRevoke(old.publicKeyHex, lane, rm.digest);
+          let rev: { seq: number };
+          try {
+            rev = await control.recordRevoke(old.publicKeyHex, lane, rm.digest);
+          } catch (e) {
+            throw new Error(`${(e as Error).message}\n  the key IS removed on-chain; record it with: antibody revoke --lane ${lane} --record-only --digest ${rm.digest} --pub ${old.publicKeyHex}`);
+          }
           console.log(green(`lane.revoke written as ledger #${rev.seq}`) + dim(` (remove_delegate_key ${rm.digest}). Quarantine set unchanged (I-9). The old key can still decrypt memories saved before removal: treat it as compromised.`));
-          if (values.rotate) await rotateLane(r, control, o.admin, lane);
+          if (values.rotate) {
+            if (r.cfg.keyIsolation === 'enforce') console.log(yellow(`now create the new key as the ${LANE_ROLE[lane]} role: sudo -u antibody-${LANE_ROLE[lane]} env ANTIBODY_ROLE=${LANE_ROLE[lane]} antibody rotate --lane ${lane}${values.wallet ? ' --wallet' : ''}`));
+            else await rotateLane(r, o.admin, lane);
+          }
           return rev;
         },
-        (rev) => `${LANE_LABEL[lane]} revoked (ledger #${rev.seq})${values.rotate ? ' and a fresh key rotated in' : ''}.`,
+        (rev) => `${LANE_LABEL[lane]} revoked (ledger #${rev.seq})${values.rotate && r.cfg.keyIsolation !== 'enforce' ? ' and a fresh key rotated in' : ''}.`,
       );
       return;
     }
 
     case 'rotate': {
-      // After a revocation (CLI or the console's owner-wallet button): a fresh key for the lane.
-      const r = rt('control');
-      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, wallet: { type: 'boolean', default: false } });
+      // After a revocation (CLI or the console's owner-wallet button): a fresh key for the lane, made by the lane's own role.
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { lane: { type: 'string' }, wallet: { type: 'boolean', default: false }, 'record-only': { type: 'boolean', default: false }, digest: { type: 'string' } });
       const lane = String(values.lane) as Lane;
       if (!LANES.includes(lane) || lane === 'antibody') throw new Error('usage: antibody rotate --lane user|agent|wallet-objects [--wallet]');
+      const r = rt(LANE_ROLE[lane]);
+      if (values['record-only']) {
+        if (!values.digest) throw new Error('usage: antibody rotate --lane <lane> --record-only --digest <add_delegate_key digest>');
+        await recordRotation(r, lane, String(values.digest));
+        return;
+      }
       const account = await r.chain.getAccount(requireAccount(r.cfg));
       if (account.delegateKeys.some((k) => k.label === LANE_LABEL[lane])) throw new Error(`${LANE_LABEL[lane]} still has an active key: revoke it first`);
       const o = await ownerAdmin(r, !!values.wallet);
-      await withOwner(o, () => rotateLane(r, buildControl(r, { signer: null }), o.admin, lane), () => `A fresh ${LANE_LABEL[lane]} key is registered and lane.rotate recorded.`);
+      await withOwner(o, () => rotateLane(r, o.admin, lane), () => `A fresh ${LANE_LABEL[lane]} key is registered and lane.rotate recorded.`);
       return;
     }
 
@@ -627,6 +687,7 @@ async function main(argv: string[]): Promise<void> {
       const { values } = opts([sub ?? '', ...rest].filter(Boolean), { foreground: { type: 'boolean', default: false } });
       const cfg = loadConfig();
       ensureState(cfg.home);
+      assertStartable(cfg);
       mkdirSync(runDir(cfg), { recursive: true, mode: 0o700 });
       mkdirSync(join(cfg.home, 'logs'), { recursive: true, mode: 0o700 });
       // Stale sockets from a previous run would satisfy the readiness check before the daemon serves.
@@ -634,8 +695,9 @@ async function main(argv: string[]): Promise<void> {
       if (values.foreground) return supervise(cfg);
       for (const [name, args, role] of DAEMONS) {
         const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
-        const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, windowsHide: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
+        const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { detached: true, windowsHide: true, stdio: ['ignore', out, out], env: roleEnv(role) });
         child.unref();
+        closeSync(out);
         writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
         if (name === 'ingest') await new Promise((res) => setTimeout(res, 300)); // no socket: it only talks to control
         else await waitFor(ipcPath(cfg, name as 'control' | 'signer' | 'agent'), 30_000);
@@ -653,7 +715,7 @@ async function main(argv: string[]): Promise<void> {
       const deps: Parameters<typeof runDoctor>[1] = {};
       const setUp = existsSync(join(cfg.home, 'antibody.json')) && existsSync(keyPath(cfg.home, 'control'));
       if (!values.offline && cfg.backend === 'live') {
-        const r = createRuntime({ ...cfg, role: null }, 'cli');
+        const r = createRuntime({ ...cfg, role: null }, 'cli', { readOnly: true });
         deps.chain = r.chain;
         if (cfg.accountId && setUp) {
           deps.relayerHealth = async () => {
@@ -668,7 +730,7 @@ async function main(argv: string[]): Promise<void> {
       }
       if (setUp && cfg.accountId && cfg.stewardWallet) {
         deps.ledger = async () => {
-          const r = createRuntime({ ...cfg, role: null, keyIsolation: 'simulated' }, 'cli');
+          const r = createRuntime({ ...cfg, role: null, keyIsolation: 'simulated' }, 'cli', { readOnly: true });
           const c = buildControl(r, { signer: null });
           const snap = await c.snapshot();
           return snap.ledger.ok ? { ok: true, head: snap.ledger.head.seq, acknowledged: c.hwm.acknowledged() } : { ok: false, code: snap.ledger.code, detail: snap.ledger.detail };
@@ -692,6 +754,7 @@ async function main(argv: string[]): Promise<void> {
           return;
         }
         if (!existsSync(join(cfg.home, 'antibody.json'))) throw new Error('run antibody setup first');
+        assertStartable(cfg);
         // One manager owns the daemons: stop any copy started by hand.
         spawnSync(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), 'down'], { stdio: 'ignore', windowsHide: true });
         installService(plan);
@@ -889,6 +952,39 @@ async function waitForHttp(url: string, ms: number) {
   }
 }
 
+/** A daemon's environment: its role, and only its own role's key passphrase (S16). */
+function roleEnv(role: Role): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ANTIBODY_ROLE: role };
+  for (const other of ROLES) if (other !== role) for (const v of passphraseVars(other)) delete env[v];
+  return env;
+}
+
+/**
+ * M5: `up` and the service start all four daemons as this one OS user. With
+ * enforced isolation (the live default) that can never work: each daemon would
+ * see the others' keys and refuse, and the supervisor would crash-loop. Say so
+ * up front, with the two ways out.
+ */
+function assertStartable(cfg: Config): void {
+  if (cfg.keyIsolation !== 'enforce') return;
+  const readable = ROLES.filter((r) => {
+    try {
+      readFileSync(keyPath(cfg.home, r));
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (readable.length <= 1) {
+    throw new Error(
+      readable.length === 0
+        ? 'key isolation is enforced and this user can read none of the role keys: start each daemon as its own user (e.g. `sudo -u antibody-control env ANTIBODY_ROLE=control antibody control serve --web`; see scripts/setup-roles.sh)'
+        : `key isolation is enforced: \`antibody up\` would run every role as this one user. Start each daemon as its role's user (scripts/setup-roles.sh), or for a single-user machine set ANTIBODY_KEY_ISOLATION=simulated in antibody.env`,
+    );
+  }
+  throw new Error(`key isolation is enforced but this one user can read ${readable.length} role keys (${readable.join(', ')}): every daemon would refuse to start. Run scripts/setup-roles.sh, or set ANTIBODY_KEY_ISOLATION=simulated for a single-user machine`);
+}
+
 const DAEMONS: [string, string[], Role][] = [
   ['signer', ['signer', 'serve'], 'signer'],
   ['control', ['control', 'serve', '--web'], 'control'],
@@ -906,9 +1002,11 @@ async function supervise(cfg: Config): Promise<void> {
   writeFileSync(supPid, String(process.pid));
   const children = new Map<string, ChildProcess>();
   let stopping = false;
+  const quick = new Map<string, number>();
   const start = (name: string, args: string[], role: Role, attempt: number) => {
     const out = openSync(join(cfg.home, 'logs', `${name}.out`), 'a');
-    const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { windowsHide: true, stdio: ['ignore', out, out], env: { ...process.env, ANTIBODY_ROLE: role } });
+    const child = spawn(process.execPath, [join(ROOT, 'bin', 'antibody.mjs'), ...args], { windowsHide: true, stdio: ['ignore', out, out], env: roleEnv(role) });
+    closeSync(out); // B24: the child holds its own copy; keeping ours leaked one fd per restart
     children.set(name, child);
     writeFileSync(join(runDir(cfg), `${name}.pid`), String(child.pid));
     const t0 = Date.now();
@@ -916,6 +1014,14 @@ async function supervise(cfg: Config): Promise<void> {
       children.delete(name);
       if (stopping) return;
       const next = Date.now() - t0 > 60_000 ? 0 : attempt + 1;
+      // B24: a daemon that keeps dying fast is a configuration problem, not a hiccup: stop and say so
+      // (the OS service manager may retry later with a fresh process).
+      quick.set(name, next === 0 ? 0 : (quick.get(name) ?? 0) + 1);
+      if ((quick.get(name) ?? 0) >= 12) {
+        console.error(red(`${name} keeps exiting within a minute of starting; giving up. Run \`antibody doctor\` and read ${join(cfg.home, 'logs', `${name}.out`)}`));
+        stop(1);
+        return;
+      }
       const delay = Math.min(30_000, 1000 * 2 ** Math.max(0, next - 1));
       console.log(yellow(`${new Date().toISOString()} ${name} exited (${code ?? signal}); restarting in ${delay / 1000}s`) + dim(` log ${join(cfg.home, 'logs', `${name}.out`)}`));
       setTimeout(() => !stopping && start(name, args, role, next), delay);
@@ -1016,7 +1122,8 @@ Control (antibody key)
   antibody show [--forensic] [--graph <seq>]  projection, ledger, payees, blast radius
   antibody quarantine --source 0x… | --memory <id> | --turn <id> | --signer-window <pub> --from N --to N
   antibody revoke --lane <lane> [--rotate] [--wallet]   owner removes the key on-chain; lane.revoke record
-  antibody rotate --lane <lane> [--wallet]    owner adds a fresh key after a revocation; lane.rotate record
+  antibody rotate --lane <lane> [--wallet]    as the lane's role: new key saved first, owner registers it, lane.rotate record
+  antibody revoke|rotate --lane <lane> --record-only --digest D [--pub P]   record an on-chain change that was not recorded
   antibody rebuild --fresh                    reconstruct from Walrus + Sui alone; projection digest
   antibody verify-ledger [--accept]           completeness, integrity, rollback; --accept confirms a first sync
   antibody report <seq>                       incident JSON via the Tatum Storage API

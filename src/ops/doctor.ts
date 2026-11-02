@@ -4,12 +4,12 @@
  * ledger records. Each check is independent, so one failure never hides the
  * rest.
  */
-import { existsSync, readFileSync, statfsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statfsSync, statSync } from 'node:fs';
 import { connect } from 'node:net';
 import { join } from 'node:path';
 import { ipcPath, persistedPath, ROLES, runDir, type Config } from '../config.ts';
 import { bindLanes } from '../core/lanes.ts';
-import { checkIsolation, isEncryptedKeyText, keyPassphrase, keyPath, readKeyText } from '../keystore.ts';
+import { isEncryptedKeyText, keyPassphrase, keyPath, readKeyText } from '../keystore.ts';
 import { alertConfigFrom } from './alerts.ts';
 import { readStateVersion, STATE_VERSION } from './state.ts';
 
@@ -98,43 +98,71 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
     }
   })();
   let encrypted = 0;
-  const present = ROLES.filter((r) => existsSync(keyPath(cfg.home, r)));
-  if (present.length === 0) add({ name: 'Keys', status: 'fail', detail: `none in ${join(cfg.home, 'keys')}`, fix: 'antibody setup' });
-  for (const role of present.length ? ROLES : []) {
-    const p = keyPath(cfg.home, role);
-    if (!existsSync(p)) {
-      add({ name: `Key: ${role}`, status: 'fail', detail: 'missing', fix: 'antibody setup' });
-      continue;
+  // B26: under role separation this user cannot even see the other roles' key folders. That is the
+  // point of the separation, so it is reported as "held by its role", not as missing.
+  const look = (role: (typeof ROLES)[number]): 'missing' | 'other-role' | 'here' => {
+    try {
+      statSync(keyPath(cfg.home, role));
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === 'EACCES' ? 'other-role' : 'missing';
     }
-    const mode = statSync(p).mode & 0o777;
-    if (platform !== 'win32' && (mode & 0o077) !== 0) {
-      add({ name: `Key: ${role}`, status: 'fail', detail: `mode ${mode.toString(8)}: readable by others`, fix: `chmod 600 ${p}` });
-      continue;
+    try {
+      readFileSync(keyPath(cfg.home, role));
+      return 'here';
+    } catch {
+      return 'other-role';
     }
-    const raw = readFileSync(p, 'utf8');
-    if (isEncryptedKeyText(raw)) {
-      encrypted++;
-      if (!pass) {
-        add({ name: `Key: ${role}`, status: 'fail', detail: 'encrypted, and no passphrase is set', fix: 'set ANTIBODY_KEY_PASSPHRASE or ANTIBODY_KEY_PASSPHRASE_FILE' });
+  };
+  const where = Object.fromEntries(ROLES.map((r) => [r, look(r)])) as Record<(typeof ROLES)[number], ReturnType<typeof look>>;
+  const keysDirListable = (() => {
+    try {
+      readdirSync(join(cfg.home, 'keys'));
+      return true;
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code !== 'EACCES';
+    }
+  })();
+  if (ROLES.every((r) => where[r] === 'missing') && keysDirListable) add({ name: 'Keys', status: 'fail', detail: `none in ${join(cfg.home, 'keys')}`, fix: 'antibody setup' });
+  else
+    for (const role of ROLES) {
+      const p = keyPath(cfg.home, role);
+      if (where[role] === 'missing' && keysDirListable) {
+        add({ name: `Key: ${role}`, status: 'fail', detail: 'missing', fix: 'antibody setup' });
         continue;
       }
-      try {
-        readKeyText(p);
-      } catch (e) {
-        add({ name: `Key: ${role}`, status: 'fail', detail: (e as Error).message, fix: 'check the passphrase' });
+      if (where[role] !== 'here') {
+        add({ name: `Key: ${role}`, status: 'ok', detail: 'held by its own role (not readable by this user)' });
         continue;
       }
+      const mode = statSync(p).mode & 0o777;
+      if (platform !== 'win32' && (mode & 0o077) !== 0) {
+        add({ name: `Key: ${role}`, status: 'fail', detail: `mode ${mode.toString(8)}: readable by others`, fix: `chmod 600 ${p}` });
+        continue;
+      }
+      const raw = readFileSync(p, 'utf8');
+      if (isEncryptedKeyText(raw)) {
+        encrypted++;
+        if (!pass && !keyPassphrase(process.env, role)) {
+          add({ name: `Key: ${role}`, status: 'fail', detail: 'encrypted, and no passphrase is set', fix: `set ANTIBODY_KEY_PASSPHRASE_${role.toUpperCase()} (or the shared ANTIBODY_KEY_PASSPHRASE)` });
+          continue;
+        }
+        try {
+          readKeyText(p);
+        } catch (e) {
+          add({ name: `Key: ${role}`, status: 'fail', detail: (e as Error).message, fix: 'check the passphrase' });
+          continue;
+        }
+      }
+      add({ name: `Key: ${role}`, status: 'ok', detail: isEncryptedKeyText(raw) ? 'present, encrypted' : 'present' });
     }
-    add({ name: `Key: ${role}`, status: 'ok', detail: isEncryptedKeyText(raw) ? 'present, encrypted' : 'present' });
-  }
-  if (encrypted === 0 && existsSync(keyPath(cfg.home, 'control'))) {
+  if (encrypted === 0 && where.control === 'here') {
     add({ name: 'Keys at rest', status: cfg.backend === 'live' ? 'warn' : 'ok', detail: 'plaintext (protected by file permissions only)', ...(cfg.backend === 'live' ? { fix: 'ANTIBODY_KEY_PASSPHRASE=… antibody keys encrypt' } : {}) });
   }
-  const iso = ROLES.map((r) => ({ r, rep: checkIsolation(cfg, r) })).filter((x) => !x.rep.ok);
+  const readableHere = ROLES.filter((r) => where[r] === 'here');
   add(
-    iso.length === 0
-      ? { name: 'Key isolation', status: 'ok', detail: 'each role can read only its own key' }
-      : { name: 'Key isolation', status: cfg.keyIsolation === 'enforce' ? 'fail' : 'warn', detail: `one OS user can read every role's key (${cfg.keyIsolation === 'enforce' ? 'enforced: daemons will refuse to start' : 'SIMULATED isolation'})`, fix: 'give each role its own OS user: sudo scripts/setup-roles.sh' },
+    readableHere.length <= 1
+      ? { name: 'Key isolation', status: 'ok', detail: readableHere.length ? `this user holds only the ${readableHere[0]} key` : 'this user holds no role key' }
+      : { name: 'Key isolation', status: cfg.keyIsolation === 'enforce' ? 'fail' : 'warn', detail: `this OS user can read ${readableHere.length} role keys (${cfg.keyIsolation === 'enforce' ? 'enforced: daemons will refuse to start' : 'SIMULATED isolation'})`, fix: 'give each role its own OS user: sudo scripts/setup-roles.sh' },
   );
 
   // Backend and network

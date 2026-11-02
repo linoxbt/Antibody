@@ -34,14 +34,14 @@ export class TatumStorage implements ReportStore {
   async upload(filename: string, json: unknown): Promise<UploadResult> {
     const body = new FormData();
     body.append('file', new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' }), filename);
-    const res = await fetch(`${this.apiUrl}/v4/data/storage/upload`, { method: 'POST', headers: { 'x-api-key': this.apiKey }, body });
+    const res = await fetch(`${this.apiUrl}/v4/data/storage/upload`, { method: 'POST', headers: { 'x-api-key': this.apiKey }, body, signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new Error(`Tatum Storage upload failed: HTTP ${res.status} ${await res.text()}`);
     const r = (await res.json()) as Omit<UploadResult, 'url' | 'simulated'>;
     return { ...r, url: `${AGGREGATOR}/${r.blobId}`, simulated: false };
   }
 
   async status(jobId: string): Promise<Record<string, unknown>> {
-    const res = await fetch(`${this.apiUrl}/v4/data/storage/upload/${encodeURIComponent(jobId)}`, { headers: { 'x-api-key': this.apiKey } });
+    const res = await fetch(`${this.apiUrl}/v4/data/storage/upload/${encodeURIComponent(jobId)}`, { headers: { 'x-api-key': this.apiKey }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`Tatum Storage status failed: HTTP ${res.status}`);
     return (await res.json()) as Record<string, unknown>;
   }

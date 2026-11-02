@@ -13,5 +13,5 @@ export type SigClient = SuiGrpcClient;
 
 export function zkLoginClient(url = process.env.ANTIBODY_ZKLOGIN_RPC_URL ?? DEFAULT_URL): () => SigClient {
   let c: SigClient | null = null;
-  return () => (c ??= new SuiGrpcClient({ network: 'mainnet', baseUrl: url }));
+  return () => (c ??= new SuiGrpcClient({ network: 'mainnet', baseUrl: url, timeout: 15_000 }));
 }

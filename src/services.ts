@@ -22,6 +22,7 @@ import { loadGuardians, type GuardianLists } from './ingest/guardians.ts';
 import { watchWallet, type WatchOptions } from './ingest/watch.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
+import { runUnprotectedTurn } from './steward/unprotected.ts';
 import { suiNetworkId } from './payments/x402.ts';
 import { Alerter, alertConfigFrom, type Alert } from './ops/alerts.ts';
 
@@ -109,6 +110,8 @@ export function controlRoutes(control: Control): Record<string, Route> {
     '/lessons': { lanes: ['wallet-objects'], handler: async () => control.lessons() },
     '/incident': { lanes: ['wallet-objects'], handler: async (p) => control.incident(p as Parameters<Control['incident']>[0]) },
     '/checkpoint': { lanes: ['agent', 'user', 'wallet-objects'], handler: async () => control.d.chain.latestCheckpoint() },
+    // M4: a lane's own process asks control to record its rotation, signing with the new key (bound on-chain).
+    '/lane/rotated': { lanes: ['user', 'agent', 'wallet-objects'], handler: async (p, caller) => control.recordRotate(caller.pub, caller.lane, String((p as { digest?: string }).digest ?? '')) },
   };
 }
 
@@ -190,6 +193,11 @@ export async function serveAgent(rt: Runtime) {
           const { instruction, execute } = p as { instruction: string; execute?: boolean };
           return runTurn({ ...full, execute: !!execute }, instruction);
         },
+      },
+      // M4: the unprotected comparison also runs here, so the LLM key never has to live in control.
+      '/compare': {
+        lanes: ['antibody'],
+        handler: async (p) => runUnprotectedTurn({ mem: deps.mem, chain: rt.chain, wallet: requireWallet(rt.cfg), model: deps.model }, String((p as { instruction?: string }).instruction ?? '').slice(0, 2000)),
       },
     },
     chainLaneOf(rt),

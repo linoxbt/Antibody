@@ -21,19 +21,24 @@ export interface SdkChainOptions {
   gasBudget?: bigint;
 }
 
-export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey'>): AnyClient {
+/** Deadline for one chain call; without it a hung RPC held locks for minutes (undici's default is ~300 s). */
+export const CHAIN_CALL_TIMEOUT_MS = 30_000;
+
+export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {
   const headers: Record<string, string> = o.apiKey ? { 'x-api-key': o.apiKey } : {};
   if (o.transport === 'grpc') {
     // gRPC-web over fetch; Tatum takes the key as x-api-key metadata.
-    return new SuiGrpcClient({ network: o.network, baseUrl: o.url, meta: headers });
+    return new SuiGrpcClient({ network: o.network, baseUrl: o.url, meta: headers, ...(timeoutMs ? { timeout: timeoutMs } : {}) });
   }
-  return new SuiJsonRpcClient({ network: o.network, transport: new JsonRpcHTTPTransport({ url: o.url, rpc: { headers } }) });
+  const timed: typeof fetch = (input, init) => fetch(input, { ...init, ...(timeoutMs ? { signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) } : {}) });
+  return new SuiJsonRpcClient({ network: o.network, transport: new JsonRpcHTTPTransport({ url: o.url, rpc: { headers }, fetch: timed }) });
 }
 
 export class SdkChainReader implements ChainReader {
   readonly kind: 'tatum-grpc' | 'tatum-jsonrpc';
   readonly simulated = false;
   readonly client: AnyClient;
+  private streamClient: AnyClient | null = null;
 
   constructor(private readonly o: SdkChainOptions) {
     this.kind = o.transport === 'grpc' ? 'tatum-grpc' : 'tatum-jsonrpc';
@@ -123,7 +128,8 @@ export class SdkChainReader implements ChainReader {
   get watchCheckpoints(): ChainReader['watchCheckpoints'] {
     if (this.o.transport !== 'grpc') return undefined;
     return async (address, onCheckpoint, signal) => {
-      const client = this.client as SuiGrpcClient;
+      // A long-lived stream: its own client, with no per-call deadline.
+      const client = (this.streamClient ??= createSuiClient(this.o, null)) as SuiGrpcClient;
       const call = client.subscriptionService.subscribeCheckpoints(
         {
           readMask: { paths: ['sequence_number'] },

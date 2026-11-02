@@ -40,11 +40,6 @@ export class TatumStorage implements ReportStore {
     return { ...r, url: `${AGGREGATOR}/${r.blobId}`, simulated: false };
   }
 
-  async status(jobId: string): Promise<Record<string, unknown>> {
-    const res = await fetch(`${this.apiUrl}/v4/data/storage/upload/${encodeURIComponent(jobId)}`, { headers: { 'x-api-key': this.apiKey }, signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) throw new Error(`Tatum Storage status failed: HTTP ${res.status}`);
-    return (await res.json()) as Record<string, unknown>;
-  }
 }
 
 /** Offline stand-in: writes the report locally and labels it SIMULATED. */

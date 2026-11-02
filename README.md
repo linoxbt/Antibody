@@ -263,6 +263,9 @@ The invariants are the product. Each is enforced in code and attacked by a test.
 | I-10 | **Restore is deterministic** (fresh process, same digest) | `rebuild --fresh`, projection digest | T-17, T-18 |
 | I-11 | **The ledger is tamper-evident** (hash chain, contiguous seq, signer rules, rollback guard) | `core/ledger.ts` | T-10, T-11 ×4, T-12 |
 | I-12 | **Keys are separated** (one role, one key, one OS user) | `keystore.ts`, `scripts/setup-roles.sh` | T-19 |
+| I-13 | **Lane keys come only from the chain and control-signed history.** A ledger record signed by a key the owner never registered is noise, not a key change | `core/ledger.ts` (`trustedHistory`) | S1 ledger tests, fuzz |
+| I-14 | **A payment goes out once.** The same recipient, coin and amount within 10 minutes, or one still in flight, is `DUPLICATE_PAYMENT` | `control.ts` payment log | hardening B6 |
+| I-15 | **Every process proves who answered.** IPC requests and responses are signed by the lane keys, nonces are single-use, bodies are capped | `ipc.ts` | ipc tests |
 
 ### Trust assumptions (stated, not hidden)
 
@@ -273,8 +276,14 @@ The invariants are the product. Each is enforced in code and attacked by a test.
 - **Tatum** returns correct Sui state. **Seal** key servers meet their threshold.
 - **Revocation is forward-only**: a removed key can still decrypt memories saved
   before removal. Revocation cuts the writer; it doesn't make old data secret.
-- `ckpt` in a header is claimed by the writer; the relayer rejecting removed keys
-  (probe P-5) is what stops back-dating after revocation.
+- `ckpt` in a header is claimed by the writer. A record whose claimed checkpoint
+  is far older than the relayer's own `createdAt` is flagged BACKDATED and never
+  trusted; the relayer rejecting removed keys (probe P-5) is what stops
+  back-dating after revocation.
+- **First sync.** On a new machine there is no local high-water mark yet, so a
+  relayer could hide the newest ledger records once. Payments stay blocked
+  (`LEDGER_UNACKNOWLEDGED`) until you compare the head with another machine or
+  the console and run `antibody verify-ledger --accept`.
 
 ---
 
@@ -301,15 +310,20 @@ and when, across sessions and machines.
 
 ## Agent payments (x402 on Sui)
 
-`pay_x402(url)` lets Steward pay a bill served behind HTTP 402:
+`pay_x402(url)` lets Steward pay a bill served behind HTTP 402. It is **off
+until you allow bill origins**: `ANTIBODY_X402_ALLOW=https://bills.example.com`
+(comma separated, exact origins); with no allowlist the tool is not offered to
+the model at all.
 
-1. Control fetches the URL, decodes `PAYMENT-REQUIRED`, picks the `exact`
+1. Control fetches the URL (only an allowed origin, no redirects, with a deadline), decodes `PAYMENT-REQUIRED`, picks the `exact`
    requirement for `sui:mainnet`.
 2. `payTo`, `amount` and `asset` become a normal proposal: **R0–R5 decide**.
 3. On ALLOW the signer re-simulates and **signs without executing**; control
    retries with `PAYMENT-SIGNATURE` (base64 PaymentPayload `{signature, transaction}`).
 4. The facilitator verifies network, signature, dry-run and the `payTo` balance
-   change, then executes on Sui and returns `PAYMENT-RESPONSE`.
+   change, then executes on Sui and returns `PAYMENT-RESPONSE`. Control then
+   reads that transaction from Sui itself: a payment is recorded as executed
+   only when the chain shows it succeeded.
 
 The 402 response body is external content and is never shown to the model. A
 bill server whose `payTo` isn't a registered payee gets `BLOCK`. A reference
@@ -329,10 +343,11 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody doctor [--json]` | — | check the whole install (keys, state, RPC, relayer, ledger, daemons, alerts); a fix for each problem |
 | `antibody service install\|uninstall\|status` | — | run at login, restart on crash: systemd user unit, launchd agent or Task Scheduler |
 | `antibody alert test` | — | send a test alert (`ANTIBODY_ALERT_WEBHOOK`, or Telegram bot token + chat id) |
-| `antibody keys encrypt` | — | encrypt key files at rest (scrypt + AES-256-GCM) with `ANTIBODY_KEY_PASSPHRASE` |
+| `antibody keys encrypt` | — | encrypt key files at rest (scrypt + AES-256-GCM) with `ANTIBODY_KEY_PASSPHRASE`, or one `ANTIBODY_KEY_PASSPHRASE_<ROLE>` per role |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
 | `antibody cloud serve` | — | the hosted sandbox: any wallet gets its own simulated Antibody (`$PORT`, `ANTIBODY_CLOUD_DATA`) |
-| `antibody rotate --lane <lane> [--wallet]` | owner | add a fresh key after a revocation; `lane.rotate` record |
+| `antibody rotate --lane <lane> [--wallet]` | lane's role + owner | run as the lane's own role: the new key is saved first, the owner registers it, then a `lane.rotate` record |
+| `antibody revoke\|rotate --lane <lane> --record-only --digest D [--pub P]` | control | record an on-chain key change whose ledger record was interrupted |
 | `antibody payee add\|remove` | user | signed ledger record after typed confirmation (last 6 chars) |
 | `antibody statement "<text>"` | user | a trusted `[USER FACT]` |
 | `antibody release <seq> --reason …` | user | `quarantine.release` (human decision) |
@@ -345,7 +360,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody quarantine --source\|--memory\|--turn\|--signer-window …` | control | closure preview → ledger record → lesson |
 | `antibody revoke --lane <lane> [--rotate] [--wallet]` | control + owner | on-chain removal, verification, `lane.revoke` (+ `lane.rotate`) |
 | `antibody rebuild --fresh` | control | reconstruction from Walrus + Sui; projection digest |
-| `antibody verify-ledger` | control | completeness, integrity, rollback |
+| `antibody verify-ledger [--accept]` | control | completeness, integrity, rollback; `--accept` confirms the head on a first sync |
 | `antibody report <seq>` | control | incident JSON via Tatum Storage API |
 | `antibody lessons` · `incidents` · `restore-index` | control | learned lessons, sentinel incidents, relayer index repair |
 
@@ -359,8 +374,13 @@ See [`.env.example`](.env.example). Key variables: `ANTIBODY_BACKEND`
 owner signs in the browser with `--wallet`), `ANTIBODY_KEY_ISOLATION`
 (`enforce` default on live), `ANTIBODY_KEY_PASSPHRASE[_FILE]` (encrypted key
 files), `ANTIBODY_ALERT_WEBHOOK`, `ANTIBODY_TELEGRAM_BOT_TOKEN` +
-`ANTIBODY_TELEGRAM_CHAT_ID` (alerts). Hosted sandbox: `ANTIBODY_CLOUD_*`
-limits, `ANTIBODY_METRICS_TOKEN` for `GET /metrics`.
+`ANTIBODY_TELEGRAM_CHAT_ID` (alerts), `ANTIBODY_X402_ALLOW` (bill origins Steward
+may pay over x402; unset = off). Per-role passphrases:
+`ANTIBODY_KEY_PASSPHRASE_CONTROL|STEWARD|INGEST|SIGNER`. Hosted sandbox:
+`ANTIBODY_CLOUD_*` limits, `ANTIBODY_PUBLIC_ORIGIN` (the site named in sign-in
+messages), `ANTIBODY_METRICS_TOKEN` (`GET /metrics` answers 404 without it),
+`ANTIBODY_CLIENT_IP_HEADER`. Every variable, with defaults, is in `.env.example`;
+unknown values are refused at start rather than guessed.
 
 ## Repository layout
 
@@ -379,7 +399,7 @@ src/ops/        doctor · service (systemd/launchd/Task Scheduler) · resilience
 web/            index · walkthrough · security · install · privacy · login · app (console SPA) · owner · offline · 404 (.html) · install.sh · install.ps1 · manifest + sw.js (installable app)
                 assets/css (brand, landing, walkthrough, app) · assets/js (shell, motion, data, ui, pages/*, app/*) · assets/img · assets/fonts
 scripts/        probe.ts (Phase 0) · demo-m1.ts · attack-set/run.ts · setup-roles.sh (Linux + macOS) · load-sandbox.ts · build-site.ts
-test/           node:test suites (envelope, lineage, ledger, ledger-scale, policy, system, keys, lint, auth, revoke, owner-sign, watch, crosscheck, rates, cloud, cloud-ops, ops, fuzz)
+test/           node:test suites (envelope, lineage, ledger, ledger-scale, policy, system, keys, lint, auth, revoke, owner-sign, watch, crosscheck, rates, cloud, cloud-ops, ops, fuzz, hardening, ipc, signer-shape)
 e2e/            Chromium end-to-end: public pages, console views, wallet sign-in, attack → quarantine, owner approval page, PWA; axe-core WCAG 2.1 AA
 docs/           blog.md · demo-live.md · design-notes.md · attack-set-results.md
 ```
@@ -388,7 +408,8 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
-| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox | ✅ 104 unit tests (`npm test`) | same code |
+| Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox, audit hardening | ✅ 138 unit tests (`npm test`) | same code |
+| Attack set: 20 variants, every cell counted from the runs | ✅ 0/20 unsafe executed, 0/40 legitimate blocked, 20/20 repeats refused; CI fails on any regression | needs an LLM key for a real model |
 | Fuzzing: mutated envelopes, ledger bodies and whole ledgers never verify or crash | ✅ seeded, 90k cases checked; CI runs 20k per push | — |
 | Ledger past 90 records (cap now 5000) | ✅ 260-record cold rebuild through 100-hit recall | same code |
 | Operability: doctor, supervisor restart, service files, state migration, retries, alerts, encrypted keys | ✅ unit tests; supervisor restart checked by hand | — |

@@ -9,6 +9,9 @@
 # Your data and keys live in ~/.antibody (ANTIBODY_HOME); this script never touches them.
 set -euo pipefail
 
+# Everything runs from main(), called on the last line: a download cut short
+# by the network defines nothing and runs nothing (B27).
+main() {
 REPO="${ANTIBODY_REPO:-https://github.com/linoxbt/Antibody.git}"
 REF="${ANTIBODY_REF:-main}"
 DIR="${ANTIBODY_APP_DIR:-$HOME/.antibody-app}"
@@ -49,7 +52,7 @@ ok "npm $(npm -v)"
 if [ -d "$DIR/.git" ]; then
   bold "Updating $DIR"
   git -C "$DIR" fetch --depth 1 origin "$REF" || fail "Could not reach GitHub to update." "Check your internet connection, or a proxy/firewall blocking github.com."
-  git -C "$DIR" checkout -q -B "$REF" FETCH_HEAD
+  git -C "$DIR" checkout -q -B "$REF" FETCH_HEAD || fail "Could not switch $DIR to the new version." "Local changes in $DIR? Move the folder away and run the installer again (your data in ~/.antibody is not in it)."
 elif [ -e "$DIR" ]; then
   fail "$DIR exists but is not an Antibody install." "Move it away, or choose another folder: ANTIBODY_APP_DIR=~/antibody-app bash install.sh"
 else
@@ -130,3 +133,6 @@ echo "    antibody up        # starts Antibody and prints your sign-in link"
 echo "  Then open it any time with: antibody open (or the Antibody app icon)"
 echo
 echo "  Guide: https://antibody-memory.netlify.app/install"
+}
+
+main "$@"

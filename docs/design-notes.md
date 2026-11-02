@@ -90,7 +90,10 @@ it with that explanation.
 
 The hackathon has a *Best Use of Agent Payments* award (x402 or MPP, settled on
 Sui). x402 v2 over HTTP with the Sui `exact` scheme is implemented as a fourth
-Steward tool behind the same policy. The signer signs without executing, and the
+Steward tool behind the same policy. It is opt-in: without
+`ANTIBODY_X402_ALLOW` the tool is not offered, and control fetches only allowed
+origins, never follows redirects, and confirms the settlement on Sui before
+recording a payment as executed. The signer signs without executing, and the
 facilitator settles. Public Sui x402 facilitators were testnet- or
 hackathon-stage when this was written, so the repo ships a reference resource
 server and facilitator. Verify a mainnet facilitator before relying on a third party.
@@ -100,3 +103,43 @@ server and facilitator. Verify a mainnet facilitator before relying on a third p
 The attack set's "user-pasted text marked external" carrier needs a path. Pasted
 text enters through the wallet-objects lane as an untrusted observation
 (`antibody ingest paste`), never as a user statement.
+
+## 14. Ledger key history comes only from control-signed records
+
+Lane keys are what the owner registered on-chain plus what earlier
+control-signed `lane.rotate` / `lane.revoke` records say, starting from a genesis
+signed by a control key that is on-chain. A record signed by any other key
+cannot introduce or bound a key; a revoke names only a key already bound to the
+same lane, never the control lane, and never a checkpoint after its own. Blobs
+written to the ledger namespace by keys outside the four lanes (the relayer
+says who wrote them) are ignored as noise instead of breaking the chain.
+
+## 15. Duplicate payments are refused
+
+A payment log next to the ledger refuses a payment identical (recipient, coin,
+amount) to one pending, of unknown outcome, or executed in the last 10 minutes.
+Payments are serialised, so two turns cannot both pass the check. The demo and
+the attack set therefore check rent with a dry run first and pay it once.
+
+## 16. First sync must be acknowledged
+
+The local high-water mark is what makes ledger rollback detectable. A new
+machine has none, so payments stay blocked (`LEDGER_UNACKNOWLEDGED`) until the
+owner confirms the head with `antibody verify-ledger --accept`.
+
+## 17. Rotation runs as the lane's own role
+
+Under key isolation only the lane's role can hold its new key, so `antibody
+rotate` runs as that role. The new key is written to disk (`.new`) before the
+owner registers it, so a crash never leaves an on-chain key with no private key;
+`--record-only` records a change whose ledger write was interrupted. Each role
+may have its own key passphrase.
+
+## 18. Console sessions need a second secret locally
+
+On `127.0.0.1` any page in the browser can make requests that carry the cookie,
+so the local console also requires the session's secret in an
+`x-antibody-session` header (kept in the page's storage), checks Host against
+an allowlist (DNS rebinding), and Origin / Sec-Fetch-Site. The hosted sandbox
+uses `__Host-` cookies, opens a session only after the visitor's world exists,
+and names its configured site (not the request's Host) in sign-in messages.

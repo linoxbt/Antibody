@@ -201,7 +201,7 @@ async function main() {
         }
       }
     }
-    const cov = await retrieveAll(mw, ns, [laneQuery('user', 'statement')], (found, missing) => (missing.length ? ['coverage record', 'reminder'] : []));
+    const cov = await retrieveAll(mw, ns, [laneQuery('user', 'statement')], (_found, missing) => (missing.length ? ['coverage record', 'reminder'] : []));
     return { pass: cov.missing.length === 0, evidence: { namespace: ns, written: blobs.length, inventory: cov.inventory.length, retrieved: cov.memories.length, missing: cov.missing, queries: cov.queries } };
   });
 

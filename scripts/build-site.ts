@@ -63,13 +63,13 @@ async function main() {
 
     await snap({
       time: '0:00',
-      title: 'Rent is paid.',
-      text: 'Trusted fact, registered payee: allowed.',
-      run: await run(w, RENT, true),
+      title: 'Rent checks out.',
+      text: 'Trusted fact, registered payee: allowed (a dry run; the real payment comes at the end).',
+      run: await run(w, RENT, false),
     });
 
     const coin = w.airdrop(POISON_COIN);
-    const scan = await w.scan();
+    await w.scan();
     await snap({
       time: '0:20',
       title: 'A coin that talks.',
@@ -106,7 +106,7 @@ async function main() {
     await snap({
       time: '2:15',
       title: 'Rebuilt.',
-      text: 'Fresh process, same digest. Rent goes to the real landlord.',
+      text: 'Fresh process, same digest. Rent is paid, to the real landlord.',
       run: await run(w, RENT, true),
     }, true);
 

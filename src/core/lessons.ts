@@ -111,7 +111,3 @@ export function matchLessons(c: LessonCandidate, lessons: LessonEntry[]): { scor
   return { score, matches };
 }
 
-/** Strong matches (sender, coin type, package) justify automatic quarantine. */
-export function isStrongLessonMatch(m: LessonMatch): boolean {
-  return m.indicator !== 'keywords';
-}

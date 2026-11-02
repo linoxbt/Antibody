@@ -41,7 +41,9 @@ async function main() {
     step('0:00', "Steward at work: Ada's payees are signed by Ada (user lane)");
     await seedBaseline(w);
     await w.addPayee({ payeeId: 'utility', label: 'utility', address: CAST.utility, capDisplay: '150' });
-    const t0 = await w.steward("Pay this month's rent.", { execute: true });
+    // A dry run: the real payment is made once, after restoration (paying the
+    // same rent twice in ten minutes is refused as DUPLICATE_PAYMENT).
+    const t0 = await w.steward("Pay this month's rent.", { execute: false });
     decisions(t0);
 
     step('0:20', 'The poison: a second wallet sends a coin called "USDC Rewards"');

@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.1.0 — 2026-11-02
+
+Fixes from a full audit of 1.0.0. Upgrading is in place; on a machine with no
+ledger high-water mark run `antibody verify-ledger --accept` once.
+
+### Security
+- Ledger key changes are accepted only from control-signed history; outsider
+  records are ignored as noise (S1). Quarantine closure covers unverified and
+  duplicate ids (B2, S3). Back-dated records are flagged from the relayer's
+  `createdAt`.
+- Incidents are revalidated before they act; auto-quarantine has a budget per
+  sender (S2, S4). The signer checks the shape of every transaction (S5).
+- Payments: duplicate refusal and serialisation (B6, M8); x402 is opt-in with an
+  origin allowlist, no redirects, deadlines and on-chain settlement checks (S7).
+- IPC responses are signed; nonces are reserved before use; bodies capped (S13).
+- Local console: session secret header, Host allowlist, Origin checks (S11).
+  Hosted sandbox: `__Host-` cookies, session only after the world exists,
+  `/metrics` off without a token, fixed sign-in origin (S8, S14, S15). Owner
+  approval page bound to the first browser (S6). Reports redact private text (S9).
+- Per-role key passphrases; rotation runs as the lane's role (S16, B9).
+- Container runs as an unprivileged user; nothing secret goes into the image
+  (S12). Security headers on the public site; CI actions pinned, read-only token.
+
+### Reliability
+- Alerts can no longer crash control (B3); strict configuration (B8); network
+  deadlines on every chain, relayer and storage call; ingest outbox so an
+  observation is never lost between scan and write; flapping checkpoint streams
+  back off to polling (B24); doctor works under role separation (B26).
+- Revoking the user lane no longer deadlocks; interrupted revokes and rotations
+  can be recorded afterwards (`--record-only`).
+- Quarantines that match nothing need an explicit confirmation; duplicate payees
+  are refused (B15, B18). Ledger verification and projection are memoised.
+- Installers: run only when fully downloaded, detect a failed update, keep
+  `%VAR%` entries in the Windows PATH, use `npm.cmd` (B27).
+
+### Honest numbers
+- The attack-set table is computed from the runs, including the blocked cell
+  (M10), and CI fails on any unsafe execution or wrongly blocked rent.
+- `.env.example` lists every variable (M12); unused code removed and the
+  compiler now rejects unused code (M14).
+
 ## 1.0.0 — 2026-10-29
 
 First release. Everything below runs on the simulated backend with no keys;

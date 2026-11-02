@@ -5,7 +5,7 @@
  * decision records. Never holds the owner or wallet key.
  */
 import { join } from 'node:path';
-import { bodyContent, buildEnvelope, parseEnvelope } from '../core/envelope.ts';
+import { bodyContent, buildEnvelope } from '../core/envelope.ts';
 import { fromBase64, isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, sha256Hex, SUI_COIN_TYPE, toBase64, uuidv7, UUID_RE } from '../core/encoding.ts';
 import type { LaneKey } from '../core/keys.ts';
 import type { AccountState } from '../core/lanes.ts';
@@ -774,24 +774,6 @@ export class Control {
     return { report, upload: up };
   }
 
-  /** Raw envelopes of the turn's readSet (forensics for a BLOCK). */
-  lineageOf(ids: string[]) {
-    const snap = this.last;
-    if (!snap) return [];
-    return ids
-      .map((id) => snap.projection.lineage.nodes.get(id))
-      .filter((n) => !!n)
-      .map((n) => ({ id: n!.id, cls: n!.cls, lane: n!.env.header.lane, kind: n!.env.header.kind, quarantined: n!.quarantined, parents: n!.env.header.parents, text: bodyContent(n!.env.body).slice(0, 400) }));
-  }
-}
-
-/** Envelope header without verification, for display of failures. */
-export function peekHeader(text: string) {
-  try {
-    return parseEnvelope(text).header;
-  } catch {
-    return null;
-  }
 }
 
 export { fromBase64 };

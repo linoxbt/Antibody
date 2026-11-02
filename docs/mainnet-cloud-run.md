@@ -44,9 +44,29 @@ antibody report <quarantine seq>                    # incident report via Tatum 
 ## Before the session ends
 
 Export the home (keys included) for the owner to restore on their own
-computer: `tar czf antibody-mainnet-home.tgz -C $HOME .antibody-mainnet`, then
-`antibody keys encrypt`-style protection: encrypt the archive with a passphrase
-the owner chooses (`openssl enc -aes-256-cbc -pbkdf2`). Never commit it.
-Restore on the PC: extract to `%USERPROFILE%\.antibody` (or `~/.antibody`),
-put `ANTIBODY_BACKEND=live` and `TATUM_API_KEY` in `antibody.env`, run
+computer. Nothing unencrypted is ever written to disk:
+
+```bash
+# 1. Encrypt every key file in place (scrypt + AES-GCM). The passphrase goes in
+#    the environment settings, never in a command line or a chat.
+antibody keys encrypt              # reads ANTIBODY_KEY_PASSPHRASE
+# 2. Archive and encrypt in one pipe; the name matches .gitignore and .dockerignore.
+tar czf - -C "$HOME" .antibody-mainnet \
+  | openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -pass env:ANTIBODY_KEY_PASSPHRASE \
+  > antibody-mainnet-home.tgz.enc
+git status --short                  # must not list the archive
+```
+
+Download `antibody-mainnet-home.tgz.enc`, then delete it from the session.
+Never commit it.
+
+Restore on the PC:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in antibody-mainnet-home.tgz.enc | tar xzf - -C ~
+mv ~/.antibody-mainnet ~/.antibody   # Windows: %USERPROFILE%\.antibody
+```
+
+Put `ANTIBODY_BACKEND=live`, `TATUM_API_KEY` and `ANTIBODY_KEY_PASSPHRASE`
+(or one `ANTIBODY_KEY_PASSPHRASE_<ROLE>` per role) in `antibody.env`, then run
 `antibody doctor`.

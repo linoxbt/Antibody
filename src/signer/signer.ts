@@ -29,6 +29,11 @@ export class Signer {
     this.address = normalizeSuiAddress(keypair.toSuiAddress());
   }
 
+  /** S13: the signer signs its IPC responses with the wallet key, which control checks against the wallet address. */
+  serverKey(): { publicKeyHex: string; sign(m: Uint8Array): Promise<Uint8Array> } {
+    return { publicKeyHex: Buffer.from(this.keypair.getPublicKey().toRawBytes()).toString('hex'), sign: (m) => this.keypair.sign(m) };
+  }
+
   static fromSecret(secret: string, chain: ChainReader, log: Logger, maxGasMist: string): Signer {
     return new Signer(Ed25519Keypair.fromSecretKey(secret), chain, log, maxGasMist);
   }

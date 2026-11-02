@@ -8,9 +8,10 @@
  *   signer   (wallet key)     ← antibody: /sign
  *   agent    (agent + LLM key) ← antibody: /turn   (the web UI's "run" button)
  */
+import { Ed25519PublicKey } from '@mysten/sui/keypairs/ed25519';
 import { ipcPath, socketPath, cacheDir, requireAccount, requireWallet, type Config } from './config.ts';
 import { assertOwnLane, bindLanes } from './core/lanes.ts';
-import { LABEL_LANE, type Lane } from './core/types.ts';
+import { LABEL_LANE, LANE_LABEL, type Lane } from './core/types.ts';
 import { Control } from './control/control.ts';
 import { createIpcHandler, IpcClient, serveUnix, unixTransport, type Route, type Transport } from './ipc.ts';
 import { loadLaneKey, loadWalletSecret } from './keystore.ts';
@@ -23,6 +24,31 @@ import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
 import { suiNetworkId } from './payments/x402.ts';
 import { Alerter, alertConfigFrom, type Alert } from './ops/alerts.ts';
+
+/** S13: accept a daemon's response only from the key that should be serving it. */
+export function laneServer(rt: Runtime, lane: Lane): (pub: string) => Promise<boolean> {
+  const label = LANE_LABEL[lane];
+  const cache = new Map<string, number>();
+  return async (pub) => {
+    const t = cache.get(pub);
+    if (t && Date.now() - t < 60_000) return true;
+    const a = await rt.chain.getAccount(requireAccount(rt.cfg));
+    const ok = a.delegateKeys.some((k) => k.publicKeyHex === pub && k.label === label);
+    if (ok) cache.set(pub, Date.now());
+    return ok;
+  };
+}
+
+/** The signer answers with the key behind Steward's wallet address. */
+export function walletServer(wallet: string): (pub: string) => boolean {
+  return (pub) => {
+    try {
+      return new Ed25519PublicKey(Buffer.from(pub, 'hex')).toSuiAddress() === wallet;
+    } catch {
+      return false;
+    }
+  };
+}
 
 /** Map a public key to its lane from the live account (for daemons other than control). */
 export function chainLaneOf(rt: Runtime): (pub: string) => Promise<Lane | undefined> {
@@ -56,7 +82,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
     chain: rt.chain,
     mem: rt.memory(key),
     key,
-    signer: signerTransport ? new IpcClient(key, signerTransport) : null,
+    signer: signerTransport ? new IpcClient(key, signerTransport, Date.now, walletServer(requireWallet(cfg))) : null,
     home: cfg.home,
     log: rt.log,
     reports: rt.reports,
@@ -87,7 +113,7 @@ export function controlRoutes(control: Control): Record<string, Route> {
 }
 
 export function controlHandler(control: Control): Transport {
-  return createIpcHandler(controlRoutes(control), (pub) => control.laneOf(pub));
+  return createIpcHandler(controlRoutes(control), (pub) => control.laneOf(pub), Date.now, control.d.key);
 }
 
 export async function serveControl(rt: Runtime, control: Control) {
@@ -105,7 +131,7 @@ export function buildSigner(rt: Runtime): Signer {
 }
 
 export function signerHandler(signer: Signer, laneOf: (pub: string) => Promise<Lane | undefined>): Transport {
-  return createIpcHandler({ '/sign': { lanes: ['antibody'], handler: async (p) => signer.sign(p as SignRequest) } }, laneOf);
+  return createIpcHandler({ '/sign': { lanes: ['antibody'], handler: async (p) => signer.sign(p as SignRequest) } }, laneOf, Date.now, signer.serverKey());
 }
 
 export async function serveSigner(rt: Runtime, signer: Signer) {
@@ -146,7 +172,7 @@ export function stewardBase(rt: Runtime, execute: boolean, model?: ChatModel) {
 export async function runStewardRemote(rt: Runtime, instruction: string, execute: boolean): Promise<TurnResult> {
   const deps = stewardBase(rt, execute);
   await startupCheck(rt, 'agent', deps.key.publicKeyHex);
-  const client = new IpcClient(deps.key, unixTransport(socketPath(rt.cfg, 'control')));
+  const client = new IpcClient(deps.key, unixTransport(socketPath(rt.cfg, 'control')), Date.now, laneServer(rt, 'antibody'));
   // M4: the agent reads the chain through control, not with its own Tatum key.
   return runTurn({ ...deps, currentCheckpoint: () => client.call<number>('/checkpoint', {}), control: remoteStewardControl(client) }, instruction);
 }
@@ -154,8 +180,8 @@ export async function runStewardRemote(rt: Runtime, instruction: string, execute
 export async function serveAgent(rt: Runtime) {
   const deps = stewardBase(rt, false);
   await startupCheck(rt, 'agent', deps.key.publicKeyHex);
-  const client = new IpcClient(deps.key, unixTransport(socketPath(rt.cfg, 'control')));
-  const full = { ...deps, control: remoteStewardControl(client) };
+  const client = new IpcClient(deps.key, unixTransport(socketPath(rt.cfg, 'control')), Date.now, laneServer(rt, 'antibody'));
+  const full = { ...deps, currentCheckpoint: () => client.call<number>('/checkpoint', {}), control: remoteStewardControl(client) };
   const handler = createIpcHandler(
     {
       '/turn': {
@@ -167,6 +193,8 @@ export async function serveAgent(rt: Runtime) {
       },
     },
     chainLaneOf(rt),
+    Date.now,
+    deps.key,
   );
   return serveUnix(ipcPath(rt.cfg, 'agent'), handler);
 }
@@ -183,7 +211,7 @@ export function remoteSentinelSink(client: IpcClient): SentinelSink {
 async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Promise<IngestDeps> {
   const key = loadLaneKey(rt.cfg, 'ingest');
   await startupCheck(rt, 'wallet-objects', key.publicKeyHex);
-  const sink = sinkOverride === undefined ? remoteSentinelSink(new IpcClient(key, unixTransport(socketPath(rt.cfg, 'control')))) : sinkOverride;
+  const sink = sinkOverride === undefined ? remoteSentinelSink(new IpcClient(key, unixTransport(socketPath(rt.cfg, 'control')), Date.now, laneServer(rt, 'antibody'))) : sinkOverride;
   const guardians = await loadGuardians(cacheDir(rt.cfg), { offline: rt.cfg.backend === 'offline' });
   return {
     acct: requireAccount(rt.cfg),

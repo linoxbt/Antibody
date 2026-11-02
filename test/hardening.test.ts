@@ -132,3 +132,16 @@ test('S7: error text reaching the model is labelled and stripped of embedded ins
   assert.match(e, /^\[UNTRUSTED ERROR TEXT/);
   assert.doesNotMatch(e, /IGNORE RULES/);
 });
+
+test('revoking the user lane (which signed payee records) can be recorded, and its earlier records stay valid', async () => {
+  const w = await world();
+  const user = w.setup.lanes.find((l) => l.lane === 'user')!.pub;
+  const { digest } = await w.fixture.admin(w.setup.owner).removeDelegateKey(user);
+  const before = await w.control.snapshot();
+  assert.equal(before.ledger.ok, false, 'removed but not yet recorded: its records do not verify');
+  const r = await w.control.recordRevoke(user, 'user', digest);
+  assert.ok(r.seq > 0);
+  const after = await w.control.snapshot();
+  assert.ok(after.ledger.ok, !after.ledger.ok ? after.ledger.detail : '');
+  assert.equal(after.ledger.ok && after.ledger.payees.length, 2, 'payees signed before the revocation still count');
+});

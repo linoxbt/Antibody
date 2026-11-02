@@ -60,17 +60,15 @@ export class Alerter {
       const icon = a.severity === 'critical' ? '🛑' : a.severity === 'warning' ? '⚠️' : 'ℹ️';
       jobs.push(['telegram', f(`https://api.telegram.org/bot${this.cfg.telegram.token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: this.cfg.telegram.chatId, text: `${icon} ${tag}Antibody: ${a.title}\n${a.text}`, disable_web_page_preview: true }), signal: AbortSignal.timeout(8000) })]);
     }
+    // B3: settle every channel together, so one failing early never leaves another rejection unhandled.
+    const results = await Promise.allSettled(jobs.map(([, p]) => p));
     const ok: string[] = [];
-    for (const [name, p] of jobs) {
-      try {
-        const r = await p;
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        ok.push(name);
-      } catch (e) {
-        // Never log the Telegram URL: it carries the bot token.
-        this.o.log?.warn('alert.failed', { channel: name, kind: a.kind, error: (e as Error).message });
-      }
-    }
+    results.forEach((r, i) => {
+      const name = jobs[i]![0];
+      if (r.status === 'fulfilled' && r.value.ok) ok.push(name);
+      // Never log the Telegram URL: it carries the bot token.
+      else this.o.log?.warn('alert.failed', { channel: name, kind: a.kind, error: r.status === 'fulfilled' ? `HTTP ${r.value.status}` : (r.reason as Error)?.message });
+    });
     if (ok.length) this.o.log?.info('alert.sent', { kind: a.kind, channels: ok });
     return ok;
   }

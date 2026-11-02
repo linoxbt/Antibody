@@ -74,8 +74,45 @@ interface Persisted {
   network?: 'mainnet' | 'testnet';
 }
 
+/** B8: an empty or whitespace-only value counts as unset (so a blank line in antibody.env never overrides saved setup). */
+function val(env: NodeJS.ProcessEnv, k: string): string | undefined {
+  const v = env[k];
+  return v === undefined || v.trim() === '' ? undefined : v.trim();
+}
+
+function expandHome(p: string): string {
+  return p === '~' ? homedir() : p.startsWith('~/') || p.startsWith('~\\') ? join(homedir(), p.slice(2)) : p;
+}
+
+function oneOf<T extends string>(env: NodeJS.ProcessEnv, k: string, allowed: readonly T[], fallback: T): T {
+  const v = val(env, k);
+  if (v === undefined) return fallback;
+  const lower = v.toLowerCase() as T;
+  if (!allowed.includes(lower)) throw new Error(`${k} must be one of ${allowed.join(', ')} (got "${v}")`);
+  return lower;
+}
+
+function num(env: NodeJS.ProcessEnv, k: string, fallback: number, min: number, max: number): number {
+  const v = val(env, k);
+  if (v === undefined) return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${k} must be a number between ${min} and ${max} (got "${v}")`);
+  return n;
+}
+
+function url(env: NodeJS.ProcessEnv, k: string, fallback: string): string {
+  const v = val(env, k) ?? fallback;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error();
+  } catch {
+    throw new Error(`${k} must be an http(s) URL (got "${v}")`);
+  }
+  return v;
+}
+
 export function defaultHome(env: NodeJS.ProcessEnv = process.env): string {
-  return resolve(env.ANTIBODY_HOME ?? join(homedir(), '.antibody'));
+  return resolve(expandHome(val(env, 'ANTIBODY_HOME') ?? join(homedir(), '.antibody')));
 }
 
 export function persistedPath(home: string): string {
@@ -85,35 +122,49 @@ export function persistedPath(home: string): string {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const home = defaultHome(env);
   const persisted: Persisted = existsSync(persistedPath(home)) ? (JSON.parse(readFileSync(persistedPath(home), 'utf8')) as Persisted) : {};
-  const backend = (env.ANTIBODY_BACKEND ?? 'offline') as Backend;
-  if (backend !== 'live' && backend !== 'offline') throw new Error(`ANTIBODY_BACKEND must be live or offline, got ${backend}`);
-  const role = env.ANTIBODY_ROLE ? (env.ANTIBODY_ROLE as Role) : null;
+  const backend = oneOf(env, 'ANTIBODY_BACKEND', ['live', 'offline'] as const, 'offline');
+  const roleRaw = val(env, 'ANTIBODY_ROLE');
+  const role = roleRaw ? (roleRaw as Role) : null;
   if (role && !ROLES.includes(role)) throw new Error(`ANTIBODY_ROLE must be one of ${ROLES.join(', ')}`);
-  const isolation = (env.ANTIBODY_KEY_ISOLATION ?? (backend === 'live' ? 'enforce' : 'simulated')) as KeyIsolation;
-  if (isolation !== 'enforce' && isolation !== 'simulated') throw new Error('ANTIBODY_KEY_ISOLATION must be enforce or simulated');
+  const isolation = oneOf(env, 'ANTIBODY_KEY_ISOLATION', ['enforce', 'simulated'] as const, backend === 'live' ? 'enforce' : 'simulated');
+  const network = oneOf(env, 'SUI_NETWORK', ['mainnet', 'testnet'] as const, persisted.network ?? 'mainnet');
+  // B8: testnet must name its own deployment; the mainnet defaults would silently point at mainnet.
+  if (network === 'testnet' && backend === 'live') {
+    const missing = ['MEMWAL_SERVER_URL', 'MEMWAL_PACKAGE_ID', 'MEMWAL_REGISTRY_ID', 'TATUM_SUI_GRPC_URL'].filter((k) => !val(env, k));
+    if (missing.length) throw new Error(`SUI_NETWORK=testnet needs ${missing.join(', ')} (the defaults are mainnet)`);
+  }
+  const hex = (k: string, v: string) => {
+    if (!/^0x[0-9a-fA-F]{1,64}$/.test(v)) throw new Error(`${k} must be a 0x… Sui id (got "${v}")`);
+    return v;
+  };
+  const acct = val(env, 'MEMWAL_ACCOUNT_ID');
+  const wallet = val(env, 'STEWARD_WALLET_ADDRESS');
+  const maxGas = val(env, 'ANTIBODY_MAX_GAS_MIST') ?? '50000000';
+  if (!/^[1-9][0-9]{0,15}$/.test(maxGas)) throw new Error(`ANTIBODY_MAX_GAS_MIST must be a positive integer (got "${maxGas}")`);
+  const cross = val(env, 'ANTIBODY_CROSSCHECK_RPC_URL');
   return {
     backend,
     role,
     home,
-    network: (env.SUI_NETWORK as Config['network']) ?? persisted.network ?? 'mainnet',
-    memwalServerUrl: env.MEMWAL_SERVER_URL ?? MAINNET.relayer,
-    accountId: env.MEMWAL_ACCOUNT_ID ?? persisted.accountId ?? null,
-    packageId: env.MEMWAL_PACKAGE_ID ?? MAINNET.packageId,
-    registryId: env.MEMWAL_REGISTRY_ID ?? MAINNET.registryId,
-    tatumApiKey: env.TATUM_API_KEY ?? null,
-    tatumGrpcUrl: env.TATUM_SUI_GRPC_URL ?? MAINNET.tatumGrpc,
-    tatumRpcUrl: env.TATUM_SUI_RPC_URL ?? MAINNET.tatumRpc,
-    tatumApiUrl: env.TATUM_API_URL ?? MAINNET.tatumApi,
-    chainTransport: (env.ANTIBODY_CHAIN_TRANSPORT as ChainTransport) ?? 'grpc',
-    stewardWallet: env.STEWARD_WALLET_ADDRESS ?? persisted.stewardWallet ?? null,
-    llm: { baseUrl: env.LLM_BASE_URL ?? null, apiKey: env.LLM_API_KEY ?? null, model: env.LLM_MODEL ?? null },
+    network,
+    memwalServerUrl: url(env, 'MEMWAL_SERVER_URL', MAINNET.relayer),
+    accountId: acct ? hex('MEMWAL_ACCOUNT_ID', acct) : (persisted.accountId ?? null),
+    packageId: hex('MEMWAL_PACKAGE_ID', val(env, 'MEMWAL_PACKAGE_ID') ?? MAINNET.packageId),
+    registryId: hex('MEMWAL_REGISTRY_ID', val(env, 'MEMWAL_REGISTRY_ID') ?? MAINNET.registryId),
+    tatumApiKey: val(env, 'TATUM_API_KEY') ?? null,
+    tatumGrpcUrl: url(env, 'TATUM_SUI_GRPC_URL', MAINNET.tatumGrpc),
+    tatumRpcUrl: url(env, 'TATUM_SUI_RPC_URL', MAINNET.tatumRpc),
+    tatumApiUrl: url(env, 'TATUM_API_URL', MAINNET.tatumApi),
+    chainTransport: oneOf(env, 'ANTIBODY_CHAIN_TRANSPORT', ['grpc', 'jsonrpc'] as const, 'grpc'),
+    stewardWallet: wallet ? hex('STEWARD_WALLET_ADDRESS', wallet) : (persisted.stewardWallet ?? null),
+    llm: { baseUrl: val(env, 'LLM_BASE_URL') ? url(env, 'LLM_BASE_URL', '') : null, apiKey: val(env, 'LLM_API_KEY') ?? null, model: val(env, 'LLM_MODEL') ?? null },
     keyIsolation: isolation,
-    sentinelThreshold: Number(env.ANTIBODY_SENTINEL_THRESHOLD ?? 0.6),
-    autoQuarantineScore: Number(env.ANTIBODY_AUTO_QUARANTINE_SCORE ?? 0.6),
-    webPort: Number(env.ANTIBODY_WEB_PORT ?? 7402),
-    maxGasMist: env.ANTIBODY_MAX_GAS_MIST ?? '50000000',
-    x402Allow: (env.ANTIBODY_X402_ALLOW ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
-    crossCheck: env.ANTIBODY_CROSSCHECK_RPC_URL ? { url: env.ANTIBODY_CROSSCHECK_RPC_URL, transport: (env.ANTIBODY_CROSSCHECK_TRANSPORT as ChainTransport) ?? 'grpc', apiKey: env.ANTIBODY_CROSSCHECK_API_KEY ?? null } : null,
+    sentinelThreshold: num(env, 'ANTIBODY_SENTINEL_THRESHOLD', 0.6, 0, 1),
+    autoQuarantineScore: num(env, 'ANTIBODY_AUTO_QUARANTINE_SCORE', 0.6, 0, 1),
+    webPort: num(env, 'ANTIBODY_WEB_PORT', 7402, 1, 65535),
+    maxGasMist: maxGas,
+    x402Allow: (val(env, 'ANTIBODY_X402_ALLOW') ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
+    crossCheck: cross ? { url: url(env, 'ANTIBODY_CROSSCHECK_RPC_URL', cross), transport: oneOf(env, 'ANTIBODY_CROSSCHECK_TRANSPORT', ['grpc', 'jsonrpc'] as const, 'grpc'), apiKey: val(env, 'ANTIBODY_CROSSCHECK_API_KEY') ?? null } : null,
   };
 }
 

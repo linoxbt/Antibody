@@ -166,11 +166,11 @@ export class Control {
    * Read the account through the chain reader, verify the ledger (coverage,
    * integrity, rollback) and build the projection. Runs before every payment.
    */
-  async snapshot(): Promise<Snapshot> {
+  async snapshot(o: { assumeRevoked?: { pub: string; lane: Lane; ckpt: number }[] } = {}): Promise<Snapshot> {
     const [account, ckpt] = await Promise.all([this.d.chain.getAccount(this.d.acct), this.d.chain.latestCheckpoint()]);
     const known = this.d.noCache ? new Map<string, StoredMemory>() : this.cache.all();
     const led = await retrieveLedger(this.d.mem, known);
-    const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read(), writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])) });
+    const ledger = verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm: this.hwm.read(), writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])), ...(o.assumeRevoked ? { assumeRevoked: o.assumeRevoked } : {}) });
     const content = await retrieveContent(this.d.mem, known);
     if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories]);
     const projection = buildProjection({ acct: this.d.acct, ledger, content: content.memories, contentInventory: content.inventory.map((e) => e.blobId), createdAt: new Map(content.inventory.map((e) => [e.blobId, e.createdAt])) });
@@ -184,8 +184,8 @@ export class Control {
     return snap;
   }
 
-  private async verifiedLedger(): Promise<{ snap: Snapshot; ledger: LedgerState }> {
-    const snap = await this.snapshot();
+  private async verifiedLedger(o: Parameters<Control['snapshot']>[0] = {}): Promise<{ snap: Snapshot; ledger: LedgerState }> {
+    const snap = await this.snapshot(o);
     if (!snap.ledger.ok) throw new Error(`ledger not verified: ${snap.ledger.code} ${snap.ledger.detail}`);
     return { snap, ledger: snap.ledger };
   }
@@ -202,8 +202,8 @@ export class Control {
   // ---- ledger ------------------------------------------------------------
 
   /** (seq, prev, ckpt) for the next append. The human CLI signs against this. */
-  async head(): Promise<{ seq: number; prev: string; ckpt: number; acct: string }> {
-    const { snap, ledger } = await this.verifiedLedger();
+  async head(o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; prev: string; ckpt: number; acct: string }> {
+    const { snap, ledger } = await this.verifiedLedger(o);
     return { ...nextAppend(ledger), ckpt: snap.ckpt, acct: this.d.acct };
   }
 
@@ -212,9 +212,9 @@ export class Control {
    * verify it, store it with rememberAndWait, read it back by recall, verify
    * the whole ledger again, and only then advance the head.
    */
-  async appendLedger(text: string): Promise<{ seq: number; blobId: string; envelopeId: string }> {
+  async appendLedger(text: string, o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; blobId: string; envelopeId: string }> {
     return withFileLock(join(this.d.home, 'run', 'ledger.lock'), async () => {
-      const { ledger } = await this.verifiedLedger();
+      const { ledger } = await this.verifiedLedger(o);
       const v = verifyEnvelope(text, { acct: this.d.acct, ns: NS_LEDGER, bindings: ledger.bindings });
       if (!v.ok) throw new Error(`record rejected: ${v.code} ${v.reason}`);
       const rec = parseLedgerBody(bodyContent(v.envelope.body));
@@ -226,7 +226,7 @@ export class Control {
       const back = await this.d.mem.recall(`antibody ledger record seq ${rec.seq}`, NS_LEDGER, 20);
       if (!back.some((m) => m.blobId === blobId && m.text === text)) throw new Error(`read-back of ledger seq ${rec.seq} (blob ${blobId}) did not return identical text`);
       this.cache.put([{ blobId, namespace: NS_LEDGER, text }]);
-      const after = await this.snapshot();
+      const after = await this.snapshot(o);
       if (!after.ledger.ok || after.ledger.head.seq !== rec.seq) {
         throw new Error(`ledger did not verify after append: ${after.ledger.ok ? `head ${after.ledger.head.seq}` : after.ledger.code}`);
       }
@@ -268,12 +268,12 @@ export class Control {
   }
 
   /** Build, sign (antibody lane) and append a control record. */
-  async writeOwn<T extends LedgerType>(type: T, payload: LedgerPayload<T>): Promise<{ seq: number; blobId: string; envelopeId: string }> {
+  async writeOwn<T extends LedgerType>(type: T, payload: LedgerPayload<T>, o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; blobId: string; envelopeId: string }> {
     if (LEDGER_SIGNER[type] !== 'antibody') throw new Error(`control may not sign ${type}`);
-    const h = await this.head();
+    const h = await this.head(o);
     const record = { seq: h.seq, prev: h.prev, type, payload } as LedgerRecord;
     const env = buildEnvelope({ id: uuidv7(this.now()), acct: this.d.acct, ns: NS_LEDGER, lane: 'antibody', kind: 'ledger', ckpt: h.ckpt, ts: new Date(this.now()).toISOString(), text: ledgerBodyText(record) }, this.d.key);
-    return this.appendLedger(env.text);
+    return this.appendLedger(env.text, o);
   }
 
   // ---- model context -----------------------------------------------------
@@ -704,7 +704,8 @@ export class Control {
     const tx = await this.ownerTx(digest, account.owner, 'remove_delegate_key');
     // M7: bound the key at the removal's own checkpoint, not "now" (which would widen its window).
     const ckpt = tx.checkpoint ?? (await this.d.chain.latestCheckpoint());
-    return this.writeOwn('lane.revoke', { pub, label: LANE_LABEL[lane], digest, ckpt });
+    // The key's earlier records stay valid only once this revoke exists, so append it under that assumption.
+    return this.writeOwn('lane.revoke', { pub, label: LANE_LABEL[lane], digest, ckpt }, { assumeRevoked: [{ pub, lane, ckpt }] });
   }
 
   async recordRotate(pub: string, lane: Lane, digest: string): Promise<{ seq: number }> {

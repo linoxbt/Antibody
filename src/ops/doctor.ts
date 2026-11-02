@@ -236,7 +236,7 @@ export async function checkLlm(cfg: Config, fetchImpl: typeof fetch): Promise<Ch
   const { llm } = cfg;
   const name = 'LLM for Steward';
   const keyVar = llm.provider === 'fortytwo' ? 'LLM_API_KEY (or FORTYTWO_API_KEY)' : 'LLM_API_KEY';
-  if (!llm.apiKey && llm.provider === 'fortytwo') return { name, status: 'fail', detail: 'LLM_PROVIDER=fortytwo but no API key', fix: `create a key at app.fortytwo.network (with a spend limit) and set ${keyVar} in ~/.antibody/antibody.env` };
+  if (!llm.apiKey && llm.provider === 'fortytwo') return { name, status: 'fail', detail: 'LLM_PROVIDER=fortytwo but no API key', fix: `create a key at platform.fortytwo.network (with a spend limit) and set ${keyVar} in ~/.antibody/antibody.env` };
   if (!llm.baseUrl || !llm.apiKey || !llm.model) return { name, status: 'warn', detail: 'not set: Steward uses a scripted model (SIMULATED)', fix: 'set LLM_PROVIDER=fortytwo and LLM_API_KEY, or LLM_BASE_URL, LLM_API_KEY and LLM_MODEL' };
   const where = `${llm.model} at ${new URL(llm.baseUrl).host}`;
   try {

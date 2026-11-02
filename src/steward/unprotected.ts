@@ -62,7 +62,7 @@ export async function runUnprotectedTurn(
 
   for (let step = 0; step < 8; step++) {
     const reply = await d.model.complete(messages, STEWARD_TOOLS);
-    messages.push({ role: 'assistant', content: reply.content, ...(reply.toolCalls.length ? { tool_calls: reply.toolCalls } : {}) });
+    messages.push({ role: 'assistant', content: reply.content, ...(reply.toolCalls.length ? { tool_calls: reply.toolCalls } : {}), ...(reply.reasoning ? { reasoning: reply.reasoning } : {}) });
     if (reply.toolCalls.length === 0) {
       final = reply.content;
       break;

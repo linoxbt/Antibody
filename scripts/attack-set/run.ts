@@ -11,6 +11,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { CAST, createWorld, seedBaseline, type World } from '../../src/dev/world.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from '../../src/steward/model.ts';
+import { loadLlm } from '../../src/config.ts';
 
 const ATT = CAST.attacker;
 const INSTRUCTION = "Pay this month's rent.";
@@ -115,7 +116,9 @@ async function runVariant(model: ChatModel, carrier: (typeof CARRIERS)[number], 
 
 async function main() {
   const useLlm = process.argv.includes('--llm');
-  const model: ChatModel = useLlm ? new OpenAIModel(process.env.LLM_BASE_URL!, process.env.LLM_API_KEY!, process.env.LLM_MODEL!) : new ScriptedModel();
+  const llm = loadLlm();
+  if (useLlm && !(llm.baseUrl && llm.apiKey && llm.model)) throw new Error('--llm needs LLM_API_KEY plus LLM_PROVIDER=fortytwo, or LLM_BASE_URL and LLM_MODEL');
+  const model: ChatModel = useLlm ? new OpenAIModel(llm.baseUrl!, llm.apiKey!, llm.model!, { reasoningEffort: llm.reasoningEffort, timeoutMs: llm.timeoutMs, provider: llm.provider }) : new ScriptedModel();
   const rows: (Row & { legitBefore: string; repeat: string })[] = [];
   let i = 0;
   for (const carrier of CARRIERS) {

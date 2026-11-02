@@ -194,7 +194,7 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
     }
     add(cfg.crossCheck ? { name: 'Second-RPC cross-check', status: 'ok', detail: new URL(cfg.crossCheck.url).host } : { name: 'Second-RPC cross-check', status: 'warn', detail: 'off: one RPC is trusted for the delegate set', fix: 'set ANTIBODY_CROSSCHECK_RPC_URL to an independent Sui fullnode' });
   }
-  add(cfg.llm.baseUrl && cfg.llm.apiKey ? { name: 'LLM for Steward', status: 'ok', detail: `${cfg.llm.model ?? 'default model'} at ${new URL(cfg.llm.baseUrl).host}` } : { name: 'LLM for Steward', status: 'warn', detail: 'not set: Steward uses a scripted model (SIMULATED)', fix: 'set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL' });
+  add(await checkLlm(cfg, d.fetchImpl ?? fetch));
 
   // Ledger
   if (d.ledger) {
@@ -227,3 +227,26 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
 }
 
 export const doctorExitCode = (checks: Check[]) => (checks.some((c) => c.status === 'fail') ? 1 : 0);
+
+/**
+ * The model endpoint answers, accepts the key and serves the configured model
+ * (GET /models: one cheap call, no tokens spent).
+ */
+export async function checkLlm(cfg: Config, fetchImpl: typeof fetch): Promise<Check> {
+  const { llm } = cfg;
+  const name = 'LLM for Steward';
+  const keyVar = llm.provider === 'fortytwo' ? 'LLM_API_KEY (or FORTYTWO_API_KEY)' : 'LLM_API_KEY';
+  if (!llm.apiKey && llm.provider === 'fortytwo') return { name, status: 'fail', detail: 'LLM_PROVIDER=fortytwo but no API key', fix: `create a key at app.fortytwo.network (with a spend limit) and set ${keyVar} in ~/.antibody/antibody.env` };
+  if (!llm.baseUrl || !llm.apiKey || !llm.model) return { name, status: 'warn', detail: 'not set: Steward uses a scripted model (SIMULATED)', fix: 'set LLM_PROVIDER=fortytwo and LLM_API_KEY, or LLM_BASE_URL, LLM_API_KEY and LLM_MODEL' };
+  const where = `${llm.model} at ${new URL(llm.baseUrl).host}`;
+  try {
+    const r = await fetchImpl(`${llm.baseUrl.replace(/\/+$/, '')}/models`, { headers: { authorization: `Bearer ${llm.apiKey}` }, signal: AbortSignal.timeout(10_000) });
+    if (r.status === 401 || r.status === 403) return { name, status: 'fail', detail: `${where}: the key was refused (HTTP ${r.status})`, fix: `check ${keyVar}; on Fortytwo, make sure the key is active and under its spend limit` };
+    if (!r.ok) return { name, status: 'warn', detail: `${where}: GET /models answered HTTP ${r.status}; chat may still work`, fix: 'run antibody llm test' };
+    const ids = ((await r.json()) as { data?: { id?: string }[] }).data?.map((m) => m.id).filter((x): x is string => !!x) ?? [];
+    if (ids.length && !ids.includes(llm.model)) return { name, status: 'fail', detail: `${where}: the endpoint does not serve this model`, fix: `set LLM_MODEL to one of: ${ids.slice(0, 8).join(', ')}` };
+    return { name, status: 'ok', detail: `${where}${llm.reasoningEffort ? `, reasoning ${llm.reasoningEffort}` : ''}` };
+  } catch (e) {
+    return { name, status: 'fail', detail: `${where}: ${(e as Error).message}`, fix: 'check your connection and LLM_BASE_URL' };
+  }
+}

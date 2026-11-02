@@ -129,7 +129,7 @@ export async function runTurn(d: StewardDeps, instruction: string): Promise<Turn
 
   for (let step = 0; step < (d.maxSteps ?? 8); step++) {
     const reply = await d.model.complete(messages, tools);
-    messages.push({ role: 'assistant', content: reply.content, ...(reply.toolCalls.length ? { tool_calls: reply.toolCalls } : {}) });
+    messages.push({ role: 'assistant', content: reply.content, ...(reply.toolCalls.length ? { tool_calls: reply.toolCalls } : {}), ...(reply.reasoning ? { reasoning: reply.reasoning } : {}) });
     if (reply.toolCalls.length === 0) {
       final = reply.content;
       break;

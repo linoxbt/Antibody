@@ -10,8 +10,10 @@ container is deleted when the session ends, so keys are exported at the end).
 | `TATUM_API_KEY` | mainnet key from dashboard.tatum.io |
 | `OWNER_SUI_PRIVATE_KEY` | throwaway owner wallet (`suiprivkey1…`), funded with ≈ 0.3 SUI |
 
-Optional: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` for a real model (else the
-scripted model, labelled SIMULATED).
+Optional, for a real model (else the scripted model, labelled SIMULATED):
+`LLM_PROVIDER=fortytwo` and `LLM_API_KEY` (a Fortytwo key with a spend limit)
+runs Steward on Qwen over the Fortytwo network. Check it with `antibody llm test`;
+run the attack set against it with `npx tsx scripts/attack-set/run.ts --llm`.
 
 ## Steps
 

@@ -37,6 +37,8 @@ import {
   startupCheck,
 } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
+import { llmSmokeTest } from '../steward/llm-check.ts';
+import { checkLlm } from '../ops/doctor.ts';
 import { submitUserRecord, writeStatement } from '../user/user.ts';
 import { liveAccountAdmin } from '../adapters/account-live.ts';
 import type { AccountAdmin } from '../adapters/chain.ts';
@@ -806,6 +808,21 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
 
+    case 'llm': {
+      // Steward's model: is the endpoint up, the key accepted, and does tool calling work?
+      if (sub !== 'test') throw new Error('usage: antibody llm test');
+      const cfg = loadConfig();
+      const reach = await checkLlm(cfg, fetch);
+      if (reach.status !== 'ok') throw new Error(`${reach.detail}${reach.fix ? `\n  fix: ${reach.fix}` : ''}`);
+      console.log(green(`✓ ${reach.detail}`) + dim(` (${cfg.llm.provider})`));
+      const r = await llmSmokeTest(createModel(cfg));
+      if (!r.toolCalled) throw new Error(`${r.model} answered without calling the tool (${r.ms} ms): Steward needs function calling. Reply was: ${String(r.answer ?? '').slice(0, 200)}`);
+      console.log(green(`✓ tool calling works`) + dim(` · ${r.ms} ms for two calls${r.reasoning ? ' · reasoning returned and sent back' : ''}`));
+      console.log(dim(`  reply: ${String(r.answer ?? '').trim().slice(0, 120) || '(empty)'}`));
+      console.log(`Steward will use ${bold(r.model)} (not SIMULATED). Run: antibody steward "Pay this month's rent."`);
+      return;
+    }
+
     case 'keys': {
       if (sub !== 'encrypt') throw new Error('usage: antibody keys encrypt   (with ANTIBODY_KEY_PASSPHRASE or ANTIBODY_KEY_PASSPHRASE_FILE set)');
       const cfg = loadConfig();
@@ -1124,6 +1141,7 @@ Setup and status
   antibody doctor [--json]                    check the install end to end and say how to fix problems
   antibody service install | uninstall | status   start at login, restart on crash (systemd / launchd / Task Scheduler)
   antibody alert test                         send a test alert (ANTIBODY_ALERT_WEBHOOK or Telegram)
+  antibody llm test                           check Steward's model: key, model name, tool calling (e.g. Fortytwo)
   antibody keys encrypt                       encrypt key files with ANTIBODY_KEY_PASSPHRASE
   antibody cloud serve                        the hosted sandbox: any wallet gets its own simulated Antibody ($PORT)
 

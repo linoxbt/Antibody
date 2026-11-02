@@ -7,7 +7,7 @@
  *   npx tsx scripts/build-site.ts    → site/
  */
 import { createHash } from 'node:crypto';
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CAST, createWorld, POISON_COIN, seedBaseline, type World } from '../src/dev/world.ts';
@@ -130,6 +130,16 @@ async function main() {
   writeFileSync(join(OUT, 'demo.json'), JSON.stringify({ generatedAt: new Date().toISOString(), simulated: true, steps }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
   // owner.html is served only by the CLI's one-off owner approval page (src/web/owner-sign.ts).
   cpSync('web', OUT, { recursive: true, filter: (p) => !/[\\/]owner\.(html|js)$/.test(p) });
+  // A build id from the shell's own bytes names the service worker's cache, so a
+  // new deploy never keeps serving an old shell (see web/assets/js/pwa.js).
+  const files = (readdirSync(OUT, { recursive: true }) as string[]).filter((f) => /\.(html|js|css|webmanifest)$/.test(f)).sort();
+  const h = createHash('sha256');
+  for (const f of files) h.update(f).update(readFileSync(join(OUT, f)));
+  const build = h.digest('hex').slice(0, 12);
+  for (const f of files.filter((x) => x.endsWith('.html'))) {
+    const html = readFileSync(join(OUT, f), 'utf8');
+    if (!html.includes('name="antibody-build"')) writeFileSync(join(OUT, f), html.replace(/<head>/i, `<head>\n    <meta name="antibody-build" content="${build}" />`));
+  }
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));
   // Checksums for the installers, so a download can be verified before it runs (see /install).
   const sums = ['install.sh', 'install.ps1'].map((f) => `${createHash('sha256').update(readFileSync(join(OUT, f))).digest('hex')}  ${f}`);

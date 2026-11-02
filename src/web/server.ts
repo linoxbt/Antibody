@@ -155,6 +155,7 @@ export async function stateJson(rt: Runtime, control: Control) {
     banners: rt.banners,
     health: processHealth.snapshot(),
     backend: rt.cfg.backend,
+    network: rt.cfg.network,
     chain: rt.chain.kind,
     account: { id: snap.account.accountId, owner: snap.account.owner, active: snap.account.active },
     wallet: rt.cfg.stewardWallet,

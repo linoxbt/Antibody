@@ -118,7 +118,8 @@ export async function quarantine(ctx, { type, value, reason, what, button }) {
         ? `This seed matches nothing right now.\n\nSeed: ${seed}\n\nA quarantine record is permanent: it is signed into the ledger and can later be released, never removed. Write it anyway?`
         : `Quarantine ${what ?? 'this seed'}?\n\nSeed: ${seed}\n\n${plural(pv.memories - pv.decisions, 'memory')} and ${plural(pv.decisions, 'decision')} leave Steward's context. They stay on Walrus as evidence.`;
     if (!confirm(msg)) return null;
-    const r = await ctx.src.api('/api/quarantine', { type, value, reason });
+    // The user just confirmed an empty seed; say so, or the server refuses with 409 (B15).
+    const r = await ctx.src.api('/api/quarantine', { type, value, reason, ...(pv.memories === 0 ? { force: true } : {}) });
     ctx.toast(`Quarantine written as ledger #${r.seq}${r.lessonSeq != null ? `; learned lesson #${r.lessonSeq}` : ''}.`);
     await ctx.src.refresh();
     return r;

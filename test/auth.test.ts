@@ -154,3 +154,64 @@ test('static files stay inside web/ with POSIX and Windows paths alike', async (
   assert.equal(isInside(root, win32.resolve(root, './../keys/x.key'), win32), false, 'and still cannot escape web\\');
   assert.equal(isInside(root, 'D:\\other\\login.html', win32), false);
 });
+
+test('S6/S11: the local console refuses foreign Host and Origin, and a cookie alone is not a session', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'ab-web-'));
+  const rt = { cfg: { home }, log: { warn() {}, info() {} } } as unknown as Runtime;
+  const auth = new Auth(async () => owner.toSuiAddress(), { operatorToken: 'tok-9', requireSessionHeader: true });
+  const { server } = await startWeb(rt, {} as Control, 0, auth);
+  const port = (server.address() as { port: number }).port;
+  const { request } = await import('node:http');
+  const raw = (path: string, headers: Record<string, string>, body?: string) =>
+    new Promise<{ status: number; body: string }>((res, rej) => {
+      const r = request({ host: '127.0.0.1', port, path, method: body ? 'POST' : 'GET', headers }, (m) => {
+        let b = '';
+        m.on('data', (c) => (b += c)).on('end', () => res({ status: m.statusCode!, body: b }));
+      });
+      r.on('error', rej);
+      r.end(body);
+    });
+  try {
+    assert.equal((await raw('/api/auth/status', { host: 'evil.example:7402' })).status, 421, 'DNS rebinding: foreign Host refused');
+    assert.equal((await raw('/login', { host: 'evil.example' })).status, 421);
+    const hdr = { host: `127.0.0.1:${port}`, 'content-type': 'application/json', 'x-antibody-ui': '1' };
+    assert.equal((await raw('/api/auth/operator', { ...hdr, origin: 'https://evil.example' }, '{"token":"tok-9"}')).status, 403, 'cross-origin POST refused');
+    const ok = await fetch(`http://127.0.0.1:${port}/api/auth/operator`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: '{"token":"tok-9"}' });
+    const { csrf } = await ok.json();
+    const cookie = ok.headers.get('set-cookie')!.split(';')[0]!;
+    assert.equal((await (await fetch(`http://127.0.0.1:${port}/api/auth/status`, { headers: { cookie } })).json()).authenticated, false, 'stolen cookie alone: not signed in');
+    assert.equal((await (await fetch(`http://127.0.0.1:${port}/api/auth/status`, { headers: { cookie, 'x-antibody-session': csrf } })).json()).authenticated, true);
+    const ch = await (await fetch(`http://127.0.0.1:${port}/api/auth/challenge`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: JSON.stringify({ address: owner.toSuiAddress() }) })).json();
+    assert.match(ch.message, new RegExp(`^127\\.0\\.0\\.1:${port} wants you`), 'the challenge names this console');
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/auth/operator`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1' }, body: 'null' })).status, 400, 'non-object body is a 400, not a 500');
+    const h = (await fetch(`http://127.0.0.1:${port}/login`)).headers;
+    assert.equal(h.get('x-frame-options'), 'DENY');
+    assert.match(h.get('content-security-policy')!, /frame-ancestors 'none'/);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('S8: outstanding challenges are bounded per address and sessions per address', async () => {
+  const auth = new Auth(null, { throttleFailures: false });
+  const addr = owner.toSuiAddress();
+  const msgs = Array.from({ length: 12 }, () => auth.challenge(addr, ORIGIN).message);
+  // Only the last five are still redeemable.
+  const sign = async (m: string) => (await owner.signPersonalMessage(new TextEncoder().encode(m))).signature;
+  await rejects(auth.signInWithWallet(addr, msgs[0]!, await sign(msgs[0]!)), 401, /expired or unknown/);
+  const s = await auth.signInWithWallet(addr, msgs[11]!, await sign(msgs[11]!));
+  assert.ok(s.id);
+  for (let i = 0; i < 7; i++) {
+    const m = auth.challenge(addr, ORIGIN).message;
+    await auth.signInWithWallet(addr, m, await sign(m));
+  }
+  assert.ok(auth.sessionCount <= 5);
+  // With failure throttling off (the sandbox), wrong signatures never lock anyone out.
+  for (let i = 0; i < 15; i++) {
+    const m = auth.challenge(addr, ORIGIN, 'shared-ip').message;
+    await rejects(auth.signInWithWallet(addr, m, await sign('other'), 'shared-ip'), 401);
+  }
+  const m = auth.challenge(addr, ORIGIN, 'shared-ip').message;
+  assert.ok(await auth.signInWithWallet(addr, m, await sign(m), 'shared-ip'));
+});

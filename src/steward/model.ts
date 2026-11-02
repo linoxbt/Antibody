@@ -18,7 +18,7 @@ export interface ToolCall {
 
 export type ChatMessage =
   | { role: 'system' | 'user'; content: string }
-  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+  | { role: 'assistant'; content: string | null; tool_calls?: ToolCall[]; reasoning?: ProviderReasoning }
   | { role: 'tool'; tool_call_id: string; content: string };
 
 export interface ToolDef {
@@ -27,9 +27,17 @@ export interface ToolDef {
   parameters: Record<string, unknown>;
 }
 
+/**
+ * A reasoning model's own reasoning (Fortytwo: `reasoning`, `reasoning_details`).
+ * Opaque: sent back unchanged in the next request, never shown to the policy,
+ * never stored in memory.
+ */
+export type ProviderReasoning = Record<string, unknown>;
+
 export interface ModelReply {
   content: string | null;
   toolCalls: ToolCall[];
+  reasoning?: ProviderReasoning;
 }
 
 export interface ChatModel {
@@ -38,6 +46,18 @@ export interface ChatModel {
   complete(messages: ChatMessage[], tools: ToolDef[]): Promise<ModelReply>;
 }
 
+export interface OpenAIModelOptions {
+  /** reasoning_effort for reasoning models (Fortytwo: none … max). Omitted when null. */
+  reasoningEffort?: string | null;
+  /** Deadline for one call (the SDK's own default is 10 minutes). */
+  timeoutMs?: number;
+  /** Shown in logs and the console, e.g. "fortytwo". */
+  provider?: string;
+}
+
+const REASONING_KEYS = ['reasoning', 'reasoning_details', 'reasoning_content'] as const;
+
+/** Any OpenAI-compatible Chat Completions endpoint: OpenAI, Fortytwo (Qwen), vLLM, LiteLLM, … */
 export class OpenAIModel implements ChatModel {
   readonly simulated = false;
   private readonly client: OpenAI;
@@ -46,26 +66,41 @@ export class OpenAIModel implements ChatModel {
     baseURL: string,
     apiKey: string,
     readonly name: string,
+    private readonly o: OpenAIModelOptions = {},
   ) {
-    this.client = new OpenAI({ baseURL, apiKey });
+    this.client = new OpenAI({ baseURL, apiKey, timeout: o.timeoutMs ?? 120_000, maxRetries: 2 });
+  }
+
+  get provider(): string {
+    return this.o.provider ?? 'openai-compatible';
   }
 
   async complete(messages: ChatMessage[], tools: ToolDef[]): Promise<ModelReply> {
-    const res = await this.client.chat.completions.create({
+    const body = {
       model: this.name,
       temperature: 0,
       messages: messages.map((m) =>
         m.role === 'assistant'
-          ? { role: 'assistant' as const, content: m.content, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls.map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.arguments } })) } : {}) }
+          ? {
+              role: 'assistant' as const,
+              content: m.content,
+              ...(m.tool_calls?.length ? { tool_calls: m.tool_calls.map((t) => ({ id: t.id, type: 'function' as const, function: { name: t.name, arguments: t.arguments } })) } : {}),
+              // Reasoning providers want their reasoning back unchanged on the next call.
+              ...(m.reasoning ?? {}),
+            }
           : m,
       ),
-      tools: tools.map((t) => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.parameters } })),
-      tool_choice: 'auto',
-    });
-    const msg = res.choices[0]?.message;
+      ...(tools.length ? { tools: tools.map((t) => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.parameters } })), tool_choice: 'auto' as const } : {}),
+      ...(this.o.reasoningEffort ? { reasoning_effort: this.o.reasoningEffort } : {}),
+    };
+    const res = await this.client.chat.completions.create(body as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+    const msg = res.choices[0]?.message as (OpenAI.Chat.ChatCompletionMessage & Record<string, unknown>) | undefined;
+    const reasoning: ProviderReasoning = {};
+    for (const k of REASONING_KEYS) if (msg && msg[k] !== undefined && msg[k] !== null) reasoning[k] = msg[k];
     return {
       content: msg?.content ?? null,
       toolCalls: (msg?.tool_calls ?? []).filter((t) => t.type === 'function').map((t) => ({ id: t.id, name: (t as { function: { name: string } }).function.name, arguments: (t as { function: { arguments: string } }).function.arguments })),
+      ...(Object.keys(reasoning).length ? { reasoning } : {}),
     };
   }
 }

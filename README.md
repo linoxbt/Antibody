@@ -343,6 +343,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody doctor [--json]` | — | check the whole install (keys, state, RPC, relayer, ledger, daemons, alerts); a fix for each problem |
 | `antibody service install\|uninstall\|status` | — | run at login, restart on crash: systemd user unit, launchd agent or Task Scheduler |
 | `antibody alert test` | — | send a test alert (`ANTIBODY_ALERT_WEBHOOK`, or Telegram bot token + chat id) |
+| `antibody llm test` | — | check Steward's model: endpoint, key, model name and a tool-calling round trip |
 | `antibody keys encrypt` | — | encrypt key files at rest (scrypt + AES-256-GCM) with `ANTIBODY_KEY_PASSPHRASE`, or one `ANTIBODY_KEY_PASSPHRASE_<ROLE>` per role |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |
 | `antibody cloud serve` | — | the hosted sandbox: any wallet gets its own simulated Antibody (`$PORT`, `ANTIBODY_CLOUD_DATA`) |
@@ -368,8 +369,10 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 
 See [`.env.example`](.env.example). Key variables: `ANTIBODY_BACKEND`
 (`live`|`offline`), `ANTIBODY_HOME`, `MEMWAL_ACCOUNT_ID`, `TATUM_API_KEY`,
-`ANTIBODY_CHAIN_TRANSPORT` (`grpc` default), `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`
-(any OpenAI-compatible model; unset → deterministic scripted model, SIMULATED),
+`ANTIBODY_CHAIN_TRANSPORT` (`grpc` default), Steward's model: `LLM_PROVIDER=fortytwo`
++ `LLM_API_KEY` for Qwen on the [Fortytwo](https://docs.fortytwo.network) network, or
+`LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` for any OpenAI-compatible model (unset →
+deterministic scripted model, SIMULATED; check with `antibody llm test`),
 `OWNER_SUI_PRIVATE_KEY` (optional throwaway owner for scripts; otherwise the
 owner signs in the browser with `--wallet`), `ANTIBODY_KEY_ISOLATION`
 (`enforce` default on live), `ANTIBODY_KEY_PASSPHRASE[_FILE]` (encrypted key

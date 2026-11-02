@@ -144,7 +144,7 @@ export async function serveSigner(rt: Runtime, signer: Signer) {
 // ---- agent (Steward) -------------------------------------------------------------
 
 export function createModel(cfg: Config): ChatModel {
-  if (cfg.llm.baseUrl && cfg.llm.apiKey && cfg.llm.model) return new OpenAIModel(cfg.llm.baseUrl, cfg.llm.apiKey, cfg.llm.model);
+  if (cfg.llm.baseUrl && cfg.llm.apiKey && cfg.llm.model) return new OpenAIModel(cfg.llm.baseUrl, cfg.llm.apiKey, cfg.llm.model, { reasoningEffort: cfg.llm.reasoningEffort, timeoutMs: cfg.llm.timeoutMs, provider: cfg.llm.provider });
   return new ScriptedModel();
 }
 

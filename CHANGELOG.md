@@ -2,6 +2,13 @@
 
 ## 1.1.0 — 2026-11-02
 
+### Models
+- `LLM_PROVIDER=fortytwo`: Steward on Qwen over the Fortytwo network with one
+  key. Reasoning effort is configurable and the model's reasoning is sent back
+  on the next call, as reasoning providers require. Every model call has a
+  deadline. `antibody llm test` checks key, model name and tool calling; doctor
+  checks the model is served.
+
 Fixes from a full audit of 1.0.0. Upgrading is in place; on a machine with no
 ledger high-water mark run `antibody verify-ledger --accept` once.
 

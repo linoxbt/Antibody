@@ -52,7 +52,7 @@ export interface Config {
   tatumApiUrl: string;
   chainTransport: ChainTransport;
   stewardWallet: string | null;
-  llm: { baseUrl: string | null; apiKey: string | null; model: string | null };
+  llm: LlmConfig;
   keyIsolation: KeyIsolation;
   /** Sentinel score at or above which an incident is raised. */
   sentinelThreshold: number;
@@ -111,6 +111,39 @@ function url(env: NodeJS.ProcessEnv, k: string, fallback: string): string {
   return v;
 }
 
+/** Steward's model endpoint. `fortytwo` fills in Fortytwo's URL and Qwen model. */
+export interface LlmConfig {
+  provider: LlmProvider;
+  baseUrl: string | null;
+  apiKey: string | null;
+  model: string | null;
+  /** Sent as reasoning_effort when set (reasoning models such as Qwen on Fortytwo). */
+  reasoningEffort: ReasoningEffort | null;
+  /** Deadline for one model call. */
+  timeoutMs: number;
+}
+export type LlmProvider = 'openai-compatible' | 'fortytwo';
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+/** Fortytwo's decentralised inference network: OpenAI-compatible Chat Completions. */
+export const FORTYTWO = { baseUrl: 'https://api.fortytwo.network/v1', model: 'qwen/qwen3.8-27b' } as const;
+
+export function loadLlm(env: NodeJS.ProcessEnv = process.env): LlmConfig {
+  const provider = oneOf(env, 'LLM_PROVIDER', ['openai-compatible', 'fortytwo'] as const, 'openai-compatible');
+  const preset = provider === 'fortytwo' ? FORTYTWO : null;
+  const effort = val(env, 'LLM_REASONING_EFFORT');
+  return {
+    provider,
+    baseUrl: val(env, 'LLM_BASE_URL') ? url(env, 'LLM_BASE_URL', '') : (preset?.baseUrl ?? null),
+    apiKey: val(env, 'LLM_API_KEY') ?? (provider === 'fortytwo' ? val(env, 'FORTYTWO_API_KEY') : undefined) ?? null,
+    model: val(env, 'LLM_MODEL') ?? preset?.model ?? null,
+    // Fortytwo's default is medium; low keeps a Steward turn quick. Other providers get nothing unless asked.
+    reasoningEffort: effort ? oneOf(env, 'LLM_REASONING_EFFORT', REASONING_EFFORTS, 'medium') : provider === 'fortytwo' ? 'low' : null,
+    timeoutMs: num(env, 'LLM_TIMEOUT_MS', 120_000, 1_000, 600_000),
+  };
+}
+
 export function defaultHome(env: NodeJS.ProcessEnv = process.env): string {
   return resolve(expandHome(val(env, 'ANTIBODY_HOME') ?? join(homedir(), '.antibody')));
 }
@@ -157,7 +190,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     tatumApiUrl: url(env, 'TATUM_API_URL', MAINNET.tatumApi),
     chainTransport: oneOf(env, 'ANTIBODY_CHAIN_TRANSPORT', ['grpc', 'jsonrpc'] as const, 'grpc'),
     stewardWallet: wallet ? hex('STEWARD_WALLET_ADDRESS', wallet) : (persisted.stewardWallet ?? null),
-    llm: { baseUrl: val(env, 'LLM_BASE_URL') ? url(env, 'LLM_BASE_URL', '') : null, apiKey: val(env, 'LLM_API_KEY') ?? null, model: val(env, 'LLM_MODEL') ?? null },
+    llm: loadLlm(env),
     keyIsolation: isolation,
     sentinelThreshold: num(env, 'ANTIBODY_SENTINEL_THRESHOLD', 0.6, 0, 1),
     autoQuarantineScore: num(env, 'ANTIBODY_AUTO_QUARANTINE_SCORE', 0.6, 0, 1),

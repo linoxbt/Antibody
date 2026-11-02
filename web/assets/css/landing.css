@@ -49,6 +49,7 @@ html:not(.motion) .lanes-row { opacity: 1; transform: none; }
 .tunnel h2 { font-size: clamp(38px, 5.4vw, 76px); max-width: 13ch; }
 .tunnel .prompt { width: min(760px, 100%); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: linear-gradient(180deg, rgba(var(--panel-rgb), 0.85), rgba(var(--panel-rgb), 0.85)); }
 .tunnel .prompt input { caret-color: var(--accent-hi); }
+.demo-note { margin: -18px 0 0; font-size: 13px; color: var(--text-2); }
 .verdict-chip { min-height: 46px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
 .verdict-chip .vc { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 10px; min-height: 46px; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(var(--panel-rgb), 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 15px; color: var(--text-2); animation: chip-in 0.7s var(--ease) both; }
 .verdict-chip .vc b { font-weight: 500; }

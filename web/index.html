@@ -71,11 +71,12 @@
         <svg class="tunnel-svg" id="tunnel-svg" viewBox="-720 -450 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
         <div class="wrap tunnel-copy">
           <h2 class="words">Poison stops <span class="tail">before it pays.</span></h2>
-          <form class="prompt reveal d1" id="demo-prompt" aria-label="Try an instruction">
+          <form class="prompt reveal d1" id="demo-prompt" aria-label="Try an instruction (illustration)">
             <input id="demo-input" aria-label="Instruction" autocomplete="off" />
             <button class="send" type="submit" aria-label="Run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg></button>
           </form>
-          <div class="verdict-chip" id="demo-verdict" aria-live="polite"></div>
+          <div class="verdict-chip" id="demo-verdict" aria-live="off"></div>
+          <p class="demo-note">Illustration: the real policy runs in the console.</p>
         </div>
       </div>
     </section>
@@ -191,8 +192,8 @@
               </div>
               <div class="dash-list">
                 <span class="dl-h">Incidents <b>2</b></span>
-                <div><i class="dot r"></i>Rewards coin · auto-quarantined<em>score 9</em></div>
-                <div><i class="dot y"></i>“Airdrop claim” · open<em>score 4</em></div>
+                <div><i class="dot r"></i>Rewards coin · auto-quarantined<em>score 0.85</em></div>
+                <div><i class="dot y"></i>“Airdrop claim” · open<em>score 0.70</em></div>
                 <div><i class="dot g"></i>Rent to landlord · allowed<em>450 USDC</em></div>
               </div>
             </div>
@@ -215,8 +216,8 @@
             <div class="marquee" aria-label="Built on Walrus Memory, Sui, Tatum and x402"><div class="mq-track"><b>Walrus Memory</b><b>Sui</b><b>Tatum</b><b>x402</b><b>Walrus Memory</b><b>Sui</b><b>Tatum</b><b>x402</b></div></div>
             <p>Built on <strong>Walrus Memory</strong> and Sui, read through Tatum.</p>
           </div>
-          <div class="pc-cell"><div class="big"><span class="count" data-from="20" data-to="0">0</span><small>/20</small></div><p><strong>Attacks executed</strong> by Steward.</p></div>
-          <div class="pc-cell"><div class="big"><span class="count" data-from="40" data-to="0">0</span><small>/40</small></div><p><strong>Legit payments</strong> wrongly blocked.</p></div>
+          <div class="pc-cell"><div class="big"><span class="count" data-from="20" data-to="0">0</span><small>/20</small></div><p><strong>Attacks executed</strong> by Steward, in the simulated attack set.</p></div>
+          <div class="pc-cell"><div class="big"><span class="count" data-from="40" data-to="0">0</span><small>/40</small></div><p><strong>Legit payments</strong> wrongly blocked, in the simulated attack set.</p></div>
         </div>
       </div>
     </section>

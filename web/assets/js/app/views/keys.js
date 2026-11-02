@@ -3,6 +3,7 @@ import { head, card, command } from '../kit.js';
 import { discoverWallets, connect, signMessage, signTransaction, cancelled } from '../../wallets.js';
 
 let rebuildDigest = null;
+let rebuildAgainst = null; // the live digest when that rebuild finished
 let rebuilding = false;
 let revokeLane = 'wallet-objects';
 let walletName = null;
@@ -10,6 +11,9 @@ let revoking = null; // status text while the owner's wallet is busy
 let lastRevoked = null; // lane revoked from this console, awaiting rotation
 const found = [];
 discoverWallets((ws) => found.splice(0, found.length, ...ws));
+
+/** The last live rebuild from this console: { digest, live } (live: the node's digest at that moment), or null. */
+export const lastRebuild = () => (rebuildDigest ? { digest: rebuildDigest, live: rebuildAgainst } : null);
 
 /** FR-16: the owner's wallet signs the removal; control records lane.revoke once the chain shows it. */
 async function revokeWithWallet(ctx) {
@@ -68,6 +72,7 @@ export default {
           const r = await src.api('/api/rebuild', {});
           rebuildDigest = r.digest ?? null;
           await src.refresh();
+          rebuildAgainst = src.state.digest;
           ctx.toast(`Rebuilt ${plural(r.memories ?? 0, 'memory')} from Walrus + Sui in ${r.ms ?? '?'} ms.`);
         } finally {
           rebuilding = false;

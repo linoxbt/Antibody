@@ -9,8 +9,12 @@ function resetBtn(ctx) {
     ctx.act(async () => {
       if (!confirm('Reset your sandbox? Its ledger, memories and keys are replaced with a fresh household.')) return;
       b.disabled = true;
-      await ctx.src.api('/api/sandbox/reset', {});
-      await ctx.src.refresh();
+      try {
+        await ctx.src.api('/api/sandbox/reset', {});
+        await ctx.src.refresh();
+      } finally {
+        b.disabled = false;
+      }
       ctx.toast('Fresh sandbox ready.');
       ctx.rerender();
     }),
@@ -18,16 +22,23 @@ function resetBtn(ctx) {
   return b;
 }
 
+let unsubInstall = null; // one subscription, replaced on every render
 function appCard(ctx) {
+  unsubInstall?.();
+  unsubInstall = null;
   if (installed()) return card('App', el('span', { class: 'pill live' }, 'installed'), el('p', { class: 'hint' }, 'You are using Antibody as an installed app.'));
-  const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button', ...(canInstall() ? {} : { hidden: true }) }, 'Install app');
+  const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Install app');
   b.addEventListener('click', () => ctx.act(async () => (await install()) && ctx.toast('Installed. Open Antibody from your apps.')));
-  onInstallable((ok) => (b.hidden = !ok));
-  return card(
-    'App',
-    b,
-    el('p', { class: 'hint', style: 'font-size:14px' }, 'Install the console as an app: its own window and an icon in your dock, Start menu or home screen. If no button shows, use your browser menu: Install Antibody, or Add to Home Screen.'),
-  );
+  const hint = el('p', { class: 'hint', style: 'font-size:14px' });
+  const paint = (ok) => {
+    b.hidden = !ok;
+    hint.textContent = ok
+      ? 'Install the console as an app: its own window and an icon in your dock, Start menu or home screen.'
+      : 'This browser has not offered an install here. Use its menu instead: Install Antibody, or Add to Home Screen (some browsers, like Firefox on desktop, cannot install web apps).';
+  };
+  paint(canInstall());
+  unsubInstall = onInstallable(paint);
+  return card('App', b, hint);
 }
 
 const DEP_NAMES = { relayer: 'Walrus Memory relayer', chain: 'Sui RPC', 'chain-crosscheck': 'Second Sui RPC' };
@@ -76,7 +87,7 @@ export default {
         ),
         card(
           'Node',
-          el('span', { class: `pill ${s.simulated ? 'rec' : 'live'}` }, s.simulated ? 'simulated' : 'mainnet'),
+          el('span', { class: `pill ${s.simulated ? 'rec' : 'live'}` }, s.simulated ? 'simulated' : (s.network ?? 'mainnet')),
           kv(['Backend', s.backend], ['Chain reads', s.chain], ['Delegate set', s.crossCheck ? `cross-checked with ${s.crossCheck.secondary}${s.crossCheck.agreed === false ? ' (DISAGREES: payments blocked)' : ''}` : 'single reader (set ANTIBODY_CROSSCHECK_RPC_URL for a second)'], ['Account', code(s.account.id)], ['Owner', code(s.account.owner)], ['Steward wallet', code(s.wallet)], ['Checkpoint', String(s.checkpoint)]),
         ),
       ),

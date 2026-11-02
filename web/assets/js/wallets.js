@@ -31,8 +31,6 @@ export function discoverWallets(onChange = () => {}) {
   return wallets;
 }
 
-export const canSign = (w, feature) => !!w.features?.[feature];
-
 export async function connect(w) {
   const { accounts } = await w.features['standard:connect'].connect();
   const account = accounts.find((a) => a.chains?.some((c) => String(c).startsWith('sui:'))) ?? accounts[0];

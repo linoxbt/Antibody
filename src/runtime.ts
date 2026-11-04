@@ -76,9 +76,10 @@ export function createRuntime(cfg: Config, role: Role | 'cli', o: { readOnly?: b
     url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl,
     apiKey: cfg.tatumApiKey,
     packageId: cfg.packageId,
+    grpcWire: cfg.grpcWire,
   }), 'chain', chainOpts);
   const chain = cfg.crossCheck
-    ? new CrossCheckedChain(tatum, resilient(new SdkChainReader({ transport: cfg.crossCheck.transport, network: cfg.network, url: cfg.crossCheck.url, apiKey: cfg.crossCheck.apiKey, packageId: cfg.packageId }), 'chain-crosscheck', chainOpts), { label: new URL(cfg.crossCheck.url).host })
+    ? new CrossCheckedChain(tatum, resilient(new SdkChainReader({ transport: cfg.crossCheck.transport, network: cfg.network, url: cfg.crossCheck.url, apiKey: cfg.crossCheck.apiKey, packageId: cfg.packageId, grpcWire: cfg.grpcWire }), 'chain-crosscheck', chainOpts), { label: new URL(cfg.crossCheck.url).host })
     : tatum;
   const accountId = cfg.accountId;
   return {

@@ -51,6 +51,8 @@ export interface Config {
   tatumRpcUrl: string;
   tatumApiUrl: string;
   chainTransport: ChainTransport;
+  /** gRPC over HTTP/2 (native, default) or gRPC-Web. */
+  grpcWire: 'native' | 'web';
   stewardWallet: string | null;
   llm: LlmConfig;
   keyIsolation: KeyIsolation;
@@ -189,6 +191,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     tatumRpcUrl: url(env, 'TATUM_SUI_RPC_URL', MAINNET.tatumRpc),
     tatumApiUrl: url(env, 'TATUM_API_URL', MAINNET.tatumApi),
     chainTransport: oneOf(env, 'ANTIBODY_CHAIN_TRANSPORT', ['grpc', 'jsonrpc'] as const, 'grpc'),
+    grpcWire: oneOf(env, 'ANTIBODY_GRPC_WIRE', ['native', 'web'] as const, 'native'),
     stewardWallet: wallet ? hex('STEWARD_WALLET_ADDRESS', wallet) : (persisted.stewardWallet ?? null),
     llm: loadLlm(env),
     keyIsolation: isolation,

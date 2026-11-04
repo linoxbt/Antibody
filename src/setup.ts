@@ -92,7 +92,7 @@ export async function setupLive(
   },
 ): Promise<SetupResult & { createdAccount?: { accountId: string; digest: string } }> {
   let cfg = cfgIn;
-  const chain = new SdkChainReader({ transport: cfg.chainTransport, network: cfg.network, url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl, apiKey: cfg.tatumApiKey, packageId: cfg.packageId });
+  const chain = new SdkChainReader({ transport: cfg.chainTransport, network: cfg.network, url: cfg.chainTransport === 'grpc' ? cfg.tatumGrpcUrl : cfg.tatumRpcUrl, apiKey: cfg.tatumApiKey, packageId: cfg.packageId, grpcWire: cfg.grpcWire });
   let createdAccount: { accountId: string; digest: string } | undefined;
   if (!cfg.accountId) {
     if (!opts.createAccount) throw new Error('no MemWalAccount: set MEMWAL_ACCOUNT_ID, or let setup create one (antibody setup --wallet, or OWNER_SUI_PRIVATE_KEY)');

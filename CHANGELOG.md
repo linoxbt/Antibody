@@ -2,6 +2,12 @@
 
 ## 1.1.0 — 2026-11-02
 
+### Chain
+- Native gRPC (HTTP/2) to Tatum's Sui gateway by default: Tatum answers gRPC-Web
+  with native gRPC, so mainnet reads through Tatum failed. Checked live:
+  checkpoint reads, object reads and the checkpoint stream.
+  `ANTIBODY_GRPC_WIRE=web` keeps the old wire.
+
 ### Models
 - `LLM_PROVIDER=fortytwo`: Steward on Qwen over the Fortytwo network with one
   key. Reasoning effort is configurable and the model's reasoning is sent back

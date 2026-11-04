@@ -2,7 +2,11 @@
  * Live chain reader on the Sui TypeScript SDK core API, pointed at Tatum.
  * gRPC (default) and JSON-RPC share every call except the checkpoint read.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { rootCertificates } from 'node:tls';
+import { ChannelCredentials } from '@grpc/grpc-js';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
+import { GrpcTransport } from '@protobuf-ts/grpc-transport';
 import { JsonRpcHTTPTransport, SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { coinWithBalance, Transaction } from '@mysten/sui/transactions';
 import { normalizeCoinType, normalizeSuiAddress, SUI_COIN_TYPE } from '../core/encoding.ts';
@@ -14,6 +18,12 @@ type AnyClient = SuiGrpcClient | SuiJsonRpcClient;
 
 export interface SdkChainOptions {
   transport: 'grpc' | 'jsonrpc';
+  /**
+   * gRPC wire format. native (default): gRPC over HTTP/2, what Tatum's gateway
+   * and Sui fullnodes serve. web: gRPC-Web over fetch, for endpoints that only
+   * speak that (Tatum answers gRPC-Web requests with native gRPC and fails).
+   */
+  grpcWire?: 'native' | 'web';
   network: 'mainnet' | 'testnet';
   url: string;
   apiKey: string | null;
@@ -23,10 +33,25 @@ export interface SdkChainOptions {
 /** Deadline for one chain call; without it a hung RPC held locks for minutes (undici's default is ~300 s). */
 export const CHAIN_CALL_TIMEOUT_MS = 30_000;
 
-export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {
+/**
+ * Native gRPC transport. Trusts the system roots plus NODE_EXTRA_CA_CERTS (a
+ * corporate or sandbox proxy's CA); grpc-js goes through https_proxy itself.
+ */
+function nativeTransport(url: string, meta: Record<string, string>, timeoutMs: number | null): GrpcTransport {
+  const u = new URL(url);
+  if (u.pathname !== '/' && u.pathname !== '') throw new Error(`gRPC URL ${url} has a path; native gRPC needs host[:port] only`);
+  const host = `${u.hostname}:${u.port || (u.protocol === 'http:' ? '80' : '443')}`;
+  const extraFile = process.env.NODE_EXTRA_CA_CERTS;
+  const extra = extraFile && existsSync(extraFile) ? readFileSync(extraFile, 'utf8') : '';
+  const channelCredentials = u.protocol === 'http:' ? ChannelCredentials.createInsecure() : ChannelCredentials.createSsl(Buffer.from([...rootCertificates, extra].join('\n')));
+  return new GrpcTransport({ host, channelCredentials, meta, ...(timeoutMs ? { timeout: timeoutMs } : {}) });
+}
+
+export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey' | 'grpcWire'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {
+  // Tatum takes the key as x-api-key (gRPC metadata or an HTTP header).
   const headers: Record<string, string> = o.apiKey ? { 'x-api-key': o.apiKey } : {};
   if (o.transport === 'grpc') {
-    // gRPC-web over fetch; Tatum takes the key as x-api-key metadata.
+    if ((o.grpcWire ?? 'native') === 'native') return new SuiGrpcClient({ network: o.network, transport: nativeTransport(o.url, headers, timeoutMs) });
     return new SuiGrpcClient({ network: o.network, baseUrl: o.url, meta: headers, ...(timeoutMs ? { timeout: timeoutMs } : {}) });
   }
   const timed: typeof fetch = (input, init) => fetch(input, { ...init, ...(timeoutMs ? { signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) } : {}) });

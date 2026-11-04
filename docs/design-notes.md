@@ -16,6 +16,13 @@ metadata). JSON-RPC is the same class with `ANTIBODY_CHAIN_TRANSPORT=jsonrpc`.
 Verified live: account reads, balances, owned objects, coin metadata,
 transactions, and a dry-run that passes R5.
 
+Tatum's gRPC gateway speaks native gRPC (HTTP/2) and answers gRPC-Web
+requests with `application/grpc`, which a gRPC-Web client rejects. The reader
+therefore uses native gRPC (`@grpc/grpc-js` through `@protobuf-ts/grpc-transport`,
+the transport the Sui SDK tests with) by default; `ANTIBODY_GRPC_WIRE=web`
+keeps gRPC-Web for endpoints that only serve that. Tatum's JSON-RPC path
+answers 404 since Sui retired public JSON-RPC.
+
 ## 2. Decision records are written by control
 
 The spec said decisions were written "by Steward" (§6) and "by the control

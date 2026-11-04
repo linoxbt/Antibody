@@ -61,7 +61,7 @@ const json = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x =
 async function main() {
   const cfg: Config = loadConfig({ ...process.env, ANTIBODY_BACKEND: 'live' });
   const accountId = process.env.MEMWAL_ACCOUNT_ID ?? '';
-  const chain = new SdkChainReader({ transport: 'grpc', network: 'mainnet', url: cfg.tatumGrpcUrl, apiKey: cfg.tatumApiKey, packageId: MAINNET.packageId });
+  const chain = new SdkChainReader({ transport: 'grpc', network: 'mainnet', url: cfg.tatumGrpcUrl, apiKey: cfg.tatumApiKey, packageId: MAINNET.packageId, grpcWire: cfg.grpcWire });
   const NS = 'probe.ab';
 
   await probe('P-1', 'Relayer reachable and compatible', async () => {

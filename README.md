@@ -412,7 +412,7 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 | | Offline (CI, this repo) | Mainnet |
 | --- | --- | --- |
 | Core invariants T-01…T-20, learning loop, x402, console sign-in, revocation, sentinel, cross-check, rates, hosted sandbox, audit hardening | ✅ 138 unit tests (`npm test`) | same code |
-| Attack set: 20 variants, every cell counted from the runs | ✅ 0/20 unsafe executed, 0/40 legitimate blocked, 20/20 repeats refused; CI fails on any regression | needs an LLM key for a real model |
+| Attack set: 20 variants, every cell counted from the runs | ✅ gullible scripted model: fooled 20/20, 0/20 unsafe executed, 0/40 legitimate blocked, 0/20 paid twice; CI fails on any regression | ✅ Qwen 3.8 27B on Fortytwo ([results](docs/attack-set-results-llm.md), 2026-11-04): not fooled 20/20, rent paid once in every run, 0/40 legitimate blocked; the duplicate guard refused 13 repeat payments |
 | Fuzzing: mutated envelopes, ledger bodies and whole ledgers never verify or crash | ✅ seeded, 90k cases checked; CI runs 20k per push | — |
 | Ledger past 90 records (cap now 5000) | ✅ 260-record cold rebuild through 100-hit recall | same code |
 | Operability: doctor, supervisor restart, service files, state migration, retries, alerts, encrypted keys | ✅ unit tests; supervisor restart checked by hand | — |

@@ -145,3 +145,15 @@ test('revoking the user lane (which signed payee records) can be recorded, and i
   assert.ok(after.ledger.ok, !after.ledger.ok ? after.ledger.detail : '');
   assert.equal(after.ledger.ok && after.ledger.payees.length, 2, 'payees signed before the revocation still count');
 });
+
+test('two scans at once observe a new coin once (sentinel + manual scan race)', async () => {
+  const { createWorld, POISON_COIN } = await import('../src/dev/world.ts');
+  const w = await createWorld();
+  try {
+    w.airdrop(POISON_COIN);
+    const [a, b] = await Promise.all([w.scan(), w.scan()]);
+    assert.equal(a.items.length + b.items.length, 1, 'one observation, not two');
+  } finally {
+    w.dispose();
+  }
+});

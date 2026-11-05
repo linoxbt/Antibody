@@ -15,7 +15,7 @@ import { matchLessons, type LessonMatch } from '../core/lessons.ts';
 import { formatUnits } from '../core/units.ts';
 import { NS_CONTENT, type SrcRef } from '../core/types.ts';
 import type { ChainReader, OwnedObject } from '../adapters/chain.ts';
-import { JsonFileStore } from '../adapters/filestore.ts';
+import { JsonFileStore, withFileLock } from '../adapters/filestore.ts';
 import type { MemoryClient } from '../adapters/memory.ts';
 import type { Incident } from '../control/store.ts';
 import type { Logger } from '../log.ts';
@@ -118,7 +118,16 @@ export async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
   return out;
 }
 
+/**
+ * One scan of the wallet at a time across processes: the always-on sentinel
+ * and a manual `antibody ingest scan` used to both observe the same new coin
+ * (the relayer had not indexed the other's write yet), writing it twice.
+ */
 export async function scanWallet(d: IngestDeps): Promise<ScanResult> {
+  return withFileLock(join(d.cacheDir, 'ingest-scan.lock'), () => scanWalletLocked(d), 10 * 60_000);
+}
+
+async function scanWalletLocked(d: IngestDeps): Promise<ScanResult> {
   const now = d.now ?? Date.now;
   await flushOutbox(d);
   const seen = new JsonFileStore<Record<string, string>>(join(d.cacheDir, 'ingest-seen.json'), () => ({}));

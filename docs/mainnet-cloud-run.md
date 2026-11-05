@@ -41,6 +41,7 @@ antibody quarantine --source <coin object> --yes   # ledger record on Walrus mai
 antibody rebuild --fresh                            # digest from Walrus + Sui alone
 antibody steward "Pay this month's rent." --execute # ALLOW, real 0.45 USDC transfer
 antibody report <quarantine seq>                    # incident report via Tatum Storage
+antibody evidence                                   # docs/mainnet-evidence.md: form fields + explorer links
 ```
 
 ## Before the session ends

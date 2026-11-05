@@ -15,6 +15,9 @@ import { readStateVersion, STATE_VERSION } from './state.ts';
 
 export type CheckStatus = 'ok' | 'warn' | 'fail' | 'skip';
 
+/** Account creation, four delegate keys and genesis: a few transactions' gas, with headroom. */
+export const OWNER_SETUP_MIST = 200_000_000n;
+
 export interface Check {
   name: string;
   status: CheckStatus;
@@ -24,7 +27,9 @@ export interface Check {
 
 export interface DoctorDeps {
   /** Live probes; omitted in offline mode or when the prerequisite failed. */
-  chain?: { latestCheckpoint(): Promise<number>; getAccount(id: string): Promise<import('../core/lanes.ts').AccountState> };
+  chain?: { latestCheckpoint(): Promise<number>; getAccount(id: string): Promise<import('../core/lanes.ts').AccountState>; listBalances?(owner: string): Promise<{ coinType: string; balance: string }[]> };
+  /** Live setup not done yet: the throwaway owner's address, so its SUI can be checked. */
+  ownerAddress?: string;
   relayerHealth?: () => Promise<unknown>;
   ledger?: () => Promise<{ ok: true; head: number; acknowledged?: boolean } | { ok: false; code: string; detail: string }>;
   fetchImpl?: typeof fetch;
@@ -85,7 +90,7 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
   if (sv === null) add({ name: 'Setup', status: 'fail', detail: `no ${persistedPath(cfg.home)}`, fix: 'antibody setup' });
   else if (sv > STATE_VERSION) add({ name: 'State format', status: 'fail', detail: `version ${sv} is newer than this build (${STATE_VERSION})`, fix: 're-run the installer to update Antibody' });
   else add({ name: 'State format', status: 'ok', detail: `version ${sv}${sv < STATE_VERSION ? ` (migrates to ${STATE_VERSION} on next start)` : ''}` });
-  add(cfg.accountId ? { name: 'MemWal account', status: 'ok', detail: cfg.accountId } : { name: 'MemWal account', status: 'fail', detail: 'not configured', fix: 'antibody setup (live: set MEMWAL_ACCOUNT_ID first)' });
+  add(cfg.accountId ? { name: 'MemWal account', status: 'ok', detail: cfg.accountId } : { name: 'MemWal account', status: 'fail', detail: 'not configured', fix: cfg.backend === 'live' ? 'antibody setup (creates the account; or set MEMWAL_ACCOUNT_ID to use one from memory.walrus.xyz)' : 'antibody setup' });
   add(cfg.stewardWallet ? { name: 'Steward wallet', status: 'ok', detail: cfg.stewardWallet } : { name: 'Steward wallet', status: 'fail', detail: 'not configured', fix: 'antibody setup' });
 
   // Keys
@@ -175,6 +180,12 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
       try {
         const ck = await timed(d.chain.latestCheckpoint());
         add({ name: 'Sui RPC', status: 'ok', detail: `checkpoint ${ck} via ${cfg.chainTransport}` });
+        if (d.ownerAddress && d.chain.listBalances) {
+          const sui = BigInt((await timed(d.chain.listBalances(d.ownerAddress))).find((b) => b.coinType.endsWith('::sui::SUI'))?.balance ?? '0');
+          add(sui >= OWNER_SETUP_MIST
+            ? { name: 'Owner wallet', status: 'ok', detail: `${d.ownerAddress} holds ${Number(sui) / 1e9} SUI` }
+            : { name: 'Owner wallet', status: 'fail', detail: `${d.ownerAddress} holds ${Number(sui) / 1e9} SUI; setup needs about ${Number(OWNER_SETUP_MIST) / 1e9}`, fix: `send 0.3 SUI to ${d.ownerAddress}, then antibody setup` });
+        }
         if (cfg.accountId) {
           const acct = await timed(d.chain.getAccount(cfg.accountId));
           const b = bindLanes(acct);

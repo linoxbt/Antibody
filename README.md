@@ -428,6 +428,7 @@ docs/           blog.md · demo-live.md · design-notes.md · attack-set-results
 | MemWalAccount parsing (`delegate_keys`, base64 keys) | fixture | ✅ read a live account over gRPC |
 | Build + dry-run + R5 on a real transfer | fixture | ✅ live gRPC dry-run passes R5 (negative net gas handled) |
 | P-2…P-8 (byte-identical retrieval, delegate add/remove, Tatum gateway, restore, coverage) | — | ⏳ needs your keys: `npx tsx scripts/probe.ts` ([runbook](docs/demo-live.md)) |
+| **Full demo on mainnet** (2026-11-05): four lanes on a real MemWalAccount, payees, a live attack coin from a separate wallet, sentinel incident, blocked theft, quarantine + lesson, repeat attack auto-quarantined, fresh rebuild with matching digest, three real payments (one over x402), incident report via Tatum | — | ✅ 21 records on Walrus Memory mainnet; every ID and transaction in [docs/mainnet-evidence.md](docs/mainnet-evidence.md); story in the [blog](https://antibody-memory.netlify.app/blog) |
 
 The probe has to run with your throwaway owner wallet, a dashboard delegate key
 and a Tatum mainnet key. Paste `probe-evidence.json` into the build spec under

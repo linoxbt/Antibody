@@ -7,6 +7,7 @@ import { rootCertificates } from 'node:tls';
 import { ChannelCredentials } from '@grpc/grpc-js';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { GrpcTransport } from '@protobuf-ts/grpc-transport';
+import { RateLimitRetry } from './rate-limit.ts';
 import { JsonRpcHTTPTransport, SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { coinWithBalance, Transaction } from '@mysten/sui/transactions';
 import { normalizeCoinType, normalizeSuiAddress, SUI_COIN_TYPE } from '../core/encoding.ts';
@@ -37,14 +38,14 @@ export const CHAIN_CALL_TIMEOUT_MS = 30_000;
  * Native gRPC transport. Trusts the system roots plus NODE_EXTRA_CA_CERTS (a
  * corporate or sandbox proxy's CA); grpc-js goes through https_proxy itself.
  */
-function nativeTransport(url: string, meta: Record<string, string>, timeoutMs: number | null): GrpcTransport {
+function nativeTransport(url: string, meta: Record<string, string>, timeoutMs: number | null): RateLimitRetry {
   const u = new URL(url);
   if (u.pathname !== '/' && u.pathname !== '') throw new Error(`gRPC URL ${url} has a path; native gRPC needs host[:port] only`);
   const host = `${u.hostname}:${u.port || (u.protocol === 'http:' ? '80' : '443')}`;
   const extraFile = process.env.NODE_EXTRA_CA_CERTS;
   const extra = extraFile && existsSync(extraFile) ? readFileSync(extraFile, 'utf8') : '';
   const channelCredentials = u.protocol === 'http:' ? ChannelCredentials.createInsecure() : ChannelCredentials.createSsl(Buffer.from([...rootCertificates, extra].join('\n')));
-  return new GrpcTransport({ host, channelCredentials, meta, ...(timeoutMs ? { timeout: timeoutMs } : {}) });
+  return new RateLimitRetry(new GrpcTransport({ host, channelCredentials, meta, ...(timeoutMs ? { timeout: timeoutMs } : {}) }));
 }
 
 export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey' | 'grpcWire'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {

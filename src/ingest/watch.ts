@@ -24,6 +24,10 @@ export interface WatchOptions {
   minScanGapMs?: number;
   /** How long to poll after a stream failure before trying to stream again. */
   retryStreamMs?: number;
+  /** A stream silent this long (not even a heartbeat) is dropped and reopened. */
+  staleMs?: number;
+  /** Scan this often whatever the stream says, so a quiet failure cannot hide an object for long. */
+  safetyScanMs?: number;
   log?: (event: string, data?: Record<string, unknown>) => void;
   onScan?: (r: ScanResult, why: string) => void;
 }
@@ -42,6 +46,8 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
   const pollMs = o.pollMs ?? 4000;
   const gap = o.minScanGapMs ?? 1500;
   const retryStreamMs = o.retryStreamMs ?? 180_000;
+  const staleMs = o.staleMs ?? 120_000;
+  const safetyScanMs = o.safetyScanMs ?? 300_000;
   let lastScanned = -1;
   let lastScanAt = 0;
   let want = -1; // highest checkpoint seen that has not been scanned
@@ -74,14 +80,34 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
   };
 
   trigger(0, 'startup'); // catch up on anything that landed while we were down
+  const safety = setInterval(() => trigger(Math.max(want, lastScanned) + 1, 'safety'), safetyScanMs);
+  safety.unref?.();
   let quickEnds = 0;
   while (!o.signal.aborted) {
     if (o.chain.watchCheckpoints && mode === 'stream') {
       log('stream.open', { wallet: o.wallet });
       const opened = Date.now();
+      // Watchdog: an open stream that has gone quiet never ends on its own, and
+      // the sentinel would be deaf. Any message, heartbeats included, is life.
+      const ctl = new AbortController();
+      const onOuterAbort = () => ctl.abort();
+      o.signal.addEventListener('abort', onOuterAbort, { once: true });
+      let lastMsg = Date.now();
+      let stale = false;
+      const dog = setInterval(() => {
+        if (Date.now() - lastMsg > staleMs) {
+          stale = true;
+          ctl.abort();
+        }
+      }, Math.max(50, Math.min(15_000, staleMs / 4)));
+      const alive = () => (lastMsg = Date.now());
       try {
-        await o.chain.watchCheckpoints(o.wallet, (seq) => trigger(seq, 'stream'), o.signal);
+        await o.chain.watchCheckpoints(o.wallet, (seq) => (alive(), trigger(seq, 'stream')), ctl.signal, alive);
         if (o.signal.aborted) break;
+        if (stale) {
+          log('stream.stale', { silentMs: Date.now() - lastMsg });
+          continue;
+        }
         log('stream.end');
         // B24: a stream that keeps ending at once must not spin: back off, then fall back to polling.
         quickEnds = Date.now() - opened < 5_000 ? quickEnds + 1 : 0;
@@ -92,8 +118,15 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
         } else await sleep(Math.min(30_000, 500 * 2 ** (quickEnds - 1)), o.signal);
       } catch (e) {
         if (o.signal.aborted) break;
+        if (stale) {
+          log('stream.stale', { silentMs: Date.now() - lastMsg });
+          continue;
+        }
         log('stream.error', { error: (e as Error).message, fallback: 'poll' });
         mode = 'poll';
+      } finally {
+        clearInterval(dog);
+        o.signal.removeEventListener('abort', onOuterAbort);
       }
       continue;
     }
@@ -110,6 +143,7 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
     }
     if (o.chain.watchCheckpoints && !o.signal.aborted) mode = 'stream';
   }
+  clearInterval(safety);
   await running;
   return { scans, mode };
 }

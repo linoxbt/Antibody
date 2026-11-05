@@ -151,7 +151,7 @@ export class SdkChainReader implements ChainReader {
   /** FR-18: checkpoints affecting the wallet, streamed over gRPC. Undefined on JSON-RPC. */
   get watchCheckpoints(): ChainReader['watchCheckpoints'] {
     if (this.o.transport !== 'grpc') return undefined;
-    return async (address, onCheckpoint, signal) => {
+    return async (address, onCheckpoint, signal, onAlive) => {
       // A long-lived stream: its own client, with no per-call deadline.
       const client = (this.streamClient ??= createSuiClient(this.o, null)) as SuiGrpcClient;
       const call = client.subscriptionService.subscribeCheckpoints(
@@ -164,6 +164,7 @@ export class SdkChainReader implements ChainReader {
       // With a filter the server sends a cursor-only heartbeat every few
       // checkpoints and a checkpoint body only when one touches the address.
       for await (const r of call.responses) {
+        onAlive?.();
         const seq = r.checkpoint?.sequenceNumber;
         if (seq !== undefined) onCheckpoint(Number(seq));
       }

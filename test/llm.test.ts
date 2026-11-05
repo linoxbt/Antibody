@@ -94,3 +94,8 @@ test('doctor: model served, wrong model named, key refused, not configured', asy
   assert.equal((await checkLlm(cfg({ LLM_PROVIDER: 'fortytwo' }), fetch)).status, 'fail', 'fortytwo without a key is a mistake, not a choice');
   assert.equal((await checkLlm(cfg({}), fetch)).status, 'warn', 'no model at all: scripted, SIMULATED');
 });
+
+test('ANTIBODY_X402_ALLOW takes origins or bare hosts', () => {
+  const c = loadConfig({ ANTIBODY_HOME: '/nonexistent-antibody-home', ANTIBODY_X402_ALLOW: 'https://Bills.Example.com, 127.0.0.1:7413,http://localhost:8080' });
+  assert.deepEqual(c.x402Allow, ['bills.example.com', '127.0.0.1:7413', 'localhost:8080']);
+});

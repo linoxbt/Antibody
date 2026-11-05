@@ -5,7 +5,7 @@ import { renderEvidence, type EvidenceState } from '../src/ops/evidence.ts';
 
 const pub = (c: string) => c.repeat(64);
 const state = (simulated: boolean): EvidenceState => ({
-  simulated,
+  backend: simulated ? 'offline' : 'live',
   network: 'mainnet',
   chain: simulated ? 'fixture' : 'tatum-grpc',
   account: { id: '0x' + 'a'.repeat(64), owner: '0x' + 'b'.repeat(64), active: true },

@@ -23,7 +23,8 @@ export function loadSetupEvidence(home: string): SetupEvidence | null {
 
 /** The subset of /api/state the report reads. */
 export interface EvidenceState {
-  simulated: boolean;
+  /** offline = fixture chain + local relayer: nothing on-chain. Other SIMULATED labels (key isolation) do not make evidence simulated. */
+  backend: 'live' | 'offline';
   network?: string;
   chain: string;
   account: { id: string; owner: string; active: boolean };
@@ -50,7 +51,22 @@ const txLink = (d: string, network: string) => `[\`${d}\`](${scan(network)}/tx/$
 const objLink = (id: string, network: string) => `[\`${id}\`](${scan(network)}/object/${id})`;
 const addrLink = (a: string, network: string) => `[\`${a}\`](${scan(network)}/account/${a})`;
 
-export function renderEvidence(s: EvidenceState, o: { setup: SetupEvidence | null; payments: EvidencePayment[]; generatedAt: string; tatumHost: string }): string {
+/** The live demo attack (scripts/mainnet/attack.ts): public identifiers only, never the attacker key. */
+export interface AttackEvidence {
+  attacker: string;
+  packageId?: string;
+  publishDigest?: string;
+  sent?: { coin: string; digest: string }[];
+}
+
+export function loadAttackEvidence(home: string): AttackEvidence | null {
+  const p = join(home, 'attack.json');
+  if (!existsSync(p)) return null;
+  const a = JSON.parse(readFileSync(p, 'utf8')) as AttackEvidence & { attackerSecret?: string };
+  return { attacker: a.attacker, ...(a.packageId ? { packageId: a.packageId } : {}), ...(a.publishDigest ? { publishDigest: a.publishDigest } : {}), ...(a.sent ? { sent: a.sent } : {}) };
+}
+
+export function renderEvidence(s: EvidenceState, o: { setup: SetupEvidence | null; payments: EvidencePayment[]; generatedAt: string; tatumHost: string; attack?: AttackEvidence | null }): string {
   const net = s.network ?? 'mainnet';
   const memories = s.nodes.filter((n) => n.blobIds.length);
   const ledgerBlobs = s.ledger.ok ? s.ledger.records.filter((r) => r.blobId) : [];
@@ -59,9 +75,9 @@ export function renderEvidence(s: EvidenceState, o: { setup: SetupEvidence | nul
   for (const n of memories) byLane.set(`${n.lane} · ${n.kind}`, (byLane.get(`${n.lane} · ${n.kind}`) ?? 0) + 1);
   const agent = s.lanes.find((l) => l.lane === 'agent' && l.status === 'active');
   const lines: string[] = [
-    `# Antibody · ${s.simulated ? 'SIMULATED evidence (offline backend, nothing on-chain)' : `${net} evidence`}`,
+    `# Antibody · ${s.backend === 'offline' ? 'SIMULATED evidence (offline backend, nothing on-chain)' : `${net} evidence`}`,
     '',
-    `Generated ${o.generatedAt} by \`antibody evidence\`. ${s.simulated ? 'Fixture chain' : `Chain reads via ${s.chain} (${o.tatumHost})`}, checkpoint ${s.checkpoint}.`,
+    `Generated ${o.generatedAt} by \`antibody evidence\`. ${s.backend === 'offline' ? 'Fixture chain' : `Chain reads via ${s.chain} (${o.tatumHost})`}, checkpoint ${s.checkpoint}.`,
     '',
     '## Submission form',
     '',
@@ -79,11 +95,15 @@ export function renderEvidence(s: EvidenceState, o: { setup: SetupEvidence | nul
     '| --- | --- | --- | --- |',
     ...s.lanes.map((l) => {
       const d = o.setup?.lanes.find((x) => x.pub === l.pub)?.digest;
-      return `| \`${l.label}\` | \`${l.pub}\` | ${l.status} | ${d ? txLink(d, net) : '—'} |`;
+      return `| \`${l.label}\` | \`${l.pub}\` | ${l.status} | ${d && d !== 'already-registered' ? txLink(d, net) : 'on-chain (see the account)'} |`;
     }),
   ];
   if (o.setup?.createdAccount) lines.push('', `Account created by ${txLink(o.setup.createdAccount.digest, net)}.`);
   if (o.setup) lines.push('', `Genesis ledger record: ${blobLink(o.setup.genesis.blobId, net)}.`);
+  if (o.attack) {
+    lines.push('', '## The attack (live, from a separate wallet)', '', `Attacker ${addrLink(o.attack.attacker, net)}${o.attack.packageId ? ` published package ${objLink(o.attack.packageId, net)}` : ''}${o.attack.publishDigest ? ` in ${txLink(o.attack.publishDigest, net)}` : ''}.`, '');
+    for (const x of o.attack.sent ?? []) lines.push(`- sent \`${x.coin.split('::').slice(1).join('::')}\` to Steward: ${txLink(x.digest, net)}`);
+  }
   lines.push('', '## Control ledger (hash-chained, on Walrus)', '');
   if (s.ledger.ok) {
     lines.push(`Head: seq **${s.ledger.head.seq}**, hash \`${s.ledger.head.hash}\`.`, '', '| Seq | Record | Blob | On-chain |', '| --- | --- | --- | --- |');

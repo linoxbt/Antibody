@@ -2,6 +2,19 @@
 
 ## 1.1.0 — 2026-11-02
 
+### Mainnet run (2026-11-05)
+- Full demo on Sui mainnet with real Walrus Memory writes: setup on an existing
+  account, payees, statements, a real attack coin from a separate wallet, the
+  sentinel's incident, a blocked theft, quarantine and lesson, the repeat
+  attack auto-quarantined, a fresh rebuild with a matching digest, three real
+  payments (one over x402) and an incident report through Tatum. Every
+  identifier is in `docs/mainnet-evidence.md` (`antibody evidence`).
+- Fixes found on the way: Tatum 429s retried on gRPC calls; one wallet scan at
+  a time across processes (a coin was observed twice); `ANTIBODY_X402_ALLOW`
+  accepts origins as documented; the sentinel's stream has a watchdog and a
+  5-minute safety scan (hardening against a silent stall; the run itself
+  showed a one-minute delay, not a stall).
+
 ### Chain
 - Native gRPC (HTTP/2) to Tatum's Sui gateway by default: Tatum answers gRPC-Web
   with native gRPC, so mainnet reads through Tatum failed. Checked live:

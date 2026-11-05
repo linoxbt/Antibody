@@ -38,6 +38,7 @@ import {
 } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { llmSmokeTest } from '../steward/llm-check.ts';
+import { loadSetupEvidence, renderEvidence, saveSetupEvidence, type EvidenceState } from '../ops/evidence.ts';
 import { checkLlm } from '../ops/doctor.ts';
 import { submitUserRecord, writeStatement } from '../user/user.ts';
 import { liveAccountAdmin } from '../adapters/account-live.ts';
@@ -47,10 +48,10 @@ import { primaryOf } from '../adapters/chain-crosscheck.ts';
 import { retrieveAll } from '../adapters/memory.ts';
 import { startBillServer } from '../payments/x402-server.ts';
 import { suiNetworkId } from '../payments/x402.ts';
-import { startWeb } from '../web/server.ts';
+import { startWeb, stateJson } from '../web/server.ts';
 import { ownerSession, verifyOwnerMessage, walletAccountAdmin, type OwnerSession } from '../web/owner-sign.ts';
 import { callOf } from '../web/revoke.ts';
-import { doctorExitCode, runDoctor, type Check } from '../ops/doctor.ts';
+import { doctorExitCode, OWNER_SETUP_MIST, runDoctor, type Check } from '../ops/doctor.ts';
 import { installService, serviceStatus, servicePlan, uninstallService } from '../ops/service.ts';
 import { Alerter, alertConfigFrom } from '../ops/alerts.ts';
 import { ensureState } from '../ops/state.ts';
@@ -146,6 +147,8 @@ async function createAccountAsOwner(chain: SdkChainReader, cfg: Config, session:
     const secret = process.env.OWNER_SUI_PRIVATE_KEY;
     if (!secret) throw new Error('to create the account, run antibody setup --wallet, or set OWNER_SUI_PRIVATE_KEY (throwaway owner)');
     const kp = Ed25519Keypair.fromSecretKey(secret);
+    const sui = BigInt((await chain.listBalances(kp.toSuiAddress())).find((b) => b.coinType.endsWith('::sui::SUI'))?.balance ?? '0');
+    if (sui < OWNER_SETUP_MIST) throw new Error(`the owner wallet ${kp.toSuiAddress()} holds ${Number(sui) / 1e9} SUI; send it 0.3 SUI first (nothing was written)`);
     const bytes = await chain.buildCreateAccount({ sender: kp.toSuiAddress(), ...ids });
     const tx = await chain.execute(bytes, (await kp.signTransaction(bytes)).signature);
     if (!tx.ok) throw new Error(`create_account failed: ${tx.error ?? 'unknown error'}`);
@@ -302,6 +305,7 @@ async function main(argv: string[]): Promise<void> {
         if (created) console.log(green(`MemWalAccount created on ${cfg.network}: ${created.accountId}`) + dim(` (create_account ${created.digest})`));
         console.log(bold('Antibody set up'));
         console.log(`  account ${res.accountId}\n  owner   ${res.owner}${session ? dim(' (your wallet: sign in to the console with it)') : ''}\n  wallet  ${res.wallet} ${dim('(Steward pays from here; fund it before paying)')}`);
+        if (!res.simulated) saveSetupEvidence(cfg.home, res, cfg.network);
         for (const l of res.lanes) console.log(`  ${l.label.padEnd(24)} ${l.pub}  ${dim('tx ' + l.digest)}`);
         console.log(`  genesis blob ${res.genesis.blobId} envelope ${res.genesis.envelopeId}`);
         console.log(dim(`Keys: ${cfg.home}/keys/<role>/ (0600${keyPassphrase() ? ', encrypted' : ''}). For real isolation, give each role its own OS user: scripts/setup-roles.sh`));
@@ -739,6 +743,13 @@ async function main(argv: string[]): Promise<void> {
       if (!values.offline && cfg.backend === 'live') {
         const r = createRuntime({ ...cfg, role: null }, 'cli', { readOnly: true });
         deps.chain = r.chain;
+        if (!setUp && process.env.OWNER_SUI_PRIVATE_KEY) {
+          try {
+            deps.ownerAddress = Ed25519Keypair.fromSecretKey(process.env.OWNER_SUI_PRIVATE_KEY).toSuiAddress();
+          } catch {
+            /* a malformed key is reported by setup itself */
+          }
+        }
         if (cfg.accountId && setUp) {
           deps.relayerHealth = async () => {
             const c = new LiveMemoryClient({ ...loadLaneKey({ ...cfg, keyIsolation: 'simulated' }, 'control'), accountId: cfg.accountId!, serverUrl: cfg.memwalServerUrl });
@@ -805,6 +816,20 @@ async function main(argv: string[]): Promise<void> {
       const ok = await a.send({ kind: 'test', severity: 'info', key: `test:${Date.now()}`, title: 'test alert', text: `Alerts from ${cfg.home} reach you. Incidents, quarantines and ledger failures will arrive here.` });
       if (!ok.length) throw new Error('every alert channel refused the test alert: check the URL, bot token and chat id (set ANTIBODY_LOG=stderr for details)');
       console.log(green(`test alert delivered via ${ok.join(' and ')}`));
+      return;
+    }
+
+    case 'evidence': {
+      // Judging evidence for this install: account, lanes, blobs, ledger, payments, reports.
+      const { values } = opts([sub ?? '', ...rest].filter(Boolean), { out: { type: 'string', default: 'docs/mainnet-evidence.md' } });
+      const r = rt('control');
+      const control = buildControl(r, { signer: null });
+      const state = (await stateJson(r, control)) as unknown as EvidenceState;
+      const md = renderEvidence(state, { setup: loadSetupEvidence(r.cfg.home), payments: control.payments.list(), generatedAt: new Date().toISOString(), tatumHost: new URL(r.cfg.chainTransport === 'grpc' ? r.cfg.tatumGrpcUrl : r.cfg.tatumRpcUrl).host });
+      const out = String(values.out);
+      mkdirSync(dirname(resolve(out)), { recursive: true });
+      writeFileSync(out, md);
+      console.log(green(`evidence written to ${out}`) + (state.simulated ? yellow(' (SIMULATED: offline backend)') : ''));
       return;
     }
 
@@ -1141,6 +1166,7 @@ Setup and status
   antibody doctor [--json]                    check the install end to end and say how to fix problems
   antibody service install | uninstall | status   start at login, restart on crash (systemd / launchd / Task Scheduler)
   antibody alert test                         send a test alert (ANTIBODY_ALERT_WEBHOOK or Telegram)
+  antibody evidence [--out docs/mainnet-evidence.md]   judging evidence: account, lane keys, blobs, ledger, payments, reports
   antibody llm test                           check Steward's model: key, model name, tool calling (e.g. Fortytwo)
   antibody keys encrypt                       encrypt key files with ANTIBODY_KEY_PASSPHRASE
   antibody cloud serve                        the hosted sandbox: any wallet gets its own simulated Antibody ($PORT)

@@ -157,17 +157,19 @@ version run `antibody up` locally.
 | --- | --- |
 | Walrus Memory integrated and writing on **Mainnet** | `src/adapters/memwal-live.ts` (`rememberAndWait`, `recall`, `listMemories`, `restore`), two namespaces: `steward.mem`, `antibody.ledger` |
 | **≥ 10 memories** on Mainnet | One demo run writes ≈ 15–25 (genesis, payees, statements, observations, notes, decisions, quarantine, lesson); budget ≤ 50 |
-| **Tatum RPC** for on-chain data | `src/adapters/chain-sdk.ts` over Tatum's Sui **gRPC** gateway (`x-api-key`): MemWalAccount delegate keys, balances, owned objects, coin metadata, checkpoints, **dry-runs**, transactions; JSON-RPC variant kept for while Tatum serves it |
-| Tatum Data / Storage API | Incident reports to Walrus via `POST /v4/data/storage/upload` (`antibody report <seq>`) |
+| **Tatum RPC** for on-chain data | `src/adapters/chain-sdk.ts` over Tatum's Sui **gRPC** gateway (native gRPC over HTTP/2, `x-api-key`): MemWalAccount delegate keys, balances, owned objects, coin metadata, checkpoints, the checkpoint stream for the sentinel, **dry-runs**, transactions. Checked live on mainnet with `antibody doctor` |
+| Tatum Data / Storage API | Incident reports to Walrus via `POST /v4/data/storage/upload` (`antibody report <seq>`); USD values via `/v4/data/rate/symbol` |
 | Learning over time (blog post + Best Walrus Memory) | Lessons in the ledger tighten the sentinel; payment records give Steward its history; both survive rebuild — see [The learning loop](#the-learning-loop) |
 | Agent payments (x402 / MPP settled on Sui) | `src/payments/` — x402 v2 HTTP transport, `exact` scheme on Sui, policy-gated, signer signs, facilitator settles |
 | Working demo + public repo | `scripts/demo-m1.ts`, `antibody up` + web view, this repo |
-| Technical quality (30%) | Pure core (`src/core`, no I/O), 104 unit tests incl. every invariant and seeded fuzzing, browser e2e with axe accessibility checks, CI on Linux/macOS/Windows, strict TypeScript, separate processes and keys |
-| Presentation (20%) | Web view, terminal demo, [blog draft](docs/blog.md), [attack-set table](docs/attack-set-results.md) |
+| Technical quality (30%) | Pure core (`src/core`, no I/O), 143 unit tests incl. every invariant and seeded fuzzing, browser e2e with axe accessibility checks, CI on Linux/macOS/Windows, strict TypeScript, separate processes and keys |
+| Presentation (20%) | Web view, terminal demo, [blog draft](docs/blog.md), attack-set tables for a [scripted model](docs/attack-set-results.md) and [Qwen on Fortytwo](docs/attack-set-results-llm.md), `antibody evidence` for the mainnet record |
 
 Submission form fields worth preparing: Tatum dashboard account ID, SUI address,
 MemWalAccount ID, `MEMWAL_AGENT_ID` (use the **`antibody:agent`** lane public
-key), a 2–3 minute video, the published blog post and this repo.
+key), a 2–3 minute video, the published blog post and this repo. After a
+mainnet run, `antibody evidence` writes all of them (with explorer links to
+every blob and transaction) to `docs/mainnet-evidence.md`.
 
 ---
 
@@ -343,6 +345,7 @@ resource server + facilitator is in `src/payments/x402-server.ts`
 | `antibody doctor [--json]` | — | check the whole install (keys, state, RPC, relayer, ledger, daemons, alerts); a fix for each problem |
 | `antibody service install\|uninstall\|status` | — | run at login, restart on crash: systemd user unit, launchd agent or Task Scheduler |
 | `antibody alert test` | — | send a test alert (`ANTIBODY_ALERT_WEBHOOK`, or Telegram bot token + chat id) |
+| `antibody evidence [--out file]` | control | judging evidence: account, lane keys and their transactions, every blob, ledger head, payments, reports (public identifiers only) |
 | `antibody llm test` | — | check Steward's model: endpoint, key, model name and a tool-calling round trip |
 | `antibody keys encrypt` | — | encrypt key files at rest (scrypt + AES-256-GCM) with `ANTIBODY_KEY_PASSPHRASE`, or one `ANTIBODY_KEY_PASSPHRASE_<ROLE>` per role |
 | `antibody login` | — | print a one-click console sign-in link (operator token) |

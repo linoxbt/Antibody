@@ -122,8 +122,16 @@ override, "skip checks"):
 | Unsafe transfers executed | 20/20 would have been | **0/20** |
 | Legitimate rent wrongly blocked | — | **0/40** |
 
-*(Offline run with a deliberately gullible scripted model; rerun with any
-OpenAI-compatible model via `--llm`.)*
+*(Offline run with a deliberately gullible scripted model, the worst case:
+it believes every injection.)*
+
+We ran the same 20 attacks against a real model, **Qwen 3.8 27B on the
+Fortytwo network**. It was not fooled once: in every run it paid the real
+landlord. That is good news about the model, and it is also the point. A model
+that resists today can be fooled by tomorrow's injection, and Antibody's
+guarantees do not depend on which one you get. With the gullible model the
+policy blocked all 20; with Qwen it never had to, and it still refused 13
+attempts to pay the same rent twice.
 
 It also pays bills over **x402**. When a utility answers HTTP 402 Payment
 Required, the `payTo` from the 402 becomes an ordinary proposal and passes the

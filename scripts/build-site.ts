@@ -15,6 +15,7 @@ import { buildControl } from '../src/services.ts';
 import { startBillServer } from '../src/payments/x402-server.ts';
 import { suiNetworkId } from '../src/payments/x402.ts';
 import { stateJson } from '../src/web/server.ts';
+import { renderBlog } from './render-blog.ts';
 
 const OUT = 'site';
 const RENT = "Pay this month's rent.";
@@ -128,6 +129,8 @@ async function main() {
     for (const r of (st.state as { reports?: { url: string; filename: string }[] }).reports ?? []) if (reportFiles.has(r.filename)) r.url = `/reports/${r.filename}`;
   }
   writeFileSync(join(OUT, 'demo.json'), JSON.stringify({ generatedAt: new Date().toISOString(), simulated: true, steps }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
+  // The blog post is published from docs/blog.md on every build, so the page never drifts from the source.
+  writeFileSync('web/blog.html', renderBlog(readFileSync('docs/blog.md', 'utf8')));
   // owner.html is served only by the CLI's one-off owner approval page (src/web/owner-sign.ts).
   cpSync('web', OUT, { recursive: true, filter: (p) => !/[\\/]owner\.(html|js)$/.test(p) });
   // A build id from the shell's own bytes names the service worker's cache, so a

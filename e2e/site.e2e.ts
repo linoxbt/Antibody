@@ -9,7 +9,7 @@ let stack: Awaited<ReturnType<typeof startStack>>;
 before(async () => (stack = await startStack()));
 after(() => stack.close());
 
-const PAGES = ['/', '/walkthrough', '/security', '/install', '/privacy', '/login', '/offline.html', '/no-such-page'];
+const PAGES = ['/', '/walkthrough', '/security', '/install', '/blog', '/privacy', '/login', '/offline.html', '/no-such-page'];
 
 for (const mobile of [false, true]) {
   for (const theme of ['dark', 'light'] as const) {

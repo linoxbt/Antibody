@@ -12,9 +12,10 @@ const PAGES = [
   { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '01' },
   { href: '/security', id: 'security', label: 'Security', hint: '02' },
   { href: '/install', id: 'install', label: 'Install', hint: '03' },
-  { href: '/login', id: 'login', label: 'Sign in', hint: '04' },
+  { href: '/blog', id: 'blog', label: 'Blog', hint: '04' },
+  { href: '/login', id: 'login', label: 'Sign in', hint: '05' },
 ];
-const NAV_LINKS = ['walkthrough', 'security', 'install'];
+const NAV_LINKS = ['walkthrough', 'security', 'install', 'blog'];
 
 function brand() {
   return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'));
@@ -80,12 +81,12 @@ export function mountShell(current) {
           'div',
           { class: 'footer-grid' },
           el('div', {}, brand(), el('p', {}, 'An immune system for agent memory.')),
-          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Install', '/install'], ['Console', '/app']]),
+          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Install', '/install'], ['Blog', '/blog'], ['Console', '/app']]),
           col('Operate', [['Mainnet runbook', `${REPO}/blob/main/docs/demo-live.md`, true], ['Attack set', `${REPO}/blob/main/docs/attack-set-results.md`, true], ['Design notes', `${REPO}/blob/main/docs/design-notes.md`, true]]),
           col('Project', [['Source', REPO, true], ['Article', `${REPO}/blob/main/docs/blog.md`, true], ['Total Recall', 'https://tatum.io/hackathon/total-recall', true]]),
         ),
         el('div', { class: 'giant', 'aria-hidden': 'true' }, 'antibody'),
-        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT · demo data is simulated · `, el('a', { href: '/privacy' }, 'Privacy & terms')), themeSwitch()),
+        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody · MIT · walkthrough and sandbox are simulated; the mainnet run is in the blog · `, el('a', { href: '/privacy' }, 'Privacy & terms')), themeSwitch()),
       ),
     ),
   );

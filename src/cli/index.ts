@@ -38,7 +38,7 @@ import {
 } from '../services.ts';
 import { runUnprotectedTurn } from '../steward/unprotected.ts';
 import { llmSmokeTest } from '../steward/llm-check.ts';
-import { loadSetupEvidence, renderEvidence, saveSetupEvidence, type EvidenceState } from '../ops/evidence.ts';
+import { loadAttackEvidence, loadSetupEvidence, renderEvidence, saveSetupEvidence, type EvidenceState } from '../ops/evidence.ts';
 import { checkLlm } from '../ops/doctor.ts';
 import { submitUserRecord, writeStatement } from '../user/user.ts';
 import { liveAccountAdmin } from '../adapters/account-live.ts';
@@ -825,11 +825,11 @@ async function main(argv: string[]): Promise<void> {
       const r = rt('control');
       const control = buildControl(r, { signer: null });
       const state = (await stateJson(r, control)) as unknown as EvidenceState;
-      const md = renderEvidence(state, { setup: loadSetupEvidence(r.cfg.home), payments: control.payments.list(), generatedAt: new Date().toISOString(), tatumHost: new URL(r.cfg.chainTransport === 'grpc' ? r.cfg.tatumGrpcUrl : r.cfg.tatumRpcUrl).host });
+      const md = renderEvidence(state, { setup: loadSetupEvidence(r.cfg.home), payments: control.payments.list(), attack: loadAttackEvidence(r.cfg.home), generatedAt: new Date().toISOString(), tatumHost: new URL(r.cfg.chainTransport === 'grpc' ? r.cfg.tatumGrpcUrl : r.cfg.tatumRpcUrl).host });
       const out = String(values.out);
       mkdirSync(dirname(resolve(out)), { recursive: true });
       writeFileSync(out, md);
-      console.log(green(`evidence written to ${out}`) + (state.simulated ? yellow(' (SIMULATED: offline backend)') : ''));
+      console.log(green(`evidence written to ${out}`) + (state.backend === 'offline' ? yellow(' (SIMULATED: offline backend)') : ''));
       return;
     }
 

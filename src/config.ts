@@ -199,7 +199,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     autoQuarantineScore: num(env, 'ANTIBODY_AUTO_QUARANTINE_SCORE', 0.6, 0, 1),
     webPort: num(env, 'ANTIBODY_WEB_PORT', 7402, 1, 65535),
     maxGasMist: maxGas,
-    x402Allow: (val(env, 'ANTIBODY_X402_ALLOW') ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
+    // Origins (https://bills.example.com) or bare hosts (bills.example.com:8443); compared as host[:port].
+    x402Allow: (val(env, 'ANTIBODY_X402_ALLOW') ?? '')
+      .split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean)
+      .map((h) => {
+        if (!h.includes('://')) return h;
+        try {
+          return new URL(h).host;
+        } catch {
+          throw new Error(`ANTIBODY_X402_ALLOW: "${h}" is not an origin or host`);
+        }
+      }),
     crossCheck: cross ? { url: url(env, 'ANTIBODY_CROSSCHECK_RPC_URL', cross), transport: oneOf(env, 'ANTIBODY_CROSSCHECK_TRANSPORT', ['grpc', 'jsonrpc'] as const, 'grpc'), apiKey: val(env, 'ANTIBODY_CROSSCHECK_API_KEY') ?? null } : null,
   };
 }

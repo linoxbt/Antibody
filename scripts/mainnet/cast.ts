@@ -18,6 +18,7 @@ const chain = new SdkChainReader({ transport: 'grpc', network: cfg.network, url:
 const p = join(cfg.home, 'cast.json');
 const gen = () => Ed25519Keypair.generate().getSecretKey();
 const cast: Record<string, string> = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : { landlord: gen(), sister: gen() };
+if (!cast.utility) cast.utility = gen();
 writeFileSync(p, JSON.stringify(cast, null, 2), { mode: 0o600 });
 for (const [who, secret] of Object.entries(cast)) console.log(`${who.padEnd(9)} ${Ed25519Keypair.fromSecretKey(secret).toSuiAddress()}`);
 const want = BigInt(process.argv[2] ?? '120000000');

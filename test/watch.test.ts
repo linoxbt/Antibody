@@ -121,3 +121,57 @@ test('B24: polling does not accumulate abort listeners, and a stream that keeps 
   assert.ok(logs.includes('stream.flapping'));
   assert.ok(polls > 10, 'fell back to polling');
 });
+
+test('a stream that goes silent without ending is reopened, and safety scans run regardless', async () => {
+  const ac = new AbortController();
+  let opens = 0;
+  let scans = 0;
+  const events: string[] = [];
+  const run = watchWallet({
+    wallet: '0x1',
+    signal: ac.signal,
+    minScanGapMs: 1,
+    staleMs: 120,
+    safetyScanMs: 60,
+    chain: {
+      latestCheckpoint: async () => 1,
+      // Opens, never sends anything, never ends: what a stalled gRPC stream looks like.
+      watchCheckpoints: (_a, _on, signal) => (opens++, new Promise<void>((_res, rej) => signal.addEventListener('abort', () => rej(new Error('Cancelled on client'))))),
+    },
+    scan: async () => (scans++, result(1)),
+    log: (e) => events.push(e),
+  });
+  await until(() => opens >= 3 && scans >= 3, 4000);
+  ac.abort();
+  await run;
+  assert.ok(events.includes('stream.stale'), 'the watchdog dropped the silent stream');
+  assert.ok(!events.includes('stream.error'), 'a stale stream is reopened, not treated as a failure that forces polling');
+});
+
+test('heartbeats keep a quiet stream alive', async () => {
+  const ac = new AbortController();
+  let opens = 0;
+  const events: string[] = [];
+  const run = watchWallet({
+    wallet: '0x1',
+    signal: ac.signal,
+    staleMs: 150,
+    safetyScanMs: 60_000,
+    chain: {
+      latestCheckpoint: async () => 1,
+      watchCheckpoints: (_a, _on, signal, alive) =>
+        (opens++,
+        new Promise<void>((res) => {
+          const t = setInterval(() => alive?.(), 30);
+          signal.addEventListener('abort', () => (clearInterval(t), res()));
+        })),
+    },
+    scan: async () => result(1),
+    log: (e) => events.push(e),
+  });
+  await new Promise((r) => setTimeout(r, 600));
+  ac.abort();
+  await run;
+  assert.equal(opens, 1, 'one stream, kept open by heartbeats');
+  assert.ok(!events.includes('stream.stale'));
+});

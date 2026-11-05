@@ -63,7 +63,8 @@ export interface ChainReader {
    * onCheckpoint with each sequence number until the stream ends or `signal`
    * aborts. Absent where the transport cannot stream; callers poll instead.
    */
-  watchCheckpoints?(address: string, onCheckpoint: (seq: number) => void, signal: AbortSignal): Promise<void>;
+  /** onAlive: any message from the stream, heartbeats included (the sentinel's watchdog). */
+  watchCheckpoints?(address: string, onCheckpoint: (seq: number) => void, signal: AbortSignal, onAlive?: () => void): Promise<void>;
 }
 
 /** Owner-signed account operations (setup, revoke, rotate). */

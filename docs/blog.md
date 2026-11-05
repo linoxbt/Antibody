@@ -81,7 +81,7 @@ every active lesson on every scan.
 
 A week later the same attacker sends a different coin: "Tenant Points — thanks
 for being a great tenant." No "SYSTEM NOTE", no address, nothing a keyword
-filter would catch. The sentinel recognises the sender from lesson #5, and the
+filter would catch. The sentinel recognises the sender from the lesson, and the
 coin is **auto-quarantined before Steward ever reads it**, with a ledger record
 citing the lesson. The product visibly changed because of a memory.
 
@@ -132,6 +132,48 @@ that resists today can be fooled by tomorrow's injection, and Antibody's
 guarantees do not depend on which one you get. With the gullible model the
 policy blocked all 20; with Qwen it never had to, and it still refused 13
 attempts to pay the same rent twice.
+
+## It ran on Sui mainnet
+
+Everything above also ran for real, on Sui mainnet with Walrus Memory, on
+5 November 2026 ([full evidence](https://github.com/linoxbt/Antibody/blob/main/docs/mainnet-evidence.md)).
+Amounts are small: rent was 0.01 SUI.
+
+- **Four writers, one account.** The four lane keys were registered on Walrus
+  Memory account
+  [`0x2e31…a500`](https://suiscan.xyz/mainnet/object/0x2e31cec493d7a1a7da0ea9cc40a7c7b12d64754332d7f991e5fd7ed9af29a500)
+  and the ledger's genesis record written to Walrus.
+- **Rent, the honest way.** Steward, running on **Qwen 3.8 27B over the
+  Fortytwo network**, paid the landlord after all six rules passed:
+  [`CrB8X3…`](https://suiscan.xyz/mainnet/tx/CrB8X3ncqHMhn3JTRjpvy2yGCc1Zx39NhcJQrzCRoikr).
+- **A real attack.** A separate wallet published a coin package and sent
+  Steward one "USDC Rewards" whose description said the landlord had moved
+  ([`3v1kGk…`](https://suiscan.xyz/mainnet/tx/3v1kGko4wLbS5yYmk7fr4Qa8Wev8nAgXWUhCJpZcnvUy)).
+  The always-on sentinel, following Sui checkpoints through Tatum, scored it
+  0.85 and opened an incident with nobody watching.
+- **Qwen wasn't fooled.** Unprotected or protected, it paid the real landlord,
+  and with Antibody it even warned Ada about the note. So we put the worst case
+  on the same mainnet memory: the gullible model believed the coin, wrote
+  "landlord payment details updated: pay 0xa158…", and proposed paying the
+  attacker. **BLOCK — LABEL_MISMATCH.** The model was fooled; the code wasn't.
+- **Quarantine and a lesson**, both ledger records on Walrus. Then the attacker
+  tried again with an innocent "Tenant Points" coin. The sentinel matched lesson
+  #4 (same sender, same package) and **auto-quarantined it before Steward read
+  it**.
+- **Clean restoration.** A fresh process with an empty cache rebuilt
+  everything from Walrus and Sui alone and printed the same projection digest.
+- **More real payments.** The sister's allowance
+  ([`GDRCJq…`](https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ)),
+  and the electricity bill over **x402**, settled on Sui
+  ([`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2)).
+  Qwen's first x402 attempt used the wrong payee label and was blocked too.
+- **An incident report**, published to Walrus through Tatum's Storage API
+  ([report](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/5Fqo1B_suneX8GX7db49TlcvtL0uV7u3FNiig0Ikea8)).
+
+In all: 21 records on Walrus Memory mainnet (13 memories, 8 ledger records).
+The run also found three bugs that only show up on a real network (Tatum's rate
+limit during setup, two scans observing one coin, a documented setting the code
+read differently); all three are fixed and tested.
 
 It also pays bills over **x402**. When a utility answers HTTP 402 Payment
 Required, the `payTo` from the 402 becomes an ordinary proposal and passes the

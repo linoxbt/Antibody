@@ -1,0 +1,438 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+@font-face { font-family: 'DM Sans'; src: url(assets/dm-sans-latin-wght-normal.woff2) format('woff2'); font-weight: 100 1000; }
+@font-face { font-family: 'JetBrains Mono'; src: url(assets/jetbrains-mono-latin-wght-normal.woff2) format('woff2'); font-weight: 100 800; }
+:root { --text: #f4f6fb; --muted: #7c879b; --accent: #2b7fff; --hi: #7ab1fe; --lo: #a6caff; --ok: #3ddc97; --amb: #fbbf5a; --bad: #ff5c7a; --sans: 'DM Sans', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #030407; }
+#stage { position: absolute; inset: 0; overflow: hidden; color: var(--text); font-family: var(--sans); }
+#world { position: absolute; inset: 0; will-change: transform; }
+canvas#bg { position: absolute; inset: 0; }
+.shot { position: absolute; inset: 0; display: none; }
+.abs { position: absolute; }
+.c { position: absolute; left: 0; right: 0; text-align: center; }
+.big { font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
+.tail { background-image: linear-gradient(90deg, #f4f6fb 0%, #c9d1e0 40%, #6e7891 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.blue { background-image: linear-gradient(90deg, #a6caff, #2b7fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.mono { font-family: var(--mono); }
+.eyebrow { font-family: var(--mono); font-size: 22px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.glass { background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.018)); border: 1px solid rgba(255,255,255,.11); border-radius: 24px; box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 40px 100px -40px #000; }
+.node { position: absolute; padding: 20px 28px; border-radius: 18px; border: 2px solid; background: rgba(8,10,16,.9); font-size: 28px; white-space: nowrap; }
+.node small { display: block; font-family: var(--mono); font-size: 17px; margin-top: 6px; opacity: .85; }
+.dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: currentColor; box-shadow: 0 0 18px currentColor; }
+.tick { width: 46px; height: 46px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); display: grid; place-items: center; font-size: 26px; color: transparent; }
+.word { display: inline-block; }
+#flash { position: absolute; inset: 0; background: #e6efff; opacity: 0; pointer-events: none; }
+#leak { position: absolute; inset: -20%; pointer-events: none; mix-blend-mode: screen; opacity: 0; }
+#grain { position: absolute; inset: -60px; opacity: .08; mix-blend-mode: overlay; pointer-events: none; }
+#vig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 95% at 50% 45%, transparent 52%, rgba(0,0,0,.72) 100%); }
+#bars { position: absolute; inset: 0; pointer-events: none; }
+#bars::before, #bars::after { content: ''; position: absolute; left: 0; right: 0; height: 0; background: #000; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="world">
+    <canvas id="bg" width="1920" height="1080"></canvas>
+
+    <!-- S0/S1: AI agents remember. Everything. -->
+    <div class="shot" id="s0"><div class="c big" id="s0t" style="top:440px;font-size:150px"></div></div>
+    <div class="shot" id="s1"><div class="c big tail" id="s1t" style="top:380px;font-size:300px">Everything.</div></div>
+    <!-- S2: Including the lies. (RGB split) -->
+    <div class="shot" id="s2">
+      <div class="c big" id="s2r" style="top:400px;font-size:230px;color:rgba(255,60,90,.85);mix-blend-mode:screen">Including the lies.</div>
+      <div class="c big" id="s2c" style="top:400px;font-size:230px;color:rgba(70,200,255,.75);mix-blend-mode:screen">Including the lies.</div>
+      <div class="c big" id="s2t" style="top:400px;font-size:230px">Including the lies.</div>
+    </div>
+    <!-- S3: poisoned coin slams in -->
+    <div class="shot" id="s3">
+      <div class="abs" id="s3coin" style="left:810px;top:230px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff3d6,#fbbf5a 45%,#a5600b 100%);box-shadow:0 0 140px rgba(251,191,90,.6),inset 0 -14px 30px rgba(0,0,0,.35);display:grid;place-items:center;font:700 54px var(--mono);color:#3a2300">USDCR</div>
+      <div class="c mono" id="s3txt" style="top:620px;font-size:40px;color:var(--amb);letter-spacing:.01em"></div>
+      <div class="c eyebrow" id="s3lbl" style="top:570px;color:var(--amb)">coin description · read by the agent · stored forever</div>
+    </div>
+    <!-- S4: strobe words into the drop -->
+    <div class="shot" id="s4"><div class="c big" id="s4t" style="top:400px;font-size:220px"></div></div>
+    <!-- S5: logo slam -->
+    <div class="shot" id="s5">
+      <div class="abs" id="s5halo" style="left:960px;top:420px;width:1200px;height:1200px;margin:-600px 0 0 -600px;border-radius:50%;background:radial-gradient(circle,rgba(43,127,255,.42),rgba(43,127,255,0) 58%)"></div>
+      <svg class="abs" id="s5mark" viewBox="0 0 64 64" style="left:835px;top:250px;width:250px;height:250px;overflow:visible">
+        <defs>
+          <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset=".5" stop-color="#A6CAFF" stop-opacity=".55"/><stop offset="1" stop-color="#2B7FFF" stop-opacity=".25"/></linearGradient>
+          <linearGradient id="arm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C9D6EE"/></linearGradient>
+          <radialGradient id="tip"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".45" stop-color="#7AB1FE"/><stop offset="1" stop-color="#2B7FFF" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="32" cy="32" r="28.5" fill="none" stroke="url(#ring)" stroke-width="1.2"/>
+        <path d="M32 50V34.5M32 34.5 20 20.5M32 34.5 44 20.5" fill="none" stroke="url(#arm)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M24.2 30.6 16.6 21.8M39.8 30.6 47.4 21.8" fill="none" stroke="#7AB1FE" stroke-width="1.8" stroke-linecap="round" opacity=".9"/>
+        <circle cx="17.4" cy="17.6" r="5.2" fill="url(#tip)"/><circle cx="46.6" cy="17.6" r="5.2" fill="url(#tip)"/>
+        <circle cx="32" cy="34.5" r="1.5" fill="#030407"/>
+      </svg>
+      <div class="c big" id="s5w" style="top:540px;font-size:190px">antibody</div>
+      <div class="c" id="s5s" style="top:770px;font-size:44px;color:#c9d1e0">An immune system for <span style="color:#fff">agent memory.</span></div>
+    </div>
+    <!-- S6: every memory, signed -->
+    <div class="shot" id="s6">
+      <div class="abs big" id="s6h" style="left:150px;top:160px;font-size:110px">Every memory,<br/><span class="blue">signed.</span></div>
+      <div class="glass abs" id="s6env" style="left:1000px;top:200px;width:780px;padding:34px 40px">
+        <div class="mono" style="font-size:22px;color:var(--hi)">AB1 | header | ed25519</div>
+        <div class="mono" id="s6body" style="font-size:27px;line-height:1.8;margin-top:16px;white-space:pre;color:#cdd6e6"></div>
+        <div class="abs" id="s6seal" style="right:34px;bottom:30px;width:150px;height:150px;border-radius:50%;border:3px solid var(--ok);display:grid;place-items:center;text-align:center;font:700 22px/1.2 var(--mono);color:var(--ok);box-shadow:0 0 50px rgba(61,220,151,.4)">SIGNED<br/>✓</div>
+      </div>
+    </div>
+    <!-- S7: four writers, one account -->
+    <div class="shot" id="s7">
+      <div class="c big" id="s7h" style="top:90px;font-size:92px">Four writers. <span class="tail">One account.</span></div>
+      <svg class="abs" id="s7w" width="1920" height="1080" style="left:0;top:0"></svg>
+      <div class="abs" id="s7core" style="left:960px;top:620px;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;display:grid;place-items:center;text-align:center;background:radial-gradient(circle,rgba(43,127,255,.3),rgba(8,10,16,.95) 70%);border:1.5px solid rgba(122,177,254,.6);box-shadow:0 0 110px rgba(43,127,255,.4)"><div><div style="font-size:32px;font-weight:500">Walrus Memory</div><div class="mono" style="font-size:18px;color:var(--muted);margin-top:8px">delegate keys · on Sui</div></div></div>
+      <div class="node" id="s7n0" style="border-color:var(--ok);color:#dfffee">antibody:user<small style="color:var(--ok)">you · trusted</small></div>
+      <div class="node" id="s7n1" style="border-color:var(--hi);color:#e5efff">antibody:agent<small style="color:var(--hi)">the agent · derived</small></div>
+      <div class="node" id="s7n2" style="border-color:var(--amb);color:#fff3dd">antibody:wallet-objects<small style="color:var(--amb)">the wallet · untrusted</small></div>
+      <div class="node" id="s7n3" style="border-color:#c9d6ee;color:#fff">antibody:control<small style="color:#c9d6ee">ledger · policy</small></div>
+    </div>
+    <!-- S8: payments decided by code -->
+    <div class="shot" id="s8">
+      <div class="abs big" id="s8h" style="left:150px;top:300px;font-size:120px">Payments<br/>decided<br/><span class="blue">by code.</span></div>
+      <div class="glass abs" id="s8box" style="left:1000px;top:170px;width:760px;padding:26px 40px"></div>
+    </div>
+    <!-- S9: poison caught in real time (radar) -->
+    <div class="shot" id="s9">
+      <svg class="abs" id="s9radar" width="760" height="760" viewBox="-380 -380 760 760" style="left:1060px;top:160px"></svg>
+      <div class="abs big" id="s9h" style="left:150px;top:300px;font-size:116px">Poison,<br/>caught in<br/><span style="color:var(--amb)">real time.</span></div>
+      <div class="abs mono" id="s9score" style="left:150px;top:720px;font-size:40px;color:var(--amb)"></div>
+    </div>
+    <!-- S10: theft blocked -->
+    <div class="shot" id="s10">
+      <div class="glass abs" id="s10prop" style="left:360px;top:250px;width:1200px;padding:34px 44px">
+        <div class="eyebrow" style="font-size:20px">the agent was fooled · it proposes</div>
+        <div class="mono" style="font-size:44px;margin-top:20px">pay <span style="color:var(--bad)">0xBAD…</span> 450 USDC · "landlord"</div>
+      </div>
+      <div class="abs" id="s10stamp" style="left:960px;top:640px;margin:-110px 0 0 -420px;width:840px;height:220px;border:8px solid var(--bad);border-radius:26px;display:grid;place-items:center;font:800 124px var(--mono);letter-spacing:.14em;color:var(--bad);background:rgba(24,3,9,.6);box-shadow:0 0 160px rgba(255,92,122,.6)">BLOCKED</div>
+      <div class="c mono" id="s10why" style="top:800px;font-size:30px;color:#ffc4cf">LABEL_MISMATCH · "landlord" is registered to 0x7a11…</div>
+    </div>
+    <!-- S11: blast radius traced -->
+    <div class="shot" id="s11">
+      <div class="c big" id="s11h" style="top:110px;font-size:100px">Blast radius, <span class="tail">traced.</span></div>
+      <svg class="abs" width="1920" height="1080" style="left:0;top:0">
+        <path id="s11e0" d="M 335 560 C 540 560, 540 560, 740 560" stroke="#fbbf5a" stroke-width="5" fill="none" pathLength="1" stroke-dasharray="1"/>
+        <path id="s11e1" d="M 955 560 C 1120 560, 1120 420, 1280 420" stroke="#fbbf5a" stroke-width="5" fill="none" pathLength="1" stroke-dasharray="1"/>
+        <path id="s11e2" d="M 955 560 C 1120 560, 1120 700, 1280 700" stroke="#ff5c7a" stroke-width="5" fill="none" pathLength="1" stroke-dasharray="1"/>
+        <circle id="s11q" cx="330" cy="560" r="10" fill="none" stroke="#ff5c7a" stroke-width="4" stroke-dasharray="16 12"/>
+      </svg>
+      <div class="node" id="s11n0" style="left:160px;top:515px;border-color:#c9d6ee;border-style:dashed;color:#fff">◆ coin<small style="color:#c9d6ee">source</small></div>
+      <div class="node" id="s11n1" style="left:740px;top:515px;border-color:var(--amb);color:#fff3dd">observation<small style="color:var(--amb)">untrusted</small></div>
+      <div class="node" id="s11n2" style="left:1280px;top:375px;border-color:var(--amb);color:#fff3dd">agent's note<small style="color:var(--amb)">tainted</small></div>
+      <div class="node" id="s11n3" style="left:1280px;top:655px;border-color:var(--bad);color:#ffd5dd">decision<small style="color:var(--bad)">blocked</small></div>
+    </div>
+    <!-- S12: quarantined, never deleted -->
+    <div class="shot" id="s12">
+      <div class="c big" id="s12h" style="top:250px;font-size:150px">Quarantined.</div>
+      <div class="c big tail" id="s12h2" style="top:420px;font-size:150px">Never deleted.</div>
+      <div class="c" id="s12v" style="top:680px"><span class="glass" style="display:inline-flex;align-items:center;gap:22px;padding:22px 36px;border-color:rgba(122,177,254,.45)">
+        <svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="#7ab1fe" stroke-width="1.6"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <span style="font-size:34px">Evidence kept on Walrus · out of the agent's reach</span></span></div>
+    </div>
+    <!-- S13: it learns -->
+    <div class="shot" id="s13">
+      <div class="abs big" id="s13h" style="left:150px;top:330px;font-size:170px">It <span class="blue">learns.</span></div>
+      <svg class="abs" id="s13sh" viewBox="0 0 24 24" style="left:1150px;top:300px;width:330px;height:330px" fill="none" stroke="#7ab1fe" stroke-width="1"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z" fill="rgba(43,127,255,.16)"/><path d="M8.5 12l2.5 2.5 4.5-5" stroke="#3ddc97" stroke-width="1.5"/></svg>
+      <div class="abs" id="s13coin" style="left:0;top:0;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e9fff6,#7fe3b9 45%,#1d7f5b);box-shadow:0 0 70px rgba(61,220,151,.5);display:grid;place-items:center;font:700 30px var(--mono);color:#062a1d">TPTS</div>
+      <div class="abs mono" id="s13a" style="left:1060px;top:700px;font-size:34px;color:var(--bad);letter-spacing:.08em">AUTO-QUARANTINED · same sender</div>
+    </div>
+    <!-- S14: restored from Walrus -->
+    <div class="shot" id="s14">
+      <div class="c big" id="s14h" style="top:180px;font-size:110px">Rebuilt from <span class="blue">Walrus.</span></div>
+      <div class="c mono" id="s14a" style="top:470px;font-size:40px;color:#cdd6e6">live&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ff7317f701d517a3baa215f5f70e…80c5</div>
+      <div class="c mono" id="s14b" style="top:550px;font-size:40px;color:#cdd6e6">rebuilt&nbsp;&nbsp;ff7317f701d517a3baa215f5f70e…80c5</div>
+      <div class="c" id="s14m" style="top:680px"><span style="display:inline-flex;align-items:center;gap:16px;font:600 44px var(--mono);color:var(--ok);letter-spacing:.1em"><span class="dot" style="color:var(--ok)"></span>MATCH</span></div>
+    </div>
+    <!-- S15: live on mainnet -->
+    <div class="shot" id="s15">
+      <div class="abs" id="s15rain" style="left:0;top:0;width:1920px;height:1080px;overflow:hidden"></div>
+      <div class="c" id="s15h" style="top:150px"><span style="display:inline-flex;align-items:center;gap:22px;font-size:84px;font-weight:500;letter-spacing:-.03em"><span class="dot" style="color:var(--ok);width:22px;height:22px"></span>Live on Sui mainnet</span></div>
+      <div class="abs" id="s15grid" style="left:160px;top:360px;width:1600px;display:grid;grid-template-columns:repeat(4,1fr);gap:28px"></div>
+      <div class="c mono" id="s15tx" style="top:720px;font-size:24px;color:var(--hi);line-height:1.8"></div>
+    </div>
+    <!-- S16: tagline -->
+    <div class="shot" id="s16">
+      <div class="c big" id="s16a" style="top:330px;font-size:96px">Persistent memory makes attacks persistent.</div>
+      <div class="c big blue" id="s16b" style="top:470px;font-size:96px">Provenance makes them reversible.</div>
+    </div>
+    <!-- S17: end card -->
+    <div class="shot" id="s17">
+      <img src="assets/mark.svg" id="s17m" class="abs" style="left:870px;top:220px;width:180px;height:180px"/>
+      <div class="c big" id="s17w" style="top:420px;font-size:150px">antibody</div>
+      <div class="c" id="s17s" style="top:610px;font-size:40px;color:#c9d1e0">An immune system for agent memory.</div>
+      <div class="c mono" id="s17u" style="top:710px;font-size:32px;color:var(--hi)">antibody-memory.netlify.app</div>
+      <div class="c mono" id="s17b" style="top:790px;font-size:22px;letter-spacing:.18em;color:var(--muted)">BUILT ON WALRUS MEMORY × TATUM · SUI MAINNET</div>
+    </div>
+  </div>
+  <div id="leak"></div>
+  <canvas id="grain" width="1020" height="600"></canvas>
+  <div id="vig"></div>
+  <div id="flash"></div>
+</div>
+<script>
+const BEAT = 0.5; // 120 BPM: every cut lands on a beat
+const DURATION = 44;
+const SHOTS = [
+  ['s0', 0.0, 2.0], ['s1', 2.0, 4.0], ['s2', 4.0, 6.0], ['s3', 6.0, 8.0], ['s4', 8.0, 10.0], ['s5', 10.0, 12.5],
+  ['s6', 12.5, 14.5], ['s7', 14.5, 16.5], ['s8', 16.5, 18.5], ['s9', 18.5, 20.5], ['s10', 20.5, 22.5], ['s11', 22.5, 24.5],
+  ['s12', 24.5, 26.5], ['s13', 26.5, 28.5], ['s14', 28.5, 30.5], ['s15', 30.5, 35.5], ['s16', 35.5, 39.5], ['s17', 39.5, 44.0],
+];
+const $ = (id) => document.getElementById(id);
+const cl = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const P = (t, a, d) => cl((t - a) / d);
+const eo = (x) => 1 - Math.pow(1 - x, 3);
+const e5 = (x) => 1 - Math.pow(1 - x, 5);
+const eio = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const back = (x) => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const mix = (a, b, k) => a + (b - a) * k;
+function st(el, o = {}) {
+  if (typeof el === 'string') el = $(el);
+  const { op = 1, x = 0, y = 0, s = 1, r = 0, blur = 0, sx } = o;
+  el.style.opacity = op;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${sx ?? s}, ${s}) rotate(${r}deg)`;
+  el.style.filter = blur > 0.05 ? `blur(${blur}px)` : 'none';
+}
+/** Slam in: big and blurred to sharp, with a little overshoot. */
+function slam(el, t, a, d = 0.35, from = 1.5) { const k = P(t, a, d); st(el, { op: P(t, a, d * 0.4), s: mix(from, 1, back(k)), blur: (1 - e5(k)) * 18 }); }
+function rise(el, t, a, d = 0.45, dy = 50) { const k = e5(P(t, a, d)); st(el, { op: k, y: (1 - k) * dy, blur: (1 - k) * 14 }); }
+/** Exit at the end of a shot: a fast push forward and blur (a whip into the next cut). */
+function exitK(t, end) { return eio(P(t, end - 0.18, 0.18)); }
+
+// ---- background
+const bg = $('bg').getContext('2d');
+let seed = 11; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const stars = Array.from({ length: 320 }, () => ({ x: rnd() * 1920, y: rnd() * 1080, r: rnd() * 1.5 + 0.2, p: rnd() * 6.3, z: 0.3 + rnd() }));
+const grains = Array.from({ length: 6 }, () => { const c = document.createElement('canvas'); c.width = 1020; c.height = 600; const x = c.getContext('2d'); const im = x.createImageData(1020, 600); for (let i = 0; i < im.data.length; i += 4) { const v = rnd() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; } x.putImageData(im, 0, 0); return c; });
+const gctx = $('grain').getContext('2d');
+function redAt(t) { return Math.max(P(t, 4, 0.1) * (1 - P(t, 7.8, 0.4)), P(t, 20.5, 0.1) * (1 - P(t, 22.3, 0.3)) * 0.85); }
+function drawBg(t) {
+  const red = redAt(t);
+  const speed = t < 10 ? 8 : t < 30.5 ? 60 : 18; // warp during the montage
+  bg.fillStyle = '#030407'; bg.fillRect(0, 0, 1920, 1080);
+  const gx = 960 + Math.sin(t * 0.3) * 300, gy = 540 + Math.cos(t * 0.21) * 140;
+  const g = bg.createRadialGradient(gx, gy, 0, gx, gy, 1000);
+  const col = (a) => `rgba(${Math.round(mix(43, 255, red))},${Math.round(mix(127, 50, red))},${Math.round(mix(255, 80, red))},${a})`;
+  g.addColorStop(0, col(t < 1 ? 0.05 * t : 0.17)); g.addColorStop(0.55, col(0.05)); g.addColorStop(1, 'rgba(0,0,0,0)');
+  bg.fillStyle = g; bg.fillRect(0, 0, 1920, 1080);
+  bg.save(); bg.translate(960, 560); bg.rotate(t * 0.04);
+  bg.strokeStyle = 'rgba(166,202,255,0.11)'; bg.lineWidth = 1.2; bg.beginPath(); bg.arc(0, 0, 620, 0, 6.283); bg.stroke();
+  bg.setLineDash([2, 16]); bg.strokeStyle = 'rgba(166,202,255,0.12)'; bg.beginPath(); bg.arc(0, 0, 820, 0, 6.283); bg.stroke(); bg.setLineDash([]);
+  bg.restore();
+  for (const s of stars) {
+    const x = (((s.x - t * speed * s.z) % 1920) + 1920) % 1920;
+    const len = speed > 30 ? s.z * 14 : 0;
+    bg.strokeStyle = bg.fillStyle = `rgba(220,232,255,${(0.35 + 0.4 * Math.sin(t * 2 + s.p) ** 2) * s.z * 0.7})`;
+    if (len) { bg.lineWidth = s.r; bg.beginPath(); bg.moveTo(x, s.y); bg.lineTo(x + len, s.y); bg.stroke(); } else { bg.beginPath(); bg.arc(x, s.y, s.r, 0, 6.283); bg.fill(); }
+  }
+}
+
+// ---- shot renderers (lt = time since the shot started)
+const W0 = 'AI agents remember.'.split('');
+$('s0t').innerHTML = W0.map((c, i) => `<span class="word" id="s0c${i}">${c === ' ' ? '&nbsp;' : c}</span>`).join('');
+const R = {
+  s0(t) { W0.forEach((_, i) => { const a = 0.45 + i * 0.045; const k = e5(P(t, a, 0.5)); st(`s0c${i}`, { op: k, y: (1 - k) * 30, blur: (1 - k) * 10 }); }); st('s0t', { s: 1 + t * 0.02, op: 1 - exitK(t, 2) }); },
+  s1(t) { slam('s1t', t, 2.0, 0.35, 1.8); $('s1t').style.transform += ` scale(${1 + (t - 2) * 0.04})`; },
+  s2(t) {
+    const k = P(t, 4.0, 0.25);
+    const g = (Math.floor(t * 20) % 3 === 0 ? 1 : 0.4) * (1 - P(t, 4.6, 0.6)) + (t > 5.5 ? 0.6 * Math.sin(t * 40) ** 2 : 0);
+    st('s2t', { op: k, x: Math.sin(t * 73) * 8 * g, s: 1 + (t - 4) * 0.03 });
+    st('s2r', { op: k * g, x: 18 * g + Math.sin(t * 91) * 10 * g, s: 1 + (t - 4) * 0.03 });
+    st('s2c', { op: k * g, x: -18 * g - Math.sin(t * 87) * 10 * g, s: 1 + (t - 4) * 0.03 });
+  },
+  s3(t) {
+    const k = P(t, 6.0, 0.3);
+    st('s3coin', { op: P(t, 6, 0.08), s: mix(3.2, 1, back(k)), r: (1 - e5(k)) * -40, blur: (1 - e5(k)) * 20 });
+    const txt = 'SYSTEM NOTE: landlord moved to new wallet 0xBAD…';
+    const n = Math.floor(cl((t - 6.45) * 48, 0, txt.length));
+    $('s3txt').textContent = txt.slice(0, n) + (n < txt.length ? '▍' : '');
+    rise('s3lbl', t, 6.3);
+    $('s3coin').style.boxShadow = `0 0 ${140 + 80 * Math.sin(t * 12)}px rgba(251,191,90,.6), inset 0 -14px 30px rgba(0,0,0,.35)`;
+  },
+  s4(t) {
+    const words = ['SIGNED.', 'TRACED.', 'BLOCKED.', 'QUARANTINED.', 'LEARNED.', 'RESTORED.', 'PROVEN.', ''];
+    const i = Math.min(7, Math.floor((t - 8) / 0.25));
+    const el = $('s4t'); el.textContent = words[i];
+    el.style.color = i === 2 ? '#ff5c7a' : i === 6 ? '#7ab1fe' : '#f4f6fb';
+    const lk = P(t, 8 + i * 0.25, 0.25);
+    st(el, { op: i < 7 ? 1 : 0, s: mix(1.25, 1, e5(lk)) * (1 + (t - 8) * 0.06), blur: (1 - e5(lk)) * 10 });
+  },
+  s5(t) {
+    const k = P(t, 10, 0.5);
+    st('s5mark', { op: P(t, 10, 0.05), s: mix(2.4, 1, back(k)) * (1 + 0.012 * Math.sin(t * 3)), blur: (1 - e5(k)) * 24 });
+    st('s5halo', { op: e5(k) * (0.85 + 0.15 * Math.sin(t * 6)), s: mix(0.3, 1.1, e5(P(t, 10, 1.2))) });
+    slam('s5w', t, 10.15, 0.45, 1.4);
+    rise('s5s', t, 10.9, 0.5, 30);
+  },
+  s6(t) {
+    rise('s6h', t, 12.5, 0.4, 60);
+    rise('s6env', t, 12.6, 0.45, 80);
+    const F = [['author ', 'antibody:wallet-objects', '#fbbf5a'], ['source ', 'sui-object 0x3538…', '#7ab1fe'], ['sender ', '0xa158…5f2a', '#7ab1fe'], ['ckpt   ', '341974380', '#7ab1fe']];
+    $('s6body').innerHTML = F.map(([k, v, c], i) => { const n = Math.floor(cl((t - 12.8 - i * 0.2) * 70, 0, v.length)); return `<span style="color:#7c879b">${k}</span> <span style="color:${c}">${v.slice(0, n)}</span>`; }).join('\n');
+    const sk = P(t, 13.5, 0.25);
+    st('s6seal', { op: P(t, 13.5, 0.05), s: mix(2.6, 1, back(sk)), r: -12 });
+  },
+  s7(t) {
+    rise('s7h', t, 14.5, 0.4, 50);
+    const ck = P(t, 14.55, 0.4);
+    st('s7core', { op: P(t, 14.55, 0.1), s: mix(0.4, 1, back(ck)) });
+    const pos = [[420, 400], [1500, 400], [420, 860], [1500, 860]];
+    let svg = '';
+    pos.forEach(([x, y], i) => {
+      const a = 14.75 + i * 0.25; const k = P(t, a, 0.3);
+      const n = $(`s7n${i}`); n.style.left = x - 160 + 'px'; n.style.top = y - 50 + 'px';
+      st(n, { op: P(t, a, 0.08), s: mix(1.6, 1, back(k)), blur: (1 - e5(k)) * 12 });
+      const w = e5(P(t, a, 0.35)); const col = ['#3ddc97', '#7ab1fe', '#fbbf5a', '#c9d6ee'][i];
+      svg += `<line x1="${x}" y1="${y}" x2="${mix(x, 960, w)}" y2="${mix(y, 620, w)}" stroke="${col}" stroke-width="3" stroke-dasharray="7 8" stroke-dashoffset="${-t * 60}" opacity=".85"/>`;
+    });
+    $('s7w').innerHTML = svg;
+  },
+  s8(t) {
+    rise('s8h', t, 16.5, 0.4, 60);
+    rise('s8box', t, 16.55, 0.4, 80);
+    const rules = ['Ledger verified', 'Canonical address', 'Registered payee', 'Label matches', 'Within the cap', 'Exact dry run · Tatum'];
+    $('s8box').innerHTML = '<div class="eyebrow" style="font-size:18px;margin:12px 0 6px">policy · R0–R5</div>' + rules.map((r, i) => {
+      const at = 16.75 + i * 0.25; const on = t >= at; const k = back(P(t, at, 0.25));
+      return `<div style="display:flex;align-items:center;gap:22px;font-size:32px;padding:11px 0;opacity:${0.4 + 0.6 * P(t, at - 0.1, 0.15)}"><span class="mono" style="font-size:20px;color:#7c879b;width:42px">R${i}</span><span class="tick" style="${on ? `color:#030407;background:#3ddc97;border-color:#3ddc97;transform:scale(${k});box-shadow:0 0 ${30 * (1 - P(t, at, 0.5))}px #3ddc97` : ''}">✓</span>${r}</div>`;
+    }).join('') + `<div style="margin:18px 0 10px;display:inline-block;padding:12px 32px;border-radius:999px;border:2px solid #3ddc97;color:#3ddc97;font:700 30px var(--mono);letter-spacing:.14em;opacity:${P(t, 18.25, 0.1)};transform:scale(${mix(1.6, 1, back(P(t, 18.25, 0.2)))});box-shadow:0 0 50px rgba(61,220,151,.4)">ALLOW</div>`;
+  },
+  s9(t) {
+    rise('s9h', t, 18.5, 0.4, 60);
+    const sweep = (t - 18.5) * 4.2;
+    const blipA = 2.35, blipR = 210, hit = Math.max(0, Math.cos(sweep - blipA)) ** 40;
+    const found = t > 19.25;
+    let svg = '<defs><radialGradient id="rg"><stop offset="0" stop-color="#2b7fff" stop-opacity=".25"/><stop offset="1" stop-color="#2b7fff" stop-opacity="0"/></radialGradient></defs>';
+    svg += `<circle r="360" fill="url(#rg)"/>`;
+    for (const r of [120, 240, 360]) svg += `<circle r="${r}" fill="none" stroke="rgba(122,177,254,.28)" stroke-width="1.5"/>`;
+    svg += `<line x1="-370" y1="0" x2="370" y2="0" stroke="rgba(122,177,254,.15)"/><line y1="-370" x1="0" y2="370" x2="0" stroke="rgba(122,177,254,.15)"/>`;
+    for (let i = 0; i < 24; i++) { const a = sweep - i * 0.035; svg += `<line x1="0" y1="0" x2="${Math.cos(a) * 360}" y2="${Math.sin(a) * 360}" stroke="rgba(122,177,254,${0.5 * (1 - i / 24)})" stroke-width="3"/>`; }
+    svg += `<circle cx="0" cy="0" r="10" fill="#7ab1fe"/>`;
+    if (found) { const pk = P(t, 19.25, 0.6); svg += `<circle cx="${Math.cos(blipA) * blipR}" cy="${Math.sin(blipA) * blipR}" r="${18 + 60 * pk}" fill="none" stroke="rgba(251,191,90,${1 - pk})" stroke-width="4"/>`; }
+    svg += `<circle cx="${Math.cos(blipA) * blipR}" cy="${Math.sin(blipA) * blipR}" r="16" fill="#fbbf5a" opacity="${found ? 1 : hit}" style="filter:drop-shadow(0 0 16px #fbbf5a)"/>`;
+    svg += `<text x="${Math.cos(blipA) * blipR + 30}" y="${Math.sin(blipA) * blipR + 8}" fill="#fbbf5a" font-family="JetBrains Mono" font-size="26" opacity="${P(t, 19.4, 0.2)}">USDC Rewards</text>`;
+    $('s9radar').innerHTML = svg;
+    st('s9radar', { op: P(t, 18.5, 0.15), s: mix(0.7, 1, e5(P(t, 18.5, 0.4))) });
+    const sc = Math.min(0.85, Math.max(0, (t - 19.4) * 1.2)).toFixed(2);
+    $('s9score').innerHTML = t > 19.35 ? `score ${sc} <span style="color:#ff5c7a;opacity:${P(t, 20.05, 0.1)}">· INCIDENT</span>` : '';
+  },
+  s10(t) {
+    rise('s10prop', t, 20.5, 0.35, 60);
+    const k = P(t, 21.1, 0.28);
+    st('s10stamp', { op: P(t, 21.1, 0.04), s: mix(3.0, 1, back(k)), r: -4, blur: (1 - e5(k)) * 16 });
+    rise('s10why', t, 21.45, 0.35, 20);
+  },
+  s11(t) {
+    rise('s11h', t, 22.5, 0.4, 50);
+    const at = [22.55, 22.95, 23.35, 23.75];
+    at.forEach((a, i) => { const k = P(t, a, 0.3); st(`s11n${i}`, { op: P(t, a, 0.08), s: mix(1.5, 1, back(k)) }); });
+    [['s11e0', 22.75], ['s11e1', 23.15], ['s11e2', 23.55]].forEach(([id, a]) => ($(id).style.strokeDashoffset = 1 - e5(P(t, a, 0.3))));
+    const q = P(t, 24.0, 0.5);
+    $('s11q').setAttribute('r', String(10 + 1700 * e5(q))); $('s11q').style.opacity = q > 0 && q < 1 ? 1 - q : 0;
+  },
+  s12(t) { slam('s12h', t, 24.5, 0.35, 1.6); slam('s12h2', t, 25.0, 0.35, 1.6); rise('s12v', t, 25.5, 0.4, 40); },
+  s13(t) {
+    rise('s13h', t, 26.5, 0.4, 60);
+    const shK = P(t, 26.6, 0.3); st('s13sh', { op: P(t, 26.6, 0.1), s: mix(0.5, 1, back(shK)) });
+    const hit = 27.45, kc = eio(P(t, 26.75, 0.7)), b = e5(P(t, hit, 0.7));
+    const x = t < hit ? mix(1950, 1460, kc) : mix(1460, 1780, b), y = t < hit ? mix(300, 400, kc) : mix(400, 120, b);
+    st('s13coin', { op: P(t, 26.75, 0.1) * (1 - 0.8 * P(t, hit, 0.6)), x, y, r: t * 400 % 360, s: 1 - 0.3 * P(t, hit, 0.6) });
+    $('s13sh').style.filter = `drop-shadow(0 0 ${30 + 90 * Math.sin(P(t, hit, 0.5) * Math.PI)}px rgba(43,127,255,.9))`;
+    const ak = P(t, hit + 0.25, 0.25); st('s13a', { op: P(t, hit + 0.25, 0.05), s: mix(1.6, 1, back(ak)) }); $('s13a').style.transformOrigin = 'left center';
+  },
+  s14(t) {
+    rise('s14h', t, 28.5, 0.4, 50);
+    const ka = e5(P(t, 28.75, 0.4)), kb = e5(P(t, 29.0, 0.4));
+    st('s14a', { op: ka, x: (1 - ka) * -400 });
+    st('s14b', { op: kb, x: (1 - kb) * 400 });
+    const m = t > 29.55;
+    $('s14a').style.color = $('s14b').style.color = m ? '#3ddc97' : '#cdd6e6';
+    $('s14a').style.textShadow = $('s14b').style.textShadow = m ? `0 0 ${40 * (1 - P(t, 29.55, 0.8))}px #3ddc97` : 'none';
+    slam('s14m', t, 29.55, 0.3, 1.8);
+  },
+  s15(t) {
+    rise('s15h', t, 30.5, 0.45, 40);
+    const items = [['Walrus Memory records', 21, ''], ['Real payments', 3, ''], ['Paid over x402', 1, ''], ['Unsafe payments', 0, '#3ddc97']];
+    $('s15grid').innerHTML = items.map(([k, v, c], i) => { const a = 31.0 + i * 0.5; const kk = e5(P(t, a, 0.45)); const n = Math.round(v * eo(P(t, a + 0.1, 1.0))); return `<div class="glass" style="padding:30px 34px;opacity:${kk};transform:translateY(${(1 - kk) * 60}px)"><div class="eyebrow" style="font-size:17px">${k}</div><div style="font-size:110px;font-weight:500;letter-spacing:-.04em;margin-top:6px;color:${c || '#f4f6fb'}">${n}</div></div>`; }).join('');
+    const tx = ['CrB8X3ncqHMhn3JTRjpvy2yGCc1Zx39NhcJQrzCRoikr  · rent', 'GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ  · allowance', 'DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2  · x402 bill'];
+    $('s15tx').innerHTML = tx.map((x, i) => { const n = Math.floor(cl((t - 33.0 - i * 0.45) * 90, 0, x.length)); return `<div>${x.slice(0, n)}</div>`; }).join('');
+    // hash rain behind
+    let rain = '';
+    for (let c = 0; c < 26; c++) { const y = ((t * (60 + (c * 37) % 70) + c * 130) % 1300) - 200; rain += `<div class="mono" style="position:absolute;left:${c * 75 + 10}px;top:${y}px;font-size:16px;line-height:1.3;color:rgba(122,177,254,${0.06 + (c % 5) * 0.02});writing-mode:vertical-rl">${'0123456789abcdef'.split('').map((_, j) => '0123456789abcdef'[(c * 7 + j * 3 + Math.floor(t * 8)) % 16]).join('')}</div>`; }
+    $('s15rain').innerHTML = rain;
+  },
+  s16(t) { rise('s16a', t, 35.6, 0.6, 50); rise('s16b', t, 37.0, 0.6, 50); },
+  s17(t) {
+    const k = P(t, 39.5, 0.6);
+    st('s17m', { op: P(t, 39.5, 0.1), s: mix(2.2, 1, back(k)) * (1 + 0.012 * Math.sin(t * 2)), blur: (1 - e5(k)) * 20 });
+    slam('s17w', t, 39.65, 0.45, 1.35);
+    rise('s17s', t, 40.3, 0.5, 30); rise('s17u', t, 40.8, 0.5, 20); rise('s17b', t, 41.2, 0.5, 20);
+  },
+};
+
+// hits: times that punch the camera / flash
+const HITS = [[2.0, 0.6], [4.0, 0.8], [6.0, 1.0], [10.0, 1.6], [13.5, 0.6], [21.1, 1.3], [24.0, 0.7], [27.45, 1.0], [29.55, 0.6], [30.5, 0.8], [39.5, 1.2]];
+window.render = function render(t) {
+  drawBg(t);
+  for (const [id, a, b] of SHOTS) {
+    const on = t >= a && t < b;
+    const el = $(id);
+    el.style.display = on ? 'block' : 'none';
+    if (on) {
+      R[id](t);
+      // whip into the next cut (not into the end card)
+      const x = id === 's17' || id === 's16' ? 0 : exitK(t, b);
+      el.style.opacity = 1 - x * 0.9;
+      el.style.transform = `scale(${1 + x * 0.25})`;
+      el.style.filter = x > 0.02 ? `blur(${x * 16}px)` : 'none';
+    }
+  }
+  // camera: slow push + shake on hits
+  let shake = 0, flash = 0;
+  for (const [h, g] of HITS) { const d = t - h; if (d >= 0 && d < 0.6) { shake += g * Math.exp(-d * 9); flash += g * Math.exp(-d * 14) * (h === 10 || h === 39.5 ? 0.9 : 0.25); } }
+  $('world').style.transform = `translate(${Math.sin(t * 97) * 14 * shake}px, ${Math.cos(t * 83) * 10 * shake}px) scale(${1 + 0.012 * shake})`;
+  $('flash').style.opacity = Math.min(0.9, flash);
+  // light leak sweep at the logo and the end card
+  const leak = Math.max(P(t, 10, 0.2) * (1 - P(t, 11.8, 0.7)), P(t, 39.5, 0.2) * (1 - P(t, 41.5, 1.0)));
+  const lx = mix(-30, 130, P(t, t < 20 ? 10 : 39.5, 2.2));
+  $('leak').style.opacity = leak * 0.55;
+  $('leak').style.background = `radial-gradient(40% 60% at ${lx}% 40%, rgba(122,177,254,.55), rgba(43,127,255,.15) 40%, transparent 70%)`;
+  gctx.drawImage(grains[Math.floor(t * 24) % 6], 0, 0);
+  $('grain').style.transform = `scale(2) translate(${(Math.floor(t * 24) * 37) % 50 - 25}px, ${(Math.floor(t * 24) * 53) % 50 - 25}px)`;
+  $('stage').style.filter = `brightness(${eo(P(t, 0, 0.6)) * (1 - P(t, DURATION - 1.4, 1.4))})`;
+};
+
+// Sound cues on the same clock: [time, kind, gain]
+window.CUES = (() => {
+  const c = []; const q = (t, k, g = 1) => c.push([t, k, g]);
+  q(0.0, 'boom', 0.8); q(0.45, 'typing:0.9', 0.35);
+  q(1.95, 'whoosh', 0.5); q(2.0, 'impact', 0.85);
+  q(3.6, 'reverse', 0.55); q(4.0, 'glitch', 0.9); q(4.0, 'impact', 0.9); q(5.5, 'glitch', 0.5);
+  q(5.85, 'whoosh', 0.7); q(6.0, 'impact', 1.0); q(6.0, 'boom', 0.7); q(6.45, 'typing:1.0', 0.35); q(6.9, 'alarm', 0.5);
+  q(7.0, 'riser', 0.85);
+  for (let i = 0; i < 7; i++) q(8 + i * 0.25, 'tick', 0.85);
+  q(8.5, 'reverse', 0.7);
+  q(10.0, 'braam', 1.0); q(10.0, 'impact', 1.0); q(10.0, 'shimmer', 0.6); q(10.9, 'whoosh', 0.35);
+  q(12.4, 'whoosh', 0.6); q(12.8, 'typing:0.6', 0.35); q(13.5, 'stamp', 0.9);
+  q(14.4, 'whoosh', 0.6); q(14.55, 'impact', 0.5); for (let i = 0; i < 4; i++) q(14.75 + i * 0.25, 'pop', 0.6);
+  q(16.4, 'whoosh', 0.6); for (let i = 0; i < 6; i++) q(16.75 + i * 0.25, 'tick', 0.85); q(18.25, 'success', 0.6);
+  q(18.4, 'whoosh', 0.6); q(18.5, 'sweep', 0.8); q(19.25, 'blip', 0.9); q(19.35, 'data:0.7', 0.35); q(20.05, 'alarm', 0.55);
+  q(20.4, 'whoosh', 0.6); q(21.1, 'impact', 1.0); q(21.1, 'denied', 0.9);
+  q(22.4, 'whoosh', 0.6); [22.55, 22.95, 23.35, 23.75].forEach((x) => q(x, 'blip', 0.65)); q(24.0, 'sweep', 0.6);
+  q(24.45, 'whoosh', 0.55); q(24.5, 'impact', 0.7); q(25.0, 'impact', 0.6); q(25.5, 'lock', 0.9);
+  q(26.4, 'whoosh', 0.6); q(26.6, 'shimmer', 0.4); q(26.75, 'whoosh', 0.5); q(27.45, 'shield', 1.0); q(27.7, 'stamp', 0.6);
+  q(28.4, 'whoosh', 0.6); q(28.75, 'swipe', 0.5); q(29.0, 'swipe', 0.5); q(29.55, 'success', 0.75);
+  q(30.4, 'reverse', 0.5); q(30.5, 'boom', 0.75); q(30.5, 'shimmer', 0.5);
+  for (let i = 0; i < 4; i++) q(31.0 + i * 0.5, 'pop', 0.6); q(31.2, 'data:1.6', 0.3); q(33.0, 'typing:1.8', 0.3);
+  q(35.5, 'whoosh', 0.45); q(37.0, 'whoosh', 0.45); q(37.5, 'riser', 0.6);
+  q(39.5, 'braam', 1.0); q(39.5, 'impact', 1.0); q(39.5, 'shimmer', 0.7); q(40.3, 'chime', 0.5);
+  return c;
+})();
+window.DURATION = DURATION;
+window.READY = true;
+</script>
+</body>
+</html>

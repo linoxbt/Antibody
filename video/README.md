@@ -19,3 +19,9 @@ cues all key off one timeline built from the narration.
 Copy the brand fonts and `mark.svg` from `web/assets/` into `assets/` first.
 Sandbox screens are simulated by design; the mainnet scene uses the identifiers
 in `docs/mainnet-evidence.md`.
+
+## 44-second teaser (no voice)
+
+`intro.html` (beat-synced compositor, 120 BPM; exports its own cue sheet),
+`intro_audio.py` (trailer score + braam + sound design, built on `sfxlib.py`),
+`intro_tool.cjs` (`stills` / `cues` / `render`). Output: `media/antibody-intro.mp4`.

@@ -15,3 +15,10 @@ site/
 *.enc
 antibody-*-home*
 antibody.env
+media/
+video/shots/
+video/vo/
+video/assets/
+video/*.wav
+video/*.mp4
+video/.venv/

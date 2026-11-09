@@ -10,11 +10,12 @@ const run = (ctx, button, type, value, reason) => ctx.act(async () => (await qua
 function reportCell(ctx, seq, reports) {
   const r = reports.filter((x) => x.seq === seq).at(-1);
   if (r) {
-    const local = r.url.startsWith('file://');
+    // Saved locally (offline backend), or uploaded but not certified yet (no readable link).
+    const local = !/^https:\/\//.test(r.url);
     return el(
       'span',
       { style: 'display:flex;gap:8px;align-items:center;width:100%;padding-left:20px' },
-      local ? el('span', { class: 'small muted', title: r.url.slice(7) }, 'Report saved locally') : el('a', { href: r.url, target: '_blank', rel: 'noopener', class: 'small', style: 'color:var(--accent-hi)' }, 'Incident report ↗'),
+      local ? el('span', { class: 'small muted', title: r.url || `job ${r.jobId}` }, r.simulated ? 'Report saved locally' : `Upload ${String(r.status || 'pending').toLowerCase()}: antibody report status ${r.jobId}`) : el('a', { href: r.url, target: '_blank', rel: 'noopener', class: 'small', style: 'color:var(--accent-hi)' }, 'Incident report ↗'),
       el('code', { title: r.blobId }, short(r.blobId, 10)),
       r.simulated ? el('span', { class: 'tag record' }, 'simulated') : el('span', { class: 'tag trusted' }, 'Walrus via Tatum'),
     );

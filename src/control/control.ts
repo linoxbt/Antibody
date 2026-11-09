@@ -114,7 +114,10 @@ export interface ControlDeps {
   home: string;
   log: Logger;
   reports: ReportStore;
+  /** The offline backend: nothing touches Sui or Walrus. */
   simulated: boolean;
+  /** How the roles' keys are separated on this machine (reported, never a reason to call real payments simulated). */
+  keyIsolation?: 'enforce' | 'simulated';
   maxGasMist: string;
   x402Network: string;
   /** Cache directory (cleared by rebuild --fresh). */
@@ -923,6 +926,7 @@ export class Control {
       account: this.d.acct,
       generatedAt: new Date(this.now()).toISOString(),
       simulated: this.d.simulated,
+      ...(this.d.keyIsolation ? { keyIsolation: this.d.keyIsolation } : {}),
       quarantine: { seq, seed: q.seed, reason: q.reason, evidence: q.evidence, auto: q.auto, released: q.released, ledgerBlobIds: rec.blobIds, envelopeId: rec.env.header.id },
       blastRadius: {
         sources: radius.sources,

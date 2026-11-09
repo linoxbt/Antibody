@@ -43,3 +43,12 @@ test('offline evidence says SIMULATED and does not claim Tatum', () => {
   assert.doesNotMatch(md, /gateway\.tatum\.io/);
   assert.match(md, /Payments \(executed through the signer\)\n\nNone yet\./);
 });
+
+test('B9: a Tatum upload links the quilt patch (the JSON file), never the bare quilt blob or /undefined', async () => {
+  const { toResult } = await import('../src/adapters/storage-tatum.ts');
+  const certified = toResult({ jobId: 'j1', status: 'CERTIFIED', blobId: 'QUILT', quiltPatchId: 'QUILTpatch', downloadUrlByQuiltPatchId: 'https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/QUILTpatch', sizeBytes: 10 }, 'r.json');
+  assert.equal(certified.url, 'https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/QUILTpatch');
+  const pending = toResult({ jobId: 'j2', status: 'PENDING' }, 'r.json');
+  assert.equal(pending.url, '');
+  assert.ok(!pending.url.includes('undefined'));
+});

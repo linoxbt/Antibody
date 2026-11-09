@@ -667,6 +667,12 @@ async function main(argv: string[]): Promise<void> {
 
     case 'report': {
       const r = rt('control');
+      if (sub === 'status') {
+        // B9: Tatum certifies uploads asynchronously; show the job as Tatum reports it.
+        if (!r.reports.status) throw new Error('report status needs the Tatum Storage API (live backend with TATUM_API_KEY)');
+        console.log(JSON.stringify(await r.reports.status(String(rest[0] ?? '')), null, 2));
+        return;
+      }
       const seq = Number(sub);
       const control = buildControl(r, { signer: null });
       const { upload } = await control.report(seq);

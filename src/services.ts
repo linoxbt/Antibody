@@ -112,7 +112,10 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
     home: cfg.home,
     log: rt.log,
     reports: rt.reports,
-    simulated: rt.simulated,
+    // "simulated" on payments and reports means the offline backend (nothing on Sui); a
+    // single-user install with simulated key isolation is still real money, and says so separately.
+    simulated: cfg.backend === 'offline',
+    keyIsolation: cfg.keyIsolation,
     maxGasMist: cfg.maxGasMist,
     x402Network: suiNetworkId(cfg.network, cfg.backend === 'offline'),
     cacheDir: opts.cacheDirOverride ?? cacheDir(cfg),

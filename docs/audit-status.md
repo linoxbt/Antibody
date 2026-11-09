@@ -10,7 +10,7 @@ Every finding of the second full audit, what was done, and how it was verified.
 | S1 | A leaked lane key could backdate a ledger record to slip outside a signer-window quarantine (proof of concept reproduced) | **Fixed.** Ledger checkpoints must not decrease by sequence and may not run ahead of the chain; control refuses such an append before storing it; an open-ended signer window covers every later ledger record of that key; checkpoints are bounded to safe integers | `test/backdate.test.ts` (7 tests, from the PoCs); mainnet ledger re-checked: checkpoints already monotonic |
 | B1 | Under role isolation the sentinel wrote into control's private `cache/` | **Fixed.** Ingest keeps its state in `ingest/` (migrated once); `setup-roles.sh` gives it to `antibody-ingest`; file locks fail at once on errors other than "held" | `hardening.test.ts` B1 tests |
 | B2 | Pending or unknown payments stayed that way forever; x402 settlement was read once | **Fixed.** The digest is computed from the bytes before signing, unsettled payments are reconciled on-chain before the next payment, x402 waits for the settlement, `antibody payments [list|reconcile|resolve]` | `hardening.test.ts` B2 tests; digest-from-bytes checked against two mainnet transactions |
-| M1 | Demo video 3:12; the form asks for 2 to 3 minutes | In progress (re-cut under 3:00) | see the final report |
+| M1 | Demo video 3:12; the form asks for 2 to 3 minutes | **Fixed.** Re-cut to 2:55 by tightening pacing and two narration cuts; the spoken rule list now names all six rules shown; SIMULATED caption on the sandbox shots; new report id on the mainnet card | ffprobe 175.4 s; −14 LUFS; stills checked |
 
 ## Medium
 

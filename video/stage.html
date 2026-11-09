@@ -42,6 +42,8 @@ canvas#bg { position: absolute; inset: 0; }
 .browser .chrome { height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 18px; background: #0a0d15; border-bottom: 1px solid rgba(255,255,255,.07); }
 .browser .chrome i { width: 12px; height: 12px; border-radius: 50%; background: #2a2f3b; display: block; }
 .browser .chrome .url { margin-left: 22px; flex: 1; max-width: 640px; height: 26px; border-radius: 8px; background: rgba(255,255,255,.05); font: 14px var(--mono); color: #8d97ab; display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+.browser .chrome .sim { margin-left: auto; display: flex; align-items: center; gap: 9px; height: 28px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(251,191,90,.55); background: rgba(251,191,90,.1); font: 500 17px var(--mono); letter-spacing: .06em; color: #fbd38d; white-space: nowrap; }
+.browser .chrome .sim b { width: 8px; height: 8px; border-radius: 50%; background: var(--untrusted); box-shadow: 0 0 10px var(--untrusted); }
 .browser .view { position: absolute; left: 0; top: 44px; width: 1600px; height: 900px; overflow: hidden; }
 .browser .cam { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; transform-origin: 0 0; }
 .browser .cam img { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; }
@@ -185,7 +187,7 @@ svg.wires { position: absolute; inset: 0; overflow: visible; }
   <!-- 6 ATTACK (screens) -->
   <section class="scene" id="s-attack">
     <div class="browser" id="a-br">
-      <div class="chrome"><i></i><i></i><i></i><div class="url">🔒 antibody-memory.netlify.app<span id="a-path" style="color:#c9d1e0">/app</span></div></div>
+      <div class="chrome"><i></i><i></i><i></i><div class="url">🔒 antibody-memory.netlify.app<span id="a-path" style="color:#c9d1e0">/app</span></div><span class="sim" id="a-sim"><b></b>SIMULATED sandbox</span></div>
       <div class="view"><div class="cam" id="a-cam">
         <img id="a-i0" src="shots/app-overview.png"/>
         <img id="a-i1" src="shots/app-overview-attack.png"/>
@@ -256,7 +258,7 @@ svg.wires { position: absolute; inset: 0; overflow: visible; }
     <div class="glass card" id="m-c2" style="left:1250px;top:270px;width:520px;height:220px"><div class="k">Theft</div><div class="v bad">Blocked</div><div class="h" style="color:var(--block)">LABEL_MISMATCH · on Walrus</div></div>
     <div class="glass card" id="m-c3" style="left:150px;top:520px;width:1070px;height:240px"><div class="k">Real payments · signed by Steward</div>
       <div class="mono" style="font-size:26px;line-height:1.75;margin-top:14px"><span class="ok">✓</span> rent · 0.01 SUI <span class="blu">CrB8X3nc…Roikr</span><br/><span class="ok">✓</span> allowance · 0.005 SUI <span class="blu">GDRCJqUA…3ZdJ</span><br/><span class="ok">✓</span> electricity over <b>x402</b> · 0.003 SUI <span class="blu">DJYbNY5w…8cn2</span></div></div>
-    <div class="glass card" id="m-c4" style="left:1250px;top:520px;width:520px;height:240px"><div class="k">Incident report</div><div class="v" style="font-size:38px">Tatum Storage API</div><div class="h">→ Walrus blob 5Fqo1B_s…</div></div>
+    <div class="glass card" id="m-c4" style="left:1250px;top:520px;width:520px;height:240px"><div class="k">Incident report</div><div class="v" style="font-size:38px">Tatum Storage API</div><div class="h">→ Walrus quilt patch iHHNPF…</div></div>
     <div class="abs" id="m-table" style="left:150px;top:300px;width:1620px">
       <div class="glass" style="padding:40px 50px">
         <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:20px;font-size:30px;align-items:center">
@@ -442,7 +444,7 @@ function reveal(t) {
 const ENV = [['author    ', 'antibody:wallet-objects', 'amb'], ['parents   ', '[]  (it read nothing)', 'mut'], ['source    ', 'sui-object 0x3538…bec', 'blu'], ['sender    ', '0xa158…5f2a', 'blu'], ['checkpoint', '341974380', 'blu']];
 const LANES = [{ x: 330, y: 300 }, { x: 1330, y: 300 }, { x: 330, y: 720 }, { x: 1330, y: 720 }];
 function lanes(t) {
-  const a0 = L('lanes', 0), a1 = L('lanes', 1), a2 = L('lanes', 2), a3 = L('lanes', 3);
+  const a0 = L('lanes', 0), a1 = L('lanes', 1), a3 = L('lanes', 2);
   // envelope: types out, gets sealed, then leaves
   const envOut = eio(P(t, a1 - 0.3, 0.7));
   rise('l-env', t, a0 - 0.3, 0.7, 40);
@@ -459,7 +461,7 @@ function lanes(t) {
   const wires = $('l-wires');
   let svg = '';
   LANES.forEach((p, i) => {
-    const a = a1 + 0.9 + i * 0.9;
+    const a = a1 + 0.5 + i * 0.5;
     const kk = back(P(t, a, 0.6));
     const n = $(`l-n${i}`);
     n.style.left = p.x - 130 + 'px'; n.style.top = p.y - 50 + 'px';
@@ -469,8 +471,8 @@ function lanes(t) {
     const col = ['#3ddc97', '#7ab1fe', '#fbbf5a', '#c9d6ee'][i];
     svg += `<line x1="${p.x + 130 * Math.sign(960 - p.x) * 0.9}" y1="${p.y}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="2.5" opacity="${0.75 * (1 - taintOn)}" stroke-dasharray="6 7" stroke-dashoffset="${-t * 30}"/>`;
     // "on-chain" key badge
-    const bk = back(P(t, a2 + 0.4 + i * 0.55, 0.5));
-    svg += `<g transform="translate(${p.x + 120},${p.y - 58}) scale(${bk})" opacity="${P(t, a2 + 0.4 + i * 0.55, 0.2) * (1 - taintOn)}"><rect x="-64" y="-20" width="128" height="40" rx="20" fill="#0b1324" stroke="${col}"/><text x="0" y="7" text-anchor="middle" font-family="JetBrains Mono" font-size="17" fill="${col}">⚿ on-chain</text></g>`;
+    const bk = back(P(t, a + 0.35, 0.5));
+    svg += `<g transform="translate(${p.x + 120},${p.y - 58}) scale(${bk})" opacity="${P(t, a + 0.35, 0.2) * (1 - taintOn)}"><rect x="-64" y="-20" width="128" height="40" rx="20" fill="#0b1324" stroke="${col}"/><text x="0" y="7" text-anchor="middle" font-family="JetBrains Mono" font-size="17" fill="${col}">⚿ on-chain</text></g>`;
   });
   wires.innerHTML = svg;
   // taint flow
@@ -620,7 +622,7 @@ function restore(t) {
   let out = '';
   let used = 0;
   for (const line of steps) { const d = Math.max(0.25, line.length / 34); const n = Math.floor(cl((tt - used) / d, 0, 1) * line.length); out += line.slice(0, n) + (n === line.length ? '\n' : ''); if (n < line.length) break; used += d + 0.12; }
-  const dk = Math.floor(cl((tt - used) * 40, 0, 64));
+  const dk = Math.floor(cl((tt - used) * 64, 0, 64));
   const done = dk >= 64;
   $('e-p1').innerHTML = `<span class="mut">${out}</span><span class="${done && t > a2 - 0.3 ? 'ok' : 'blu'}">${DIG.slice(0, Math.min(dk, 32))}${dk > 32 ? '\n' + DIG.slice(32, dk) : ''}</span>`;
   const mk = back(P(t, a2 - 0.2, 0.5));
@@ -703,9 +705,9 @@ window.CUES = (() => {
   q(L('reveal', 1) + 2.3, 'pop', 0.35); q(L('reveal', 1) + 3.2, 'pop', 0.35);
   q(L('lanes', 0) - 0.3, 'whoosh', 0.5); q(L('lanes', 0) + 0.4, 'typing:3.6', 0.32); q(L('lanes', 0) + 4.3, 'stamp', 0.85);
   q(L('lanes', 1) - 0.3, 'whoosh', 0.45); q(L('lanes', 1) - 0.1, 'impact', 0.4);
-  [0, 1, 2, 3].forEach((i) => q(L('lanes', 1) + 0.9 + i * 0.9, 'pop', 0.5));
-  [0, 1, 2, 3].forEach((i) => q(L('lanes', 2) + 0.4 + i * 0.55, 'tick', 0.55));
-  q(L('lanes', 3) - 0.3, 'whoosh', 0.45); q(L('lanes', 3) + 2.0, 'glitch', 0.35);
+  [0, 1, 2, 3].forEach((i) => q(L('lanes', 1) + 0.5 + i * 0.5, 'pop', 0.5));
+  [0, 1, 2, 3].forEach((i) => q(L('lanes', 1) + 0.85 + i * 0.5, 'tick', 0.45));
+  q(L('lanes', 2) - 0.3, 'whoosh', 0.45); q(L('lanes', 2) + 2.0, 'glitch', 0.35);
   q(L('rules', 0), 'whoosh', 0.45); q(L('rules', 1) - 0.3, 'whoosh', 0.4);
   const dur = E('rules', 1) - L('rules', 1);
   for (let i = 0; i < 6; i++) q(L('rules', 1) + 0.6 + (i * (dur - 1.2)) / 6, 'tick', 0.7);

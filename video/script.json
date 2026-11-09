@@ -1,8 +1,8 @@
 [
  {
   "id": "open",
-  "lead": 1.8,
-  "tail": 0.8,
+  "lead": 1.4,
+  "tail": 0.6,
   "lines": [
    "AI agents can remember now.",
    "They pay our bills, manage our money, and carry what they learn from one day to the next.",
@@ -11,8 +11,8 @@
  },
  {
   "id": "threat",
-  "lead": 1.0,
-  "tail": 0.9,
+  "lead": 0.8,
+  "tail": 0.8,
   "lines": [
    "Anyone can send a coin to a wallet on [Sui](/sw\u02c8i/), and a coin can carry a description.",
    "An agent that reads its wallet now holds that sentence in memory. Forever.",
@@ -22,8 +22,8 @@
  },
  {
   "id": "reveal",
-  "lead": 2.6,
-  "tail": 1.8,
+  "lead": 2.4,
+  "tail": 1.2,
   "lines": [
    "This is Antibody.",
    "An immune system for agent memory, built on Walrus Memory and [Tatum](/t\u02c8e\u026at\u0259m/)'s [Sui](/sw\u02c8i/) gateway."
@@ -31,28 +31,29 @@
  },
  {
   "id": "lanes",
-  "lead": 1.0,
-  "tail": 0.7,
+  "lead": 0.8,
+  "tail": 0.6,
+  "gap": 0.9,
   "lines": [
    "Every memory Antibody writes is a signed envelope: who wrote it, what it came from, and when.",
-   "Four writers share one Walrus Memory account. You, the agent, the wallet scanner, and control.",
-   "Each one is a delegate key, labelled on chain, so anyone can check who said what.",
+   "Four writers share one Walrus Memory account.",
    "Untrusted content can never become trusted. Not even through a summary."
   ]
  },
  {
   "id": "rules",
-  "lead": 0.9,
-  "tail": 0.8,
+  "lead": 0.7,
+  "tail": 0.7,
+  "gap": 0.7,
   "lines": [
    "And the model never decides where money goes.",
-   "Every payment passes six rules in code: a verified ledger, a registered payee, a matching label, a spending cap, and an exact dry run through [Tatum](/t\u02c8e\u026at\u0259m/).",
+   "Every payment passes six rules in code: a verified ledger, a canonical address, a registered payee, a matching label, a spending cap, and an exact dry run through [Tatum](/t\u02c8e\u026at\u0259m/).",
    "The model can be fooled. The code can't."
   ]
  },
  {
   "id": "attack",
-  "lead": 1.4,
+  "lead": 1.2,
   "tail": 0.6,
   "lines": [
    "Watch it happen.",
@@ -64,8 +65,8 @@
  },
  {
   "id": "blast",
-  "lead": 0.9,
-  "tail": 0.7,
+  "lead": 0.7,
+  "tail": 0.6,
   "lines": [
    "Antibody traces the blast radius: the coin, the observation, the agent's tainted note, and the blocked decision.",
    "One click quarantines the source.",
@@ -74,8 +75,8 @@
  },
  {
   "id": "learn",
-  "lead": 0.9,
-  "tail": 0.7,
+  "lead": 0.7,
+  "tail": 0.6,
   "lines": [
    "Then it learns.",
    "The quarantine becomes a lesson in the ledger.",
@@ -84,8 +85,8 @@
  },
  {
   "id": "restore",
-  "lead": 0.9,
-  "tail": 0.7,
+  "lead": 0.7,
+  "tail": 0.6,
   "lines": [
    "Wipe the machine.",
    "A fresh process rebuilds everything from Walrus and [Sui](/sw\u02c8i/) alone, and the fingerprints match.",
@@ -94,8 +95,8 @@
  },
  {
   "id": "mainnet",
-  "lead": 1.0,
-  "tail": 1.4,
+  "lead": 0.8,
+  "tail": 1.0,
   "lines": [
    "And it's real.",
    "On [Sui](/sw\u02c8i/) mainnet, Antibody ran the whole story: twenty one records on Walrus Memory, a live attack from a separate wallet, a blocked theft, three real payments, one of them over x four oh two, and an incident report through [Tatum](/t\u02c8e\u026at\u0259m/).",
@@ -104,8 +105,8 @@
  },
  {
   "id": "close",
-  "lead": 1.2,
-  "tail": 5.5,
+  "lead": 1.0,
+  "tail": 4.8,
   "lines": [
    "Persistent memory makes attacks persistent.",
    "Provenance makes them reversible.",

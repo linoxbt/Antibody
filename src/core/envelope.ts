@@ -54,7 +54,7 @@ const headerSchema = z
     parents: z.array(z.string().regex(UUID_RE)).max(MAX_PARENTS),
     src: z.array(srcRefSchema).max(32),
     turn: z.string().max(64).nullable(),
-    ckpt: z.number().int().nonnegative(),
+    ckpt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     ts: z.string().max(40),
     bodyHash: z.string().refine((s) => isHex(s, 32), 'bodyHash must be SHA-256 hex'),
     bodyLen: z.number().int().nonnegative().max(MAX_BODY_BYTES),

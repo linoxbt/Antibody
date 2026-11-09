@@ -13,6 +13,8 @@ import {
   activeSeeds,
   GENESIS_PREV,
   LEDGER_CAP,
+  LEDGER_FUTURE_SLACK,
+  LEDGER_MAX_AGE,
   LEDGER_SIGNER,
   ledgerBodyText,
   nextAppend,
@@ -175,11 +177,13 @@ export class Control {
     // Performance: verification and the projection are pure functions of these inputs, so an
     // unchanged inventory (texts included), key set and high-water mark reuse the last result.
     const fp = (ms: StoredMemory[]) => ms.map((m) => `${m.blobId}:${sha256Hex(m.text)}`).sort().join(',');
-    const ledgerKey = sha256Hex(JSON.stringify([fp(led.memories), led.inventory.map((e) => `${e.blobId}:${e.agentId}`).sort(), account, hwm, o.assumeRevoked ?? null]));
+    // The chain checkpoint only matters to verification through the future-dated bound, so
+    // it is keyed at that granularity and an unchanged ledger still reuses the last result.
+    const ledgerKey = sha256Hex(JSON.stringify([fp(led.memories), led.inventory.map((e) => `${e.blobId}:${e.agentId}`).sort(), account, hwm, o.assumeRevoked ?? null, Math.floor(ckpt / LEDGER_FUTURE_SLACK)]));
     const ledger =
       !this.d.noCache && this.memo.ledgerKey === ledgerKey && this.memo.ledger
         ? this.memo.ledger
-        : verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm, writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])), ...(o.assumeRevoked ? { assumeRevoked: o.assumeRevoked } : {}) });
+        : verifyLedger({ acct: this.d.acct, account, inventory: led.inventory.map((e) => e.blobId), recalled: led.memories, hwm, chainCkpt: ckpt, writers: new Map(led.inventory.map((e) => [e.blobId, e.agentId])), ...(o.assumeRevoked ? { assumeRevoked: o.assumeRevoked } : {}) });
     const content = await retrieveContent(this.d.mem, known);
     if (!this.d.noCache) this.cache.put([...led.memories, ...content.memories].filter((m) => !known.has(m.blobId)));
     const projectionKey = sha256Hex(JSON.stringify([ledgerKey, fp(content.memories), content.inventory.map((e) => `${e.blobId}:${e.createdAt}`).sort()]));
@@ -218,7 +222,8 @@ export class Control {
   /** (seq, prev, ckpt) for the next append. The human CLI signs against this. */
   async head(o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; prev: string; ckpt: number; acct: string }> {
     const { snap, ledger } = await this.verifiedLedger(o);
-    return { ...nextAppend(ledger), ckpt: snap.ckpt, acct: this.d.acct };
+    // Never below the head record's checkpoint: a lagging RPC node must not make an append look backdated (S1).
+    return { ...nextAppend(ledger), ckpt: Math.max(snap.ckpt, ledger.records[ledger.head.seq]!.env.header.ckpt), acct: this.d.acct };
   }
 
   /**
@@ -227,14 +232,26 @@ export class Control {
    * the whole ledger again, and only then advance the head.
    */
   async appendLedger(text: string, o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; blobId: string; envelopeId: string }> {
-    return withFileLock(join(this.d.home, 'run', 'ledger.lock'), async () => {
-      const { ledger } = await this.verifiedLedger(o);
+    return withFileLock(join(this.d.home, 'run', 'ledger.lock'), () => this.appendLocked(text, o));
+  }
+
+  /** appendLedger's body; the caller holds the ledger lock. */
+  private async appendLocked(text: string, o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; blobId: string; envelopeId: string }> {
+    {
+      const { snap, ledger } = await this.verifiedLedger(o);
       const v = verifyEnvelope(text, { acct: this.d.acct, ns: NS_LEDGER, bindings: ledger.bindings });
       if (!v.ok) throw new Error(`record rejected: ${v.code} ${v.reason}`);
       const rec = parseLedgerBody(bodyContent(v.envelope.body));
       if (v.envelope.header.lane !== LEDGER_SIGNER[rec.type]) throw new Error(`${rec.type} must be signed by the ${LEDGER_SIGNER[rec.type]} lane`);
       const expect = nextAppend(ledger);
       if (rec.seq !== expect.seq || rec.prev !== expect.prev) throw new Error(`stale head: record is seq ${rec.seq}, ledger expects ${expect.seq}; fetch the head and sign again`);
+      // S1: refuse a backdated or future-dated record before it is stored; once stored it
+      // would fail verification for good and block every payment.
+      const ck = v.envelope.header.ckpt;
+      const headCkpt = ledger.records[ledger.head.seq]!.env.header.ckpt;
+      if (ck < headCkpt) throw new Error(`record rejected: checkpoint ${ck} is earlier than the ledger head's ${headCkpt}; fetch the head and sign again`);
+      if (ck > snap.ckpt + LEDGER_FUTURE_SLACK) throw new Error(`record rejected: checkpoint ${ck} is ahead of the chain (${snap.ckpt})`);
+      if (ck + LEDGER_MAX_AGE < snap.ckpt) throw new Error(`record rejected: signed at checkpoint ${ck}, more than ${LEDGER_MAX_AGE} behind the chain (${snap.ckpt}); fetch the head and sign again`);
       const { blobId } = await this.d.mem.remember(text, NS_LEDGER, v.envelope.header.id);
       // Read back through recall and require byte-identical text before advancing.
       const back = await this.d.mem.recall(`antibody ledger record seq ${rec.seq}`, NS_LEDGER, 20);
@@ -246,7 +263,7 @@ export class Control {
       }
       this.d.log.info('ledger.append', { seq: rec.seq, type: rec.type, blobId, envelopeId: v.envelope.header.id });
       return { seq: rec.seq, blobId, envelopeId: v.envelope.header.id };
-    });
+    }
   }
 
   /**
@@ -284,10 +301,13 @@ export class Control {
   /** Build, sign (antibody lane) and append a control record. */
   async writeOwn<T extends LedgerType>(type: T, payload: LedgerPayload<T>, o: Parameters<Control['snapshot']>[0] = {}): Promise<{ seq: number; blobId: string; envelopeId: string }> {
     if (LEDGER_SIGNER[type] !== 'antibody') throw new Error(`control may not sign ${type}`);
-    const h = await this.head(o);
-    const record = { seq: h.seq, prev: h.prev, type, payload } as LedgerRecord;
-    const env = buildEnvelope({ id: uuidv7(this.now()), acct: this.d.acct, ns: NS_LEDGER, lane: 'antibody', kind: 'ledger', ckpt: h.ckpt, ts: new Date(this.now()).toISOString(), text: ledgerBodyText(record) }, this.d.key);
-    return this.appendLedger(env.text, o);
+    // B11: read the head and append under one lock, so a concurrent append cannot make this stale.
+    return withFileLock(join(this.d.home, 'run', 'ledger.lock'), async () => {
+      const h = await this.head(o);
+      const record = { seq: h.seq, prev: h.prev, type, payload } as LedgerRecord;
+      const env = buildEnvelope({ id: uuidv7(this.now()), acct: this.d.acct, ns: NS_LEDGER, lane: 'antibody', kind: 'ledger', ckpt: h.ckpt, ts: new Date(this.now()).toISOString(), text: ledgerBodyText(record) }, this.d.key);
+      return this.appendLocked(env.text, o);
+    });
   }
 
   // ---- model context -----------------------------------------------------

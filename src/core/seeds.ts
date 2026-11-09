@@ -47,7 +47,7 @@ export function seedMatches(seed: QuarantineSeed, h: EnvelopeHeader): boolean {
     case 'source':
       return h.src.some((r) => srcIdentifiers(r).includes(seed.value));
     case 'signer-window':
-      return h.pub === seed.value && h.ckpt >= (seed.from ?? 0) && h.ckpt <= (seed.to ?? Number.MAX_SAFE_INTEGER);
+      return h.pub === seed.value && h.ckpt >= (seed.from ?? 0) && (seed.to === undefined || h.ckpt <= seed.to);
     case 'turn':
       return h.turn !== null && h.turn === seed.value;
   }

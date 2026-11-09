@@ -29,6 +29,15 @@ export const LEDGER_PHRASE = 'antibody ledger record';
  */
 export const LEDGER_CAP = 5000;
 export const GENESIS_PREV = '0'.repeat(64);
+/**
+ * How far past the chain's latest checkpoint a ledger record may claim to be
+ * signed (≈15 min on Sui). A record from further in the future would sit
+ * outside every bounded signer window and revocation bound until the chain
+ * caught up.
+ */
+export const LEDGER_FUTURE_SLACK = 3600;
+/** How far behind the chain's latest checkpoint an append may be signed (≈7 h on Sui). */
+export const LEDGER_MAX_AGE = 100_000;
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
 const address = z.string().regex(SUI_ADDRESS_RE, 'address must be 0x + 64 lowercase hex');
@@ -38,8 +47,8 @@ const seedSchema = z
   .object({
     type: z.enum(['memory', 'source', 'signer-window', 'turn']),
     value: z.string().min(1).max(256),
-    from: z.number().int().nonnegative().optional(),
-    to: z.number().int().nonnegative().optional(),
+    from: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    to: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strict();
 
@@ -220,6 +229,8 @@ export interface LedgerInput {
   writers?: ReadonlyMap<string, string | null>;
   /** Highest verified head this machine has seen (rollback guard). */
   hwm?: { seq: number; hash: string } | null;
+  /** The chain's latest checkpoint; records claiming a later one (beyond slack) fail closed. */
+  chainCkpt?: number;
 }
 
 /**
@@ -393,6 +404,15 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
     const expectPrev = s === 0 ? GENESIS_PREV : records[s - 1]!.hash;
     if (r.record.prev !== expectPrev) return fail('LEDGER_CORRUPT', `seq ${s}: prev does not match the previous record's hash`);
     if ((s === 0) !== (r.record.type === 'genesis')) return fail('LEDGER_CORRUPT', `seq ${s}: genesis must be exactly record 0`);
+    // S1: header.ckpt is chosen by the signer. Ledger order is authoritative, so a
+    // record may not claim an earlier checkpoint than the record before it (that is
+    // how a leaked key would slip a record outside a signer-window quarantine).
+    if (s > 0 && r.env.header.ckpt < records[s - 1]!.env.header.ckpt) {
+      return fail('LEDGER_CORRUPT', `seq ${s}: checkpoint ${r.env.header.ckpt} is earlier than seq ${s - 1}'s ${records[s - 1]!.env.header.ckpt} (backdated record)`);
+    }
+    if (input.chainCkpt !== undefined && r.env.header.ckpt > input.chainCkpt + LEDGER_FUTURE_SLACK) {
+      return fail('LEDGER_CORRUPT', `seq ${s}: checkpoint ${r.env.header.ckpt} is ahead of the chain (${input.chainCkpt}) (future-dated record)`);
+    }
     records.push(r);
   }
   const genesis = records[0]!.record.payload as LedgerPayload<'genesis'>;
@@ -414,14 +434,19 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
     quarantines.push({ seq: r.record.seq, seed: normalizeSeed(p.seed as QuarantineSeed), reason: p.reason, evidence: p.evidence, ckpt: p.ckpt, auto: p.auto, released: false });
   }
   const excluded: LedgerState['excluded'] = [];
-  const matchingSeeds = (env: Envelope, among: QuarantineEntry[]) => among.filter((q) => seedMatches(q.seed, env.header)).map((q) => q.seq);
+  // In the ledger, an open-ended signer window also covers every later record that
+  // key signed, whatever checkpoint it claims: ledger order cannot be backdated.
+  const matchingSeeds = (env: Envelope, among: QuarantineEntry[], seq: number) =>
+    among
+      .filter((q) => seedMatches(q.seed, env.header) || (q.seed.type === 'signer-window' && q.seed.to === undefined && q.seed.value === env.header.pub && seq > q.seq))
+      .map((q) => q.seq);
   for (const r of records) {
     if (r.record.type !== 'quarantine.release') continue;
     const p = r.record.payload as LedgerPayload<'quarantine.release'>;
     const target = quarantines.find((q) => q.seq === p.quarantineSeq);
     if (!target || p.quarantineSeq >= r.record.seq) return fail('LEDGER_CORRUPT', `seq ${r.record.seq}: release of ${p.quarantineSeq}, which is not an earlier quarantine record`);
     // A release signed inside a quarantined signer window is not honoured.
-    const hits = matchingSeeds(r.env, quarantines);
+    const hits = matchingSeeds(r.env, quarantines, r.record.seq);
     if (hits.length > 0) {
       excluded.push({ seq: r.record.seq, type: r.record.type, bySeq: hits });
       continue;
@@ -434,7 +459,7 @@ export function verifyLedger(input: LedgerInput): LedgerResult {
   const payees = new Map<string, ActivePayee>();
   for (const r of records) {
     if (r.record.type === 'payee.add') {
-      const hits = matchingSeeds(r.env, active);
+      const hits = matchingSeeds(r.env, active, r.record.seq);
       if (hits.length > 0) {
         excluded.push({ seq: r.record.seq, type: r.record.type, bySeq: hits });
         continue;

@@ -105,10 +105,14 @@ export class PaymentLog {
     return this.store.read();
   }
 
-  /** A payment of the same amount and coin to the same recipient that is pending, unknown, or went out within `windowMs`. */
+  /**
+   * A payment to the same recipient in the same coin that is pending, of unknown
+   * outcome, or went out within `windowMs`, whatever its amount (S9: a nudged
+   * amount is not a different payment), or a repeat of this exact key.
+   */
   duplicate(e: Pick<PaymentEntry, 'key' | 'recipient' | 'coinType' | 'amount'>, now: number, windowMs: number): PaymentEntry | undefined {
     return this.list().find(
-      (x) => x.key === e.key && x.status !== 'failed' || (x.recipient === e.recipient && x.coinType === e.coinType && x.amount === e.amount && (x.status === 'pending' || x.status === 'unknown' || (x.status === 'executed' && now - x.at < windowMs))),
+      (x) => (x.key === e.key && x.status !== 'failed') || (x.recipient === e.recipient && x.coinType === e.coinType && (x.status === 'pending' || x.status === 'unknown' || (x.status === 'executed' && now - x.at < windowMs))),
     );
   }
 

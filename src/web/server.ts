@@ -257,12 +257,6 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
       }
       if (url.pathname.startsWith('/api/') && !session) return send(401, { error: 'sign in required' });
       if (req.method === 'GET' && url.pathname === '/api/state') return send(200, await stateJson(rt, control));
-      if (req.method === 'GET' && url.pathname === '/api/blast') {
-        const seq = Number(url.searchParams.get('seq'));
-        if (!Number.isInteger(seq) || seq < 0) throw new AuthError(400, 'seq must be a ledger sequence number');
-        const r = await control.blast(seq);
-        return send(200, { seq: r.seedSeq, sources: r.sources, memories: r.memories.map((m) => m.id), decisions: r.decisions.map((m) => m.id), txDigests: r.txDigests, edges: r.edges });
-      }
       if (req.method !== 'POST') return send(404, { error: 'not found' });
       if (req.headers['x-antibody-ui'] !== '1') return send(403, { error: 'missing x-antibody-ui header' });
       const body = asObject(await readBody(req));

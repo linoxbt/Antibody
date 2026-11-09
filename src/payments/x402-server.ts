@@ -31,7 +31,7 @@ export interface FacilitatorCheck {
 }
 
 /** Facilitator verification for the Sui exact scheme. */
-export async function verifySuiExact(chain: ChainReader, network: string, req: { payTo: string; asset: string; amount: string }, header: string): Promise<FacilitatorCheck & { txBytes?: Uint8Array; signature?: string }> {
+async function verifySuiExact(chain: ChainReader, network: string, req: { payTo: string; asset: string; amount: string }, header: string): Promise<FacilitatorCheck & { txBytes?: Uint8Array; signature?: string }> {
   let p;
   try {
     p = decodeHeader(header, paymentPayloadSchema);

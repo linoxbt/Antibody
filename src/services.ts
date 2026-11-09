@@ -43,7 +43,7 @@ export function laneServer(rt: Runtime, lane: Lane): (pub: string) => Promise<bo
 }
 
 /** The signer answers with the key behind Steward's wallet address. */
-export function walletServer(wallet: string): (pub: string) => boolean {
+function walletServer(wallet: string): (pub: string) => boolean {
   return (pub) => {
     try {
       return new Ed25519PublicKey(Buffer.from(pub, 'hex')).toSuiAddress() === wallet;
@@ -128,7 +128,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
   });
 }
 
-export function controlRoutes(control: Control): Record<string, Route> {
+function controlRoutes(control: Control): Record<string, Route> {
   return {
     '/context/recall': { lanes: ['agent'], handler: async (p) => control.recallForAgent(String((p as { query?: string }).query ?? ''), 12, typeof (p as { turn?: unknown }).turn === 'string' ? (p as { turn: string }).turn : undefined) },
     '/propose': { lanes: ['agent'], handler: async (p) => control.propose(p as Parameters<Control['propose']>[0]) },

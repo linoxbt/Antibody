@@ -92,6 +92,9 @@ export const x402ArgsSchema = z
 /** S4: verdict text can quote model input; control characters are escaped so it stays one line. */
 const oneLine = (t: string) => t.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, (c) => JSON.stringify(c).slice(1, -1));
 
+/** S8: how long a snapshot's lane bindings may answer IPC authentication without a fresh chain read. */
+const LANE_CACHE_MS = 30_000;
+
 /** How long to wait for a just-submitted transaction to become readable (B2). */
 const TX_WAIT_MS = 30_000;
 
@@ -177,6 +180,7 @@ export class Control {
   private readonly served = new Map<string, Set<string>>();
   private readonly now: () => number;
   private last: Snapshot | null = null;
+  private lastAt = 0;
   private memo: { ledgerKey?: string; ledger?: LedgerResult; projectionKey?: string; projection?: Projection } = {};
 
   constructor(readonly d: ControlDeps) {
@@ -229,6 +233,7 @@ export class Control {
     }
     const snap: Snapshot = { account, ckpt, ledger, projection, coverage: { ledgerMissing: led.missing, contentMissing: content.missing, queries: led.queries + content.queries } };
     this.last = snap;
+    this.lastAt = this.now();
     return snap;
   }
 
@@ -239,11 +244,15 @@ export class Control {
   }
 
   /** Lane of a public key under the current bindings (IPC auth). */
-  async laneOf(pub: string): Promise<Lane | undefined> {
-    const fromSnap = this.last?.projection.bindings?.get(pub);
-    if (fromSnap?.status === 'active') return fromSnap.lane;
+  async laneOf(pubIn: string): Promise<Lane | undefined> {
+    // S8: hex in any case names the same key; a snapshot older than LANE_CACHE_MS is not
+    // trusted (the key may have been revoked since), and a key must be on-chain right now.
+    const pub = pubIn.toLowerCase();
+    const fresh = this.last && this.now() - this.lastAt < LANE_CACHE_MS ? this.last : null;
+    const fromSnap = fresh?.projection.bindings?.get(pub);
+    if (fromSnap?.status === 'active' && fresh!.account.delegateKeys.some((x) => x.publicKeyHex.toLowerCase() === pub)) return fromSnap.lane;
     const account = await this.d.chain.getAccount(this.d.acct);
-    const k = account.delegateKeys.find((x) => x.publicKeyHex === pub);
+    const k = account.delegateKeys.find((x) => x.publicKeyHex.toLowerCase() === pub);
     return k ? LABEL_LANE[k.label] : undefined;
   }
 
@@ -458,7 +467,8 @@ export class Control {
     const key = sha256Hex(`${turn}|${recipient}|${coinType}|${base}`);
     const dup = this.payments.duplicate({ key, recipient, coinType, amount: base.toString() }, this.now(), DUPLICATE_WINDOW_MS);
     if (!dup) return { verdict: v, key };
-    const why = dup.status === 'executed' ? `the same payment went out ${Math.round((this.now() - dup.at) / 1000)} s ago (tx ${dup.digest ?? '?'})` : `an identical payment is ${dup.status === 'pending' ? 'still in flight' : 'of unknown outcome; check the wallet before paying again'}`;
+    const same = dup.amount === base.toString() ? 'the same payment' : `a payment to this recipient (${dup.amount} base units)`;
+    const why = dup.status === 'executed' ? `${same} went out ${Math.round((this.now() - dup.at) / 1000)} s ago (tx ${dup.digest ?? '?'})` : `${same} is ${dup.status === 'pending' ? 'still in flight' : 'of unknown outcome; check the wallet before paying again'}`;
     return { key, verdict: { decision: 'BLOCK', code: 'DUPLICATE_PAYMENT', reasons: [why], rules: [...v.rules, { rule: 'R4', pass: false, detail: `duplicate: ${why}` }], ...(v.payeeId ? { payeeId: v.payeeId } : {}) } };
   }
 

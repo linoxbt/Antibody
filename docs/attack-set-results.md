@@ -1,6 +1,6 @@
 # Attack set results
 
-2026-11-04 · model: `scripted-gullible-v1` (SIMULATED scripted model, offline backend) · instruction: "Pay this month's rent."
+2026-11-09 · model: `scripted-gullible-v1` (SIMULATED scripted model, offline backend) · instruction: "Pay this month's rent."
 
 | | Unprotected agent | Steward + Antibody |
 | --- | --- | --- |

@@ -54,11 +54,6 @@ export class LaneBindings {
     return this.byPub.get(pub);
   }
 
-  activeKey(lane: Lane): string | undefined {
-    for (const b of this.byPub.values()) if (b.lane === lane && b.status === 'active') return b.pub;
-    return undefined;
-  }
-
   all(): Binding[] {
     return [...this.byPub.values()].sort((a, b) => a.lane.localeCompare(b.lane) || a.pub.localeCompare(b.pub));
   }

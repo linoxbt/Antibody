@@ -323,3 +323,15 @@ test('B6: an incident whose observation is not indexed yet is deferred and queue
   const res = await scanWallet({ acct: w.setup.accountId, wallet: w.setup.wallet, chain: w.rt.chain, mem: w.rt.memory((await import('../src/core/keys.ts')).laneKeyFromSeedHex(w.readKey('ingest'))), key: (await import('../src/core/keys.ts')).laneKeyFromSeedHex(w.readKey('ingest')), sink, guardians: { coinBlocklist: new Set(), objectBlocklist: new Set(), source: 'none' }, log: w.rt.log, cacheDir: dir, threshold: 0.5 } as never);
   assert.ok(res, 'the scan completes without control');
 });
+
+test('S8: IPC lane lookup ignores hex case and never trusts a stale snapshot for a revoked key', async () => {
+  const w = await world();
+  const keys = (await w.rt.chain.getAccount(w.setup.accountId)).delegateKeys;
+  const ingest = keys.find((k) => k.label === 'antibody:wallet-objects')!.publicKeyHex;
+  assert.equal(await w.control.laneOf(ingest.toUpperCase()), 'wallet-objects');
+  await w.control.snapshot();
+  await w.fixture.admin(w.setup.owner).removeDelegateKey(ingest);
+  // The snapshot is fresh but its account no longer matches the chain once re-read; a removed key is refused.
+  (w.control as unknown as { lastAt: number }).lastAt = 0;
+  assert.equal(await w.control.laneOf(ingest), undefined);
+});

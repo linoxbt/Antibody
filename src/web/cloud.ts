@@ -85,7 +85,7 @@ export class Metrics {
 }
 
 /** Fixed route names for metrics labels (never raw paths). */
-const ROUTES = new Set(['/healthz', '/metrics', '/api/auth/status', '/api/auth/challenge', '/api/auth/wallet', '/api/auth/logout', '/api/state', '/api/blast', '/api/preview', '/api/quarantine', '/api/report', '/api/run', '/api/rebuild', '/api/revoke/prepare', '/api/revoke/submit', '/api/sandbox/attack', '/api/sandbox/payee', '/api/sandbox/reset']);
+const ROUTES = new Set(['/healthz', '/metrics', '/api/auth/status', '/api/auth/challenge', '/api/auth/wallet', '/api/auth/logout', '/api/state', '/api/preview', '/api/quarantine', '/api/report', '/api/run', '/api/rebuild', '/api/revoke/prepare', '/api/revoke/submit', '/api/sandbox/attack', '/api/sandbox/payee', '/api/sandbox/reset']);
 const routeOf = (p: string) => (ROUTES.has(p) ? p : p.startsWith('/api/') ? '/api/other' : 'static');
 
 const CANONICAL = /^0x[0-9a-f]{64}$/;
@@ -379,14 +379,6 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
 
       if (req.method === 'GET' && url.pathname === '/api/state') {
         return send(200, await tenants.run(me, async ({ world }) => ({ ...(await stateJson(world.rt, world.control)), sandbox: true, owner: me })));
-      }
-      if (req.method === 'GET' && url.pathname === '/api/blast') {
-        return send(200, await tenants.run(me, async ({ world }) => {
-          const seq = Number(url.searchParams.get('seq'));
-          if (!Number.isInteger(seq) || seq < 0) throw new AuthError(400, 'seq must be a ledger sequence number');
-          const r = await world.control.blast(seq);
-          return { seq: r.seedSeq, sources: r.sources, memories: r.memories.map((m) => m.id), decisions: r.decisions.map((m) => m.id), txDigests: r.txDigests, edges: r.edges };
-        }));
       }
       if (req.method !== 'POST') return send(404, { error: 'not found' });
 

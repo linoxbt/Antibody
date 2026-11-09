@@ -48,7 +48,7 @@ function nativeTransport(url: string, meta: Record<string, string>, timeoutMs: n
   return new RateLimitRetry(new GrpcTransport({ host, channelCredentials, meta, ...(timeoutMs ? { timeout: timeoutMs } : {}) }));
 }
 
-export function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey' | 'grpcWire'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {
+function createSuiClient(o: Pick<SdkChainOptions, 'transport' | 'network' | 'url' | 'apiKey' | 'grpcWire'>, timeoutMs: number | null = CHAIN_CALL_TIMEOUT_MS): AnyClient {
   // Tatum takes the key as x-api-key (gRPC metadata or an HTTP header).
   const headers: Record<string, string> = o.apiKey ? { 'x-api-key': o.apiKey } : {};
   if (o.transport === 'grpc') {

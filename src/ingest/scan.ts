@@ -100,7 +100,7 @@ async function deliver(d: IngestDeps, p: IncidentPayload): Promise<Incident | nu
 }
 
 /** Retry queued incidents (oldest first); keeps what still fails. */
-export async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
+async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
   if (!d.sink) return [];
   const box = outbox(d);
   const out: Incident[] = [];

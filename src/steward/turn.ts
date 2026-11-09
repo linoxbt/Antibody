@@ -204,5 +204,13 @@ export async function runTurn(d: StewardDeps, instruction: string): Promise<Turn
 }
 
 function verdictForModel(r: DecisionResult) {
-  return { decision: r.verdict.decision, code: r.verdict.code, reasons: r.verdict.reasons, txDigest: r.txDigest, dryRunOnly: r.dryRunOnly };
+  // A plain status line too, so the model does not tell the human a dry run was paid or queued.
+  const status = r.executed
+    ? `paid: transaction ${r.txDigest}`
+    : r.verdict.decision === 'BLOCK'
+      ? 'blocked: nothing was signed or sent'
+      : r.dryRunOnly
+        ? 'approved in a dry run only: nothing was paid, signed or queued; the human pays by running Steward with --execute'
+        : 'not paid';
+  return { decision: r.verdict.decision, code: r.verdict.code, reasons: r.verdict.reasons, txDigest: r.txDigest, dryRunOnly: r.dryRunOnly, status };
 }

@@ -87,6 +87,7 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
   const safety = setInterval(() => trigger(Math.max(want, lastScanned) + 1, 'safety'), safetyScanMs);
   safety.unref?.();
   let quickEnds = 0;
+  let rateLimited = 0;
   while (!o.signal.aborted) {
     if (o.chain.watchCheckpoints && mode === 'stream') {
       log('stream.open', { wallet: o.wallet });
@@ -112,6 +113,7 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
           log('stream.stale', { silentMs: Date.now() - lastMsg });
           continue;
         }
+        rateLimited = 0;
         log('stream.end');
         // B24: a stream that keeps ending at once must not spin: back off, then fall back to polling.
         quickEnds = Date.now() - opened < 5_000 ? quickEnds + 1 : 0;
@@ -126,7 +128,15 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
           log('stream.stale', { silentMs: Date.now() - lastMsg });
           continue;
         }
-        log('stream.error', { error: (e as Error).message, fallback: 'poll' });
+        // A rate limit (Tatum answers 429 when several daemons start at once) is brief: poll
+        // meanwhile, but try the stream again soon, backing off, instead of after retryStreamMs.
+        if (/\b429\b|RESOURCE_EXHAUSTED|too many requests/i.test((e as Error).message)) {
+          rateLimited = Math.min(rateLimited + 1, 5);
+          log('stream.rate_limited', { error: (e as Error).message, fallback: 'poll', retryInMs: Math.min(retryStreamMs, 10_000 * 2 ** (rateLimited - 1)) });
+        } else {
+          rateLimited = 0;
+          log('stream.error', { error: (e as Error).message, fallback: 'poll' });
+        }
         mode = 'poll';
       } finally {
         clearInterval(dog);
@@ -135,7 +145,7 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
       continue;
     }
     // Poll, and give streaming another chance after a while.
-    const until = Date.now() + (o.chain.watchCheckpoints ? retryStreamMs : Infinity);
+    const until = Date.now() + (o.chain.watchCheckpoints ? (rateLimited ? Math.min(retryStreamMs, 10_000 * 2 ** (rateLimited - 1)) : retryStreamMs) : Infinity);
     let lastPollScan = 0;
     while (!o.signal.aborted && Date.now() < until) {
       try {

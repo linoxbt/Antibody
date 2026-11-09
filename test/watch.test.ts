@@ -200,3 +200,24 @@ test('B15: the Guardians lists refresh in the background once stale, and a faile
   await new Promise((r) => setTimeout(r, 10));
   assert.ok(g.current()!.coinBlocklist.has('c2'), 'a failed refresh keeps the previous lists');
 });
+
+test('a rate-limited stream is retried within seconds, not after the long polling window', async () => {
+  const { watchWallet } = await import('../src/ingest/watch.ts');
+  let opens = 0;
+  const ac = new AbortController();
+  const chain = {
+    latestCheckpoint: async () => 1,
+    watchCheckpoints: async (_a: string, _cb: (n: number) => void, signal: AbortSignal) => {
+      opens++;
+      if (opens === 1) throw new Error('Received HTTP status code 429');
+      await new Promise<void>((r) => signal.addEventListener('abort', () => r(), { once: true }));
+    },
+  };
+  const t0 = Date.now();
+  const run = watchWallet({ chain: chain as never, wallet: '0x1', scan: async () => ({ items: [], skipped: 0 }) as never, signal: ac.signal, pollMs: 20, retryStreamMs: 600_000 } as never);
+  while (opens < 2 && Date.now() - t0 < 15_000) await new Promise((r) => setTimeout(r, 50));
+  ac.abort();
+  await run.catch(() => undefined);
+  assert.equal(opens, 2, 'the stream was reopened');
+  assert.ok(Date.now() - t0 < 15_000);
+});

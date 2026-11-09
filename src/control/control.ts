@@ -58,7 +58,8 @@ const LEDGER_USER_RESERVE = 250;
 
 const incidentSchema = z
   .object({
-    objectId: z.string().min(1).max(256),
+    // S2: an incident names a Sui object, never a memory id or any other identifier.
+    objectId: z.string().regex(/^0x[0-9a-fA-F]{1,64}$/, 'objectId must be a Sui object id').transform((v) => normalizeSuiAddress(v)),
     observationId: z.string().regex(UUID_RE).nullable(),
     coinType: z.string().max(512).optional(),
     sender: z.string().max(80).optional(),
@@ -66,7 +67,7 @@ const incidentSchema = z
     rules: z.array(z.string().max(200)).max(32),
     lessonMatches: z.array(z.object({ lessonSeq: z.number().int().nonnegative(), indicator: z.string().max(16), value: z.string().max(512) }).strict()).max(32),
     blocklisted: z.boolean(),
-    proposedSeed: z.object({ type: z.literal('source'), value: z.string().min(1).max(256) }).strict(),
+    proposedSeed: z.object({ type: z.literal('source'), value: z.string().regex(/^0x[0-9a-fA-F]{1,64}$/).transform((v) => normalizeSuiAddress(v)) }).strict(),
   })
   .strict();
 
@@ -788,6 +789,9 @@ export class Control {
     if (!obs || !h || h.lane !== 'wallet-objects' || h.kind !== 'observation' || !h.src.some((r) => srcIdentifiers(r).includes(normalizeIdentifierSafe(i.objectId)))) {
       throw new Error('incident rejected: it does not cite a verified wallet-objects observation of that object');
     }
+    // S2: the object must really be in Steward's wallet: the ingest key cannot invent one.
+    const owned = await this.d.chain.listOwnedObjects(this.d.wallet);
+    if (!owned.some((o) => normalizeIdentifierSafe(o.objectId) === i.objectId)) throw new Error(`incident rejected: ${i.objectId} is not an object in Steward's wallet`);
     const sender = h.src.find((r) => r.t === 'sender')?.addr;
     const coinType = h.src.find((r) => r.t === 'coin-type')?.type;
     const objectType = h.src.find((r) => r.t === 'sui-object')?.type;

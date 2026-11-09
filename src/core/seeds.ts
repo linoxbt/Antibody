@@ -45,7 +45,9 @@ export function seedMatches(seed: QuarantineSeed, h: EnvelopeHeader): boolean {
     case 'memory':
       return h.id === seed.value;
     case 'source':
-      return h.src.some((r) => srcIdentifiers(r).includes(seed.value));
+      // S2: a source seed names something outside (an object, coin type, sender, tx, URL).
+      // A human's own message id is not a source; quarantine it with a memory seed.
+      return h.src.some((r) => r.t !== 'user-msg' && srcIdentifiers(r).includes(seed.value));
     case 'signer-window':
       return h.pub === seed.value && h.ckpt >= (seed.from ?? 0) && (seed.to === undefined || h.ckpt <= seed.to);
     case 'turn':

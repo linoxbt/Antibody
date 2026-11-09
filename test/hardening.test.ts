@@ -258,3 +258,25 @@ test('B4: oversized or malformed proposals are refused before they reach policy 
   await assert.rejects(w.control.propose({ turn: 't', readSet: [], proposal: { recipient: '0x1', amount: '1', reason: 'x'.repeat(5000) }, execute: false }));
   await assert.rejects(w.control.propose({ turn: 't', readSet: [], proposal: { recipient: '0x1', amount: '1', reason: 'r', extra: 1 } as never, execute: false }));
 });
+
+test('S2: the ingest key cannot quarantine a user statement through a forged observation', async () => {
+  const { buildEnvelope } = await import('../src/core/envelope.ts');
+  const { uuidv7 } = await import('../src/core/encoding.ts');
+  const { laneKeyFromSeedHex } = await import('../src/core/keys.ts');
+  const { NS_CONTENT } = await import('../src/core/types.ts');
+  const w = await world();
+  const st = await w.statement('My landlord is at 0x7a11ce.');
+  const ingest = laneKeyFromSeedHex(w.readKey('ingest'));
+  const forge = async (objectId: string) => {
+    const id = uuidv7(Date.now());
+    const env = buildEnvelope({ id, acct: w.setup.accountId, ns: NS_CONTENT, lane: 'wallet-objects', kind: 'observation', src: [{ t: 'sui-object', id: objectId, type: '0x2::coin::Coin<0x9::bad::BAD>' }], ckpt: await w.rt.chain.latestCheckpoint(), ts: new Date().toISOString(), text: 'Observed in Steward wallet: coin' }, ingest);
+    await w.rt.memory(ingest).remember(env.text, NS_CONTENT, id);
+    return w.control.incident({ objectId, observationId: id, score: 1, rules: [], lessonMatches: [], blocklisted: true, proposedSeed: { type: 'source', value: objectId } });
+  };
+  await assert.rejects(forge(st.id), /Sui object id/);
+  await assert.rejects(forge('0x' + 'ab'.repeat(32)), /not an object in Steward's wallet/);
+  // Even a human source seed naming the statement's own id does not reach it: that is what memory seeds are for.
+  await w.quarantine({ type: 'source', value: st.id }).catch(() => undefined);
+  const snap = await w.control.snapshot();
+  assert.equal(snap.projection.lineage.nodes.get(st.id)!.quarantined, false);
+});

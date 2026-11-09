@@ -38,12 +38,15 @@ const time = async <T>(step: string, fn: () => Promise<T>): Promise<T> => {
   }
 };
 
+let n = 1;
 async function visitor(base: string): Promise<void> {
   const kp = Ed25519Keypair.generate();
   let cookie = '';
+  // Each visitor is its own client (the sandbox limits new worlds per client, S6).
+  const ip = `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n++ & 255}`;
   const call = async (step: string, path: string, body?: unknown) =>
     time(step, async () => {
-      const r = await fetch(base + path, body === undefined ? { headers: { cookie } } : { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1', cookie }, body: JSON.stringify(body) });
+      const r = await fetch(base + path, body === undefined ? { headers: { cookie, 'x-forwarded-for': ip } } : { method: 'POST', headers: { 'content-type': 'application/json', 'x-antibody-ui': '1', cookie, 'x-forwarded-for': ip }, body: JSON.stringify(body) });
       if (!r.ok) {
         const k = `${step} ${r.status}`;
         errors.set(k, (errors.get(k) ?? 0) + 1);

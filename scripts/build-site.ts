@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CAST, createWorld, POISON_COIN, seedBaseline, type World } from '../src/dev/world.ts';
 import { buildControl } from '../src/services.ts';
+import { cacheDir } from '../src/config.ts';
 import { startBillServer } from '../src/payments/x402-server.ts';
 import { suiNetworkId } from '../src/payments/x402.ts';
 import { stateJson } from '../src/web/server.ts';
@@ -87,7 +88,7 @@ async function main() {
 
     const q = await w.quarantine({ type: 'source', value: coin.objectId }, 'poisoned coin metadata (USDC Rewards)');
     const published = await w.control.report(q.seq); // FR-14: the incident report, published (locally, SIMULATED)
-    reportFiles.set(published.upload.filename, readFileSync(published.upload.url.slice('file://'.length), 'utf8'));
+    reportFiles.set(published.upload.filename, readFileSync(join(cacheDir(w.cfg), 'reports', published.upload.filename), 'utf8'));
     await snap({
       time: '1:40',
       title: 'Quarantined.',

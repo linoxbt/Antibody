@@ -122,7 +122,7 @@ export class Tenants {
   private created: number[] = [];
   /** S6: new worlds per client per hour, so one client cannot use up the hourly budget. */
   private createdBy = new Map<string, number[]>();
-  private readonly newPerClientPerHour = 3;
+  private readonly newPerClientPerHour = 5;
   readonly metrics: Metrics;
 
   constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute' | 'globalRatePerMinute' | 'newTenantsPerHour' | 'idleDays' | 'resetsPerHour'>, metrics = new Metrics()) {

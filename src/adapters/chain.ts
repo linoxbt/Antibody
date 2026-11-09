@@ -35,6 +35,10 @@ export interface TxInfo {
   checkpoint: number | null;
   timestampMs: number | null;
   balanceChanges: { address: string; coinType: string; amount: string }[];
+  /** S5: what the transaction did, when the reader returns it: Move calls as "module::function", object inputs, pure inputs (hex). */
+  moveCalls?: string[];
+  objectInputs?: string[];
+  pureInputsHex?: string[];
 }
 
 export interface TransferRequest {

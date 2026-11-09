@@ -250,8 +250,13 @@ function toTxInfo(r: { $kind: string; Transaction?: unknown; FailedTransaction?:
     timestampMs: number | null;
     status: { success: boolean; error: unknown };
     balanceChanges?: { address: string; coinType: string; amount: string }[];
-    transaction?: { sender?: string };
+    transaction?: {
+      sender?: string;
+      commands?: { MoveCall?: { module: string; function: string } }[];
+      inputs?: { Object?: { SharedObject?: { objectId: string }; ImmOrOwnedObject?: { objectId: string } }; Pure?: { bytes: string } }[];
+    };
   };
+  const tx = t.transaction;
   return {
     digest: t.digest,
     ok: t.status.success,
@@ -260,5 +265,15 @@ function toTxInfo(r: { $kind: string; Transaction?: unknown; FailedTransaction?:
     checkpoint: t.checkpoint === null ? null : Number(t.checkpoint),
     timestampMs: t.timestampMs,
     balanceChanges: (t.balanceChanges ?? []).map((b) => ({ address: normalizeSuiAddress(b.address), coinType: normalizeCoinType(b.coinType), amount: b.amount })),
+    ...(tx?.commands
+      ? {
+          moveCalls: tx.commands.flatMap((c) => (c.MoveCall ? [`${c.MoveCall.module}::${c.MoveCall.function}`] : [])),
+          objectInputs: (tx.inputs ?? []).flatMap((i) => {
+            const id = i.Object?.SharedObject?.objectId ?? i.Object?.ImmOrOwnedObject?.objectId;
+            return id ? [normalizeSuiAddress(id)] : [];
+          }),
+          pureInputsHex: (tx.inputs ?? []).flatMap((i) => (i.Pure ? [Buffer.from(i.Pure.bytes, 'base64').toString('hex')] : [])),
+        }
+      : {}),
   };
 }

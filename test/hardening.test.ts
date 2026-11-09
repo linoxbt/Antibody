@@ -292,3 +292,16 @@ test('S4: a decision with untrusted lineage is labelled as such, and the modelâ€
   const body = snap.projection.lineage.nodes.get(r.decisionId)!.env.body;
   assert.ok(!/\nVerdict: ALLOW/.test(body) && !/\nRules: all pass/.test(body), 'model text cannot forge a line');
 });
+
+test('S5: a revoke must cite the ownerâ€™s remove_delegate_key call for that very key on this account', async () => {
+  const w = await world();
+  const keys = (await w.rt.chain.getAccount(w.setup.accountId)).delegateKeys;
+  const agent = keys.find((k) => k.label === 'antibody:agent')!.publicKeyHex;
+  const ingest = keys.find((k) => k.label === 'antibody:wallet-objects')!.publicKeyHex;
+  const admin = w.fixture.admin(w.setup.owner);
+  const { digest: addOther } = await admin.addDelegateKey('ab'.repeat(32), 'antibody:agent');
+  const { digest: rmIngest } = await admin.removeDelegateKey(ingest);
+  await admin.removeDelegateKey(agent);
+  await assert.rejects(w.control.recordRevoke(agent, 'agent', addOther), /does not call account::remove_delegate_key/);
+  await assert.rejects(w.control.recordRevoke(agent, 'agent', rmIngest), /does not name key/);
+});

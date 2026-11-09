@@ -874,7 +874,7 @@ export class Control {
   async recordRevoke(pub: string, lane: Lane, digest: string): Promise<{ seq: number }> {
     const account = await this.d.chain.getAccount(this.d.acct);
     if (account.delegateKeys.some((k) => k.publicKeyHex === pub)) throw new Error('key is still in delegate_keys on-chain; revocation not confirmed');
-    const tx = await this.ownerTx(digest, account.owner, 'remove_delegate_key');
+    const tx = await this.ownerTx(digest, account.owner, 'remove_delegate_key', pub);
     // M7: bound the key at the removal's own checkpoint, not "now" (which would widen its window).
     const ckpt = tx.checkpoint ?? (await this.d.chain.latestCheckpoint());
     // The key's earlier records stay valid only once this revoke exists, so append it under that assumption.
@@ -885,15 +885,24 @@ export class Control {
     const account = await this.d.chain.getAccount(this.d.acct);
     const k = account.delegateKeys.find((x) => x.publicKeyHex === pub);
     if (!k || k.label !== LANE_LABEL[lane]) throw new Error(`new key is not on-chain with label ${LANE_LABEL[lane]}`);
-    const tx = await this.ownerTx(digest, account.owner, 'add_delegate_key');
+    const tx = await this.ownerTx(digest, account.owner, 'add_delegate_key', pub);
     return this.writeOwn('lane.rotate', { pub, label: LANE_LABEL[lane], digest, ckpt: tx.checkpoint ?? (await this.d.chain.latestCheckpoint()) });
   }
 
   /** M7: the digest must be a successful transaction sent by the account owner. */
-  private async ownerTx(digest: string, owner: string, what: string): Promise<TxInfo> {
-    const tx = await this.d.chain.getTransaction(digest);
+  /**
+   * S5: and it must be the call being recorded: account::<what> on this
+   * account, naming this key. A reader that cannot show the transaction's
+   * contents, or a missing sender, fails closed.
+   */
+  private async ownerTx(digest: string, owner: string, what: 'add_delegate_key' | 'remove_delegate_key', pub: string): Promise<TxInfo> {
+    const tx = await this.waitForTx(digest, 10_000);
     if (!tx || !tx.ok) throw new Error(`${what} transaction ${digest} not found or failed`);
-    if (tx.sender && normalizeSuiAddress(tx.sender) !== normalizeSuiAddress(owner)) throw new Error(`${what} transaction ${digest} was not sent by the account owner`);
+    if (!tx.sender || normalizeSuiAddress(tx.sender) !== normalizeSuiAddress(owner)) throw new Error(`${what} transaction ${digest} was not sent by the account owner`);
+    if (!tx.moveCalls || !tx.objectInputs || !tx.pureInputsHex) throw new Error(`cannot read what transaction ${digest} did; refusing to record it`);
+    if (!tx.moveCalls.includes(`account::${what}`)) throw new Error(`transaction ${digest} does not call account::${what}`);
+    if (!tx.objectInputs.includes(normalizeSuiAddress(this.d.acct))) throw new Error(`transaction ${digest} does not act on this account`);
+    if (!tx.pureInputsHex.some((h) => h.toLowerCase().includes(pub.toLowerCase()))) throw new Error(`transaction ${digest} does not name key ${pub.slice(0, 12)}…`);
     return tx;
   }
 

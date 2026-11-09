@@ -261,7 +261,10 @@ function recordTx(s: FixtureState, sender: string, what: string, balanceChanges:
   s.seq++;
   s.checkpoint++;
   const digest = base58ish(sha256Hex(`${s.seq}:${what}`));
-  s.txs[digest] = { digest, ok: true, sender, checkpoint: s.checkpoint, timestampMs: null, balanceChanges };
+  // Delegate-key calls look like the real ones: account::<fn>(account, …, pub as BCS vector<u8>).
+  const m = /^(add_delegate_key|remove_delegate_key) ([0-9a-f]{64})$/.exec(what);
+  const call = m && s.account ? { moveCalls: [`account::${m[1]}`], objectInputs: [normalizeSuiAddress(s.account.accountId)], pureInputsHex: ['20' + m[2]] } : {};
+  s.txs[digest] = { digest, ok: true, sender, checkpoint: s.checkpoint, timestampMs: null, balanceChanges, ...call };
   return digest;
 }
 

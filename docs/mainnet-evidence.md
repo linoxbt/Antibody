@@ -1,6 +1,6 @@
 # Antibody · mainnet evidence
 
-Generated 2026-11-09T19:17:32.752Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 343459261.
+Generated 2026-11-09T20:09:23.089Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 343472043.
 
 ## Submission form
 
@@ -10,7 +10,7 @@ Generated 2026-11-09T19:17:32.752Z by `antibody evidence`. Chain reads via tatum
 | SUI address (owner) | [`0xd8d6ea54011cfa35a1538fa47219caa13066a68b9a16a7e74e7987f6927f3215`](https://suiscan.xyz/mainnet/account/0xd8d6ea54011cfa35a1538fa47219caa13066a68b9a16a7e74e7987f6927f3215) |
 | MEMWAL_AGENT_ID (Steward's `antibody:agent` delegate key) | `03ec6e75b908ce079af66d2fb0c212112e8ebb8effccad407f4e9c03c2639dab` |
 | Steward's wallet | [`0x8a57ec1f69b28d25f79ce882b3affdae85b5058d298b186717bef125b1d0a5cb`](https://suiscan.xyz/mainnet/account/0x8a57ec1f69b28d25f79ce882b3affdae85b5058d298b186717bef125b1d0a5cb) |
-| Memories on Walrus | **23** (13 memories + 10 ledger records) |
+| Memories on Walrus | **25** (15 memories + 10 ledger records) |
 
 ## Lanes (delegate keys on the account)
 
@@ -57,7 +57,7 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 | Lane · kind | Count |
 | --- | --- |
 | agent · note | 1 |
-| antibody · decision | 6 |
+| antibody · decision | 8 |
 | user · statement | 2 |
 | wallet-objects · observation | 4 |
 
@@ -78,6 +78,8 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 | `01a1ac9a-a5dc-7434-9f21-b2b8ca1ef78c` | antibody · decision | untrusted | [`Mp0u-SQ3QQOAIIdeTWXUFo2KlMCRpqClzlugiTkqX4k`](https://walruscan.com/mainnet/blob/Mp0u-SQ3QQOAIIdeTWXUFo2KlMCRpqClzlugiTkqX4k) |
 | `01a1ac94-0a24-7590-9c8c-c27c9c188854` | agent · note | untrusted (quarantined) | [`QvSMC_eKfP4W2v0nSIhnI9jib6D0oMhjVWwk8d-bkn8`](https://walruscan.com/mainnet/blob/QvSMC_eKfP4W2v0nSIhnI9jib6D0oMhjVWwk8d-bkn8) |
 | `01a1ac94-7574-7052-9691-0ec182abcab3` | antibody · decision | untrusted (quarantined) | [`qPY_9clxMbSXPcMhIeJ4-agElaN10efcu-NZ6ix6q7g`](https://walruscan.com/mainnet/blob/qPY_9clxMbSXPcMhIeJ4-agElaN10efcu-NZ6ix6q7g) |
+| `01a1c1ea-2ca0-7678-97a8-8605572cc8c4` | antibody · decision | untrusted | [`zDccCRiFeVjBOtlURvRqcTnn6m7RLg-wTJfrb5J6kyg`](https://walruscan.com/mainnet/blob/zDccCRiFeVjBOtlURvRqcTnn6m7RLg-wTJfrb5J6kyg) |
+| `01a1c1eb-a532-7f83-8672-3541974fcfdb` | antibody · decision | untrusted | [`7jnpY8vT5g4XNwB0ebcUC16V6kiOXlrd1lKkiXUDUTM`](https://walruscan.com/mainnet/blob/7jnpY8vT5g4XNwB0ebcUC16V6kiOXlrd1lKkiXUDUTM) |
 
 </details>
 
@@ -95,7 +97,7 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 
 ## Restore
 
-Projection digest (this machine, with its cache): `5a58832605ec91dcb853763e1032c50db258b97f5feb0a9f6184b328e9caa3c3`
-Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, 2026-11-09T19:17:32.750Z): `5a58832605ec91dcb853763e1032c50db258b97f5feb0a9f6184b328e9caa3c3`
+Projection digest (this machine, with its cache): `55536b3c099d68c4388c61b9d23193cb5d313a6391625ce68daad29e6fb5d82f`
+Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, 2026-11-09T20:09:23.088Z): `55536b3c099d68c4388c61b9d23193cb5d313a6391625ce68daad29e6fb5d82f`
 
-**Match.** The fresh rebuild read 13 memories in 2 recall queries (6.8 s) and reached the same state.
+**Match.** The fresh rebuild read 15 memories in 2 recall queries (5.8 s) and reached the same state.

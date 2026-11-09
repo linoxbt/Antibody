@@ -192,3 +192,69 @@ test('B1: the sentinel keeps its state in its own directory and carries over see
   await w2.scan();
   assert.ok('0xlegacy' in JSON.parse(readFileSync(join(w2.cfg.home, 'ingest', 'ingest-seen.json'), 'utf8')));
 });
+
+test('B2: a signer that broadcast and then failed is reconciled from the chain, not left unknown', async () => {
+  const w = await world();
+  const signer = w.control.d.signer as unknown as { call: (...a: unknown[]) => Promise<unknown> };
+  const real = signer.call.bind(signer);
+  signer.call = async (...a: unknown[]) => {
+    await real(...a);
+    throw new Error('socket hang up');
+  };
+  const r = await w.steward(RENT, { execute: true });
+  assert.equal(r.decisions[0]!.executed, true, 'the expected digest was found on-chain');
+  const e = w.control.payments.list()[0]!;
+  assert.equal(e.status, 'executed');
+  assert.equal(e.resolvedBy, 'chain');
+  assert.equal(e.digest, r.decisions[0]!.txDigest);
+});
+
+test('B2: an unknown payment blocks repeats until a human resolves it; resolving needs a real key', async () => {
+  const w = await world();
+  const signer = w.control.d.signer as unknown as { call: () => Promise<never> };
+  signer.call = async () => {
+    throw new Error('socket hang up');
+  };
+  await w.steward(RENT, { execute: true });
+  const e = w.control.payments.list()[0]!;
+  assert.equal(e.status, 'unknown');
+  assert.ok(e.digest, 'the digest is known before signing');
+  assert.deepEqual((await w.control.reconcilePayments()).map((x) => x.status), ['unknown']);
+  assert.throws(() => w.control.resolvePayment('abc', 'failed'), /at least 8/);
+  w.control.resolvePayment(e.key.slice(0, 12), 'failed');
+  assert.equal(w.control.payments.list()[0]!.resolvedBy, 'human');
+  assert.throws(() => w.control.resolvePayment(e.key.slice(0, 12), 'executed'), /already failed/);
+});
+
+test('B4: a decision the relayer could not store after a payment is queued and stored before the next payment', async () => {
+  const w = await world();
+  const mem = w.control.d.mem as unknown as { remember: (...a: unknown[]) => Promise<{ blobId: string }> };
+  const real = mem.remember.bind(mem);
+  let fail = false;
+  mem.remember = async (...a: unknown[]) => {
+    if (fail) {
+      fail = false;
+      throw new Error('relayer 503');
+    }
+    return real(...a);
+  };
+  const signer = w.control.d.signer as unknown as { call: (...a: unknown[]) => Promise<unknown> };
+  const realSign = signer.call.bind(signer);
+  signer.call = async (...a: unknown[]) => {
+    const out = await realSign(...a);
+    fail = true; // the decision write right after this payment fails
+    return out;
+  };
+  const r = await w.steward(RENT, { execute: true });
+  assert.equal(r.decisions[0]!.executed, true);
+  assert.equal(w.control.decisionOutbox.list().length, 1);
+  assert.equal(await w.control.flushDecisions(), 0);
+  const snap = await w.control.snapshot();
+  assert.ok([...snap.projection.lineage.nodes.values()].some((n) => n.env.header.kind === 'decision' && n.env.body.includes(r.decisions[0]!.txDigest!)));
+});
+
+test('B4: oversized or malformed proposals are refused before they reach policy or a decision record', async () => {
+  const w = await world();
+  await assert.rejects(w.control.propose({ turn: 't', readSet: [], proposal: { recipient: '0x1', amount: '1', reason: 'x'.repeat(5000) }, execute: false }));
+  await assert.rejects(w.control.propose({ turn: 't', readSet: [], proposal: { recipient: '0x1', amount: '1', reason: 'r', extra: 1 } as never, execute: false }));
+});

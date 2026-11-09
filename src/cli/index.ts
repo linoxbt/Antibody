@@ -598,6 +598,39 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
 
+    case 'payments': {
+      // B2: payments whose outcome was never settled (crash, signer timeout, slow facilitator).
+      const r = rt('control');
+      const control = buildControl(r, { signer: null });
+      const show = (e: { key: string; status: string; amount: string; coinType: string; recipient: string; digest?: string; at: number; error?: string; resolvedBy?: string }) =>
+        `${e.key.slice(0, 12)}  ${(e.status === 'executed' ? green : e.status === 'failed' ? dim : yellow)(e.status.padEnd(8))}  ${e.amount} ${e.coinType.split('::').pop()} → ${short(e.recipient, 10)}  ${e.digest ?? 'no digest'}  ${new Date(e.at).toISOString()}${e.resolvedBy ? `  (resolved by ${e.resolvedBy})` : ''}${e.error ? `\n              ${dim(e.error.slice(0, 160))}` : ''}`;
+      if (!sub || sub === 'list') {
+        const all = control.payments.list();
+        if (all.length === 0) console.log(dim('no payments signed on this machine yet'));
+        for (const e of all) console.log(show(e));
+        const waiting = control.decisionOutbox.list().length;
+        if (waiting) console.log(yellow(`${waiting} decision record(s) queued locally, stored before the next payment`));
+        return;
+      }
+      if (sub === 'reconcile') {
+        const out = await control.reconcilePayments({ waitMs: 10_000 });
+        const left = await control.flushDecisions();
+        if (out.length === 0) console.log(green('no unsettled payments'));
+        for (const x of out) console.log(`${x.key.slice(0, 12)}  ${x.status}${x.digest ? `  ${x.digest}` : ''}`);
+        if (out.some((x) => x.status === 'unknown' || x.status === 'pending')) console.log(yellow('Not on-chain yet. Check the wallet, then: antibody payments resolve <key> --executed | --failed'));
+        if (left) console.log(yellow(`${left} decision record(s) still queued (relayer unreachable)`));
+        return;
+      }
+      if (sub === 'resolve') {
+        const { values, positionals } = opts(rest, { executed: { type: 'boolean', default: false }, failed: { type: 'boolean', default: false } });
+        if (!positionals[0] || values.executed === values.failed) throw new Error('usage: antibody payments resolve <key> --executed | --failed');
+        const e = control.resolvePayment(positionals[0], values.executed ? 'executed' : 'failed');
+        console.log(green(`payment ${e.key.slice(0, 12)} marked ${e.status}`));
+        return;
+      }
+      throw new Error('usage: antibody payments [list | reconcile | resolve <key> --executed|--failed]');
+    }
+
     case 'verify-ledger': {
       const r = rt('control');
       const { values } = opts([sub ?? '', ...rest].filter(Boolean), { accept: { type: 'boolean', default: false } });
@@ -1194,6 +1227,8 @@ Control (antibody key)
   antibody verify-ledger [--accept]           completeness, integrity, rollback; --accept confirms a first sync
   antibody report <seq>                       incident JSON via the Tatum Storage API
   antibody lessons | incidents | restore-index
+  antibody payments [list | reconcile]       signed payments; settle unknown outcomes from the chain
+  antibody payments resolve <key> --executed | --failed   a human settles one the chain cannot (yet) show
 
 Dev (offline backend)
   antibody dev airdrop [--name … --description …]

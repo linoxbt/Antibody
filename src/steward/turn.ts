@@ -22,7 +22,7 @@ import type { ChatMessage, ChatModel, ToolDef } from './model.ts';
 export interface StewardControl {
   recall(query: string, turn: string): Promise<ContextItem[]>;
   propose(args: { turn: string; readSet: string[]; proposal: ModelProposal; execute: boolean }): Promise<DecisionResult>;
-  payX402(args: { turn: string; readSet: string[]; url: string; payeeLabel?: string; reason: string }): Promise<DecisionResult & { httpStatus: number }>;
+  payX402(args: { turn: string; readSet: string[]; url: string; payeeLabel?: string; reason: string; execute: boolean }): Promise<DecisionResult & { httpStatus: number }>;
 }
 
 export interface StewardDeps {
@@ -177,13 +177,13 @@ export async function runTurn(d: StewardDeps, instruction: string): Promise<Turn
         return { saved: id, parents };
       }
       case 'propose_payment': {
-        const cites = Array.isArray(args.cites) ? (args.cites as unknown[]).filter((c): c is string => typeof c === 'string') : undefined;
+        const cites = Array.isArray(args.cites) ? (args.cites as unknown[]).filter((c): c is string => typeof c === 'string').map((c) => c.slice(0, 64)).slice(0, 32) : undefined;
         const proposal: ModelProposal = {
           recipient: str('recipient') ?? '',
           amount: str('amount') ?? String(args.amount ?? ''),
           ...(str('coinType') ? { coinType: str('coinType')! } : {}),
-          ...(str('payeeLabel') ? { payeeLabel: str('payeeLabel')! } : {}),
-          reason: str('reason') ?? '',
+          ...(str('payeeLabel') ? { payeeLabel: str('payeeLabel')!.slice(0, 64) } : {}),
+          reason: (str('reason') ?? '').slice(0, 1000),
           ...(cites ? { cites } : {}),
         };
         const r = await d.control.propose({ turn: turnId, readSet: [...readSet], proposal, execute: d.execute });
@@ -193,7 +193,7 @@ export async function runTurn(d: StewardDeps, instruction: string): Promise<Turn
       case 'pay_x402': {
         if (!d.allowX402) return { error: 'pay_x402 is not enabled' };
         external = true;
-        const r = await d.control.payX402({ turn: turnId, readSet: [...readSet], url: str('url') ?? '', ...(str('payeeLabel') ? { payeeLabel: str('payeeLabel')! } : {}), reason: str('reason') ?? '' });
+        const r = await d.control.payX402({ turn: turnId, readSet: [...readSet], url: str('url') ?? '', ...(str('payeeLabel') ? { payeeLabel: str('payeeLabel')!.slice(0, 64) } : {}), reason: (str('reason') ?? '').slice(0, 1000), execute: d.execute });
         decisions.push(r);
         return { ...verdictForModel(r), httpStatus: r.httpStatus };
       }

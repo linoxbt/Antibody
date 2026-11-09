@@ -46,7 +46,7 @@ import type { Logger } from '../log.ts';
 import type { Alert } from '../ops/alerts.ts';
 import { decodeHeader, encodeHeader, HDR_REQUIRED, HDR_RESPONSE, HDR_SIGNATURE, paymentRequiredSchema, selectRequirement, settlementResponseSchema, type PaymentPayload, type SettlementResponse } from '../payments/x402.ts';
 import { retrieveContent, retrieveLedger } from './retrieve.ts';
-import { HighWaterMark, IncidentStore, PaymentLog, ReportLog, TextCache, type Incident } from './store.ts';
+import { DecisionOutbox, HighWaterMark, IncidentStore, PaymentLog, ReportLog, TextCache, type Incident, type PaymentEntry } from './store.ts';
 
 /** Auto-quarantines per hour, and ledger records kept free for the human (S4). */
 const AUTO_QUARANTINE_PER_HOUR = 30;
@@ -69,6 +69,27 @@ const incidentSchema = z
     proposedSeed: z.object({ type: z.literal('source'), value: z.string().min(1).max(256) }).strict(),
   })
   .strict();
+
+/** B4: what the agent lane may send to /propose and /x402/pay; bounded so nothing oversized reaches a decision record. */
+const proposalSchema = z
+  .object({
+    recipient: z.string().max(80),
+    amount: z.string().max(48),
+    coinType: z.string().max(512).optional(),
+    payeeLabel: z.string().max(64).optional(),
+    reason: z.string().max(1000),
+    cites: z.array(z.string().max(64)).max(32).optional(),
+  })
+  .strict();
+const turnSchema = z.string().min(1).max(64);
+const readSetSchema = z.array(z.string().max(64)).max(256);
+export const proposeArgsSchema = z.object({ turn: turnSchema, readSet: readSetSchema, proposal: proposalSchema, execute: z.boolean() }).strict();
+export const x402ArgsSchema = z
+  .object({ turn: turnSchema, readSet: readSetSchema, url: z.string().min(1).max(2048), payeeLabel: z.string().max(64).optional(), reason: z.string().max(1000), execute: z.boolean().default(false) })
+  .strict();
+
+/** How long to wait for a just-submitted transaction to become readable (B2). */
+const TX_WAIT_MS = 30_000;
 
 const normalizeIdentifierSafe = (v: string) => {
   try {
@@ -144,6 +165,7 @@ export class Control {
   readonly incidents: IncidentStore;
   readonly reportLog: ReportLog;
   readonly payments: PaymentLog;
+  readonly decisionOutbox: DecisionOutbox;
   /** Memory ids served to each turn by recallForAgent (M6), most recent 200 turns. */
   private readonly served = new Map<string, Set<string>>();
   private readonly now: () => number;
@@ -156,6 +178,7 @@ export class Control {
     this.incidents = new IncidentStore(d.cacheDir);
     this.reportLog = new ReportLog(d.cacheDir);
     this.payments = new PaymentLog(d.home);
+    this.decisionOutbox = new DecisionOutbox(d.home);
     this.now = d.now ?? Date.now;
   }
 
@@ -432,20 +455,98 @@ export class Control {
     return { key, verdict: { decision: 'BLOCK', code: 'DUPLICATE_PAYMENT', reasons: [why], rules: [...v.rules, { rule: 'R4', pass: false, detail: `duplicate: ${why}` }], ...(v.payeeId ? { payeeId: v.payeeId } : {}) } };
   }
 
+  /** Poll for a transaction until it is readable or `ms` passes (a fresh digest is often not indexed yet). */
+  private async waitForTx(digest: string, ms = TX_WAIT_MS): Promise<TxInfo | null> {
+    const deadline = this.now() + ms;
+    for (let delay = 250; ; delay = Math.min(delay * 2, 4000)) {
+      const tx = await this.d.chain.getTransaction(digest).catch(() => null);
+      if (tx || this.now() >= deadline) return tx;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  /** Did this transaction move exactly this payment out of Steward's wallet? */
+  private credits(tx: TxInfo, e: Pick<PaymentEntry, 'recipient' | 'coinType' | 'amount'>): boolean {
+    return tx.ok && tx.sender === normalizeSuiAddress(this.d.wallet) && tx.balanceChanges.some((b) => b.address === normalizeSuiAddress(e.recipient) && b.coinType === e.coinType && BigInt(b.amount) === BigInt(e.amount));
+  }
+
+  /**
+   * B2: settle payments left pending or unknown (a crash mid-signing, a signer
+   * timeout, a facilitator that answered before the chain did) by looking their
+   * digest up on-chain. Found: executed or failed by what the chain shows.
+   * Not found: left unknown for a human (`antibody payments resolve`), since a
+   * signed transaction may still land.
+   */
+  async reconcilePayments(o: { waitMs?: number } = {}): Promise<{ key: string; digest?: string; status: PaymentEntry['status'] }[]> {
+    const out: { key: string; digest?: string; status: PaymentEntry['status'] }[] = [];
+    for (const e of this.payments.unresolved()) {
+      if (!e.digest) {
+        out.push({ key: e.key, status: e.status });
+        continue;
+      }
+      const tx = o.waitMs ? await this.waitForTx(e.digest, o.waitMs) : await this.d.chain.getTransaction(e.digest).catch(() => null);
+      if (!tx) {
+        out.push({ key: e.key, digest: e.digest, status: e.status });
+        continue;
+      }
+      const status = this.credits(tx, e) ? 'executed' : 'failed';
+      this.payments.put({ ...e, status, resolvedBy: 'chain', ...(status === 'failed' ? { error: tx.error ?? 'on-chain effects do not show this transfer' } : {}) });
+      this.d.log.info('payment.reconciled', { key: e.key, digest: e.digest, status });
+      out.push({ key: e.key, digest: e.digest, status });
+    }
+    return out;
+  }
+
+  /** A human checked the wallet and settles an unknown payment (B2). */
+  resolvePayment(keyOrDigest: string, status: 'executed' | 'failed'): PaymentEntry {
+    const e = this.payments.find(keyOrDigest);
+    if (e.status === 'executed' || e.status === 'failed') throw new Error(`payment ${e.key.slice(0, 12)} is already ${e.status}`);
+    const next: PaymentEntry = { ...e, status, resolvedBy: 'human' };
+    this.payments.put(next);
+    this.d.log.info('payment.resolved', { key: e.key, digest: e.digest, status, by: 'human' });
+    return next;
+  }
+
+  /** B4: store decisions a relayer failure left behind. Returns how many are still waiting. */
+  async flushDecisions(): Promise<number> {
+    for (const d of this.decisionOutbox.list()) {
+      try {
+        const { blobId } = await this.d.mem.remember(d.text, NS_CONTENT, d.id);
+        this.cache.put([{ blobId, namespace: NS_CONTENT, text: d.text }]);
+        this.decisionOutbox.remove(d.id);
+        this.d.log.info('decision.flushed', { envelopeId: d.id, blobId });
+      } catch (e) {
+        this.d.log.warn('decision.outbox', { envelopeId: d.id, error: (e as Error).message });
+      }
+    }
+    return this.decisionOutbox.list().length;
+  }
+
+  /** Before any payment: settle what can be settled, and refuse while a past decision is still unrecorded. */
+  private async prePayment(): Promise<string | null> {
+    if (this.payments.unresolved().length) await this.reconcilePayments().catch(() => undefined);
+    const waiting = await this.flushDecisions();
+    return waiting > 0 ? `${waiting} earlier decision record(s) are not stored on Walrus yet; no new payment until they are` : null;
+  }
+
   /** propose_payment: evaluate, execute through the signer when allowed, record the decision (always, M8). */
-  async propose(args: { turn: string; readSet: string[]; proposal: ModelProposal; execute: boolean }): Promise<DecisionResult> {
+  async propose(raw: { turn: string; readSet: string[]; proposal: ModelProposal; execute: boolean }): Promise<DecisionResult> {
+    const args = proposeArgsSchema.parse(raw);
     return this.serialPayment(async () => {
       let ev = await this.evaluate(args.proposal);
       let txDigest: string | null = null;
       let executed = false;
       let error: string | null = null;
+      const blocked = ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute ? await this.prePayment() : null;
+      if (blocked) ev = { ...ev, verdict: { decision: 'BLOCK', code: 'LEDGER_UNVERIFIED', reasons: [blocked], rules: [...ev.verdict.rules, { rule: 'R0', pass: false, detail: blocked }], ...(ev.verdict.payeeId ? { payeeId: ev.verdict.payeeId } : {}) }, txBytes: null };
       if (ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute) {
         const recipient = args.proposal.recipient.trim();
         const d = this.duplicateVerdict(args.turn, recipient, ev.coinType!, ev.base!, ev.verdict);
         if (d.verdict.decision === 'BLOCK') ev = { ...ev, verdict: d.verdict, txBytes: null };
         else if (!this.d.signer) error = 'no signer configured';
         else {
-          const entry = { key: d.key, turn: args.turn, recipient, coinType: ev.coinType!, amount: ev.base!.toString(), at: this.now() };
+          const expected = this.d.chain.txDigest?.(ev.txBytes);
+          const entry = { key: d.key, turn: args.turn, recipient, coinType: ev.coinType!, amount: ev.base!.toString(), at: this.now(), ...(expected ? { digest: expected } : {}) };
           this.payments.put({ ...entry, status: 'pending' });
           try {
             const r = await this.d.signer.call<{ digest: string; tx: TxInfo }>('/sign', { mode: 'execute', txB64: toBase64(ev.txBytes), expect: { recipient, coinType: ev.coinType, amount: ev.base!.toString() } });
@@ -453,9 +554,17 @@ export class Control {
             executed = r.tx.ok;
             this.payments.put({ ...entry, status: executed ? 'executed' : 'failed', digest: r.digest, ...(r.tx.ok ? {} : { error: r.tx.error ?? 'failed on-chain' }) });
           } catch (e) {
-            // The signer may have broadcast before failing: the outcome is unknown, and a retry is refused until a human checks.
+            // The signer may have broadcast before failing: look the expected digest up before calling it unknown.
             error = `signer: ${(e as Error).message}`;
             this.payments.put({ ...entry, status: /signer refused/.test(error) ? 'failed' : 'unknown', error });
+            if (!/signer refused/.test(error) && expected) {
+              const [r] = (await this.reconcilePayments({ waitMs: 5_000 }).catch(() => [])).filter((x) => x.key === entry.key);
+              if (r?.status === 'executed') {
+                txDigest = expected;
+                executed = true;
+                error = null;
+              }
+            }
           }
         }
       }
@@ -473,7 +582,8 @@ export class Control {
    * The resource body and description are external content and never reach
    * the model or the decision text.
    */
-  async payX402(args: { turn: string; readSet: string[]; url: string; payeeLabel?: string; reason: string }): Promise<DecisionResult & { httpStatus: number; settlement: SettlementResponse | null }> {
+  async payX402(raw: { turn: string; readSet: string[]; url: string; payeeLabel?: string; reason: string; execute?: boolean }): Promise<DecisionResult & { httpStatus: number; settlement: SettlementResponse | null }> {
+    const args = x402ArgsSchema.parse(raw);
     return this.serialPayment(async () => {
       const u = new URL(args.url);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('x402 URL must be http(s)');
@@ -499,12 +609,16 @@ export class Control {
       let txDigest: string | null = null;
       let executed = false;
       let error: string | null = null;
-      if (ev.verdict.decision === 'ALLOW' && ev.txBytes) {
+      // B3: dry-run mode (execute off) evaluates the bill and stops before anything is signed.
+      const blocked = ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute ? await this.prePayment() : null;
+      if (blocked) ev = { ...ev, verdict: { decision: 'BLOCK', code: 'LEDGER_UNVERIFIED', reasons: [blocked], rules: [...ev.verdict.rules, { rule: 'R0', pass: false, detail: blocked }], ...(ev.verdict.payeeId ? { payeeId: ev.verdict.payeeId } : {}) }, txBytes: null };
+      if (ev.verdict.decision === 'ALLOW' && ev.txBytes && args.execute) {
         const d = this.duplicateVerdict(args.turn, req.payTo, coinType, BigInt(req.amount), ev.verdict);
         if (d.verdict.decision === 'BLOCK') ev = { ...ev, verdict: d.verdict, txBytes: null };
         else if (!this.d.signer) error = 'no signer configured';
         else {
-          const entry = { key: d.key, turn: args.turn, recipient: req.payTo, coinType, amount: req.amount, at: this.now() };
+          const expected = this.d.chain.txDigest?.(ev.txBytes);
+          const entry = { key: d.key, turn: args.turn, recipient: req.payTo, coinType, amount: req.amount, at: this.now(), ...(expected ? { digest: expected } : {}) };
           this.payments.put({ ...entry, status: 'pending' });
           try {
             const s = await this.d.signer.call<{ signature: string }>('/sign', { mode: 'sign', txB64: toBase64(ev.txBytes), expect: { recipient: req.payTo, coinType, amount: req.amount } });
@@ -516,13 +630,17 @@ export class Control {
             settlement = rh ? decodeHeader(rh, settlementResponseSchema) : null;
             if (settlement?.success) {
               // B7: the facilitator's word is not enough: the digest must show this exact transfer on-chain.
-              const tx = await this.d.chain.getTransaction(settlement.transaction).catch(() => null);
-              const credited = tx?.balanceChanges.some((b) => b.address === normalizeSuiAddress(req.payTo) && b.coinType === coinType && BigInt(b.amount) === BigInt(req.amount));
-              if (tx?.ok && credited && tx.sender === normalizeSuiAddress(this.d.wallet)) {
-                txDigest = settlement.transaction;
-                executed = true;
-              } else error = `facilitator reported settlement ${settlement.transaction}, but it does not show this transfer on-chain`;
+              // B2: the facilitator may answer before the transaction is readable, so wait for it.
+              if (expected && settlement.transaction !== expected) error = `facilitator reported settlement ${settlement.transaction}, but the signed transaction is ${expected}`;
+              else {
+                const tx = await this.waitForTx(settlement.transaction);
+                if (tx && this.credits(tx, entry)) {
+                  txDigest = settlement.transaction;
+                  executed = true;
+                } else error = `facilitator reported settlement ${settlement.transaction}, but ${tx ? 'it does not show this transfer' : 'it is not on-chain yet'}`;
+              }
             } else error = `settlement failed (HTTP ${httpStatus})`;
+            // Not settled yet is unknown, not failed: the signed transaction may still land (reconciled before the next payment).
             this.payments.put({ ...entry, status: executed ? 'executed' : 'unknown', ...(txDigest ? { digest: txDigest } : {}), ...(error ? { error } : {}) });
           } catch (e) {
             error = `x402: ${(e as Error).message}`;
@@ -531,7 +649,7 @@ export class Control {
         }
       }
       const dec = await this.writeDecision({ turn: args.turn, readSet: args.readSet, proposal, ev, txDigest, executed, channel: `x402 ${u.host}${u.pathname}`, error });
-      return { ...dec, verdict: dec.verdict ?? ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: false, simulated: this.d.simulated, httpStatus, settlement, ...(error ? { error } : {}) };
+      return { ...dec, verdict: dec.verdict ?? ev.verdict, amountBase: ev.base?.toString() ?? null, coinType: ev.coinType, decimals: ev.decimals, executed, txDigest, dryRunOnly: ev.verdict.decision === 'ALLOW' && !args.execute, simulated: this.d.simulated, httpStatus, settlement, ...(error ? { error } : {}) };
     });
   }
 
@@ -575,8 +693,21 @@ export class Control {
     const src = a.txDigest ? [{ t: 'tx', digest: a.txDigest }] : [];
     const ckpt = await this.d.chain.latestCheckpoint().catch(() => a.ev.snap?.ckpt ?? 0);
     const env = buildEnvelope({ id, acct: this.d.acct, ns: NS_CONTENT, lane: 'antibody', kind: 'decision', parents, src, turn: a.turn, ckpt, ts: new Date(this.now()).toISOString(), text: lines.join('\n') }, this.d.key);
-    const { blobId } = await this.d.mem.remember(env.text, NS_CONTENT, id);
-    this.cache.put([{ blobId, namespace: NS_CONTENT, text: env.text }]);
+    // B4: kept locally first, so a relayer failure after a payment went out never loses its decision.
+    this.decisionOutbox.add({ id, text: env.text, at: this.now() });
+    let blobId = 'pending';
+    try {
+      blobId = (await this.d.mem.remember(env.text, NS_CONTENT, id)).blobId;
+      this.decisionOutbox.remove(id);
+      this.cache.put([{ blobId, namespace: NS_CONTENT, text: env.text }]);
+    } catch (e) {
+      if (!a.txDigest && !a.error) {
+        this.decisionOutbox.remove(id); // nothing was signed: an unrecorded refusal needs no retry
+        throw e;
+      }
+      this.d.log.warn('decision.outbox', { envelopeId: id, error: (e as Error).message });
+      this.d.alert?.({ kind: 'ledger-unverified', severity: 'critical', key: `decision:${id}`, title: 'a payment decision could not be stored yet', text: `Decision ${id} (tx ${a.txDigest ?? 'unknown'}) is queued locally and retried before the next payment: ${(e as Error).message}`.slice(0, 500), data: { decisionId: id } });
+    }
     this.d.log.info('decision', { envelopeId: id, blobId, verdict: v.decision, code: v.code, txDigest: a.txDigest, turn: a.turn });
     if (v.decision === 'BLOCK') this.d.alert?.({ kind: 'payment-blocked', severity: 'warning', key: `block:${id}`, title: `payment blocked (${v.code})`, text: `${a.proposal.amount} to ${a.proposal.recipient}: ${v.reasons.join('; ').slice(0, 400)}`, data: { decisionId: id, code: v.code, turn: a.turn } });
     return { decisionId: id, decisionBlobId: blobId, verdict: v };

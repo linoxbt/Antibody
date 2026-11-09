@@ -205,11 +205,18 @@ test('x402: a registered payee is paid over HTTP 402 and settled; a rogue payTo 
   const good = await startBillServer({ chain: w.rt.chain, network: net, payTo: CAST.utility, asset: CAST.usdc, amount: '42500000', serviceName: 'Power', port: 7591 });
   const evil = await startBillServer({ chain: w.rt.chain, network: net, payTo: CAST.attacker, asset: CAST.usdc, amount: '42500000', serviceName: 'Power', port: 7592 });
   try {
-    const ok = await w.steward('Pay the electricity bill at http://127.0.0.1:7591/bill/1');
+    // B3: without execute, an x402 bill is evaluated but nothing is signed or paid.
+    const dry = await w.steward('Pay the electricity bill at http://127.0.0.1:7591/bill/1');
+    assert.equal(dry.decisions[0]!.verdict.decision, 'ALLOW');
+    assert.equal(dry.decisions[0]!.executed, false);
+    assert.equal(dry.decisions[0]!.dryRunOnly, true);
+    assert.equal((await w.rt.chain.listBalances(CAST.utility)).find((b) => b.coinType === CAST.usdc), undefined);
+    const ok = await w.steward('Pay the electricity bill at http://127.0.0.1:7591/bill/1', { execute: true });
     assert.equal(ok.decisions[0]!.verdict.decision, 'ALLOW');
     assert.ok(ok.decisions[0]!.executed);
+    assert.equal(w.control.payments.list().find((p) => p.digest === ok.decisions[0]!.txDigest)?.status, 'executed');
     assert.equal((await w.rt.chain.listBalances(CAST.utility)).find((b) => b.coinType === CAST.usdc)!.balance, '42500000');
-    const bad = await w.steward('Pay the electricity bill at http://127.0.0.1:7592/bill/1');
+    const bad = await w.steward('Pay the electricity bill at http://127.0.0.1:7592/bill/1', { execute: true });
     assert.equal(bad.decisions[0]!.verdict.decision, 'BLOCK');
     assert.equal((await w.rt.chain.listBalances(CAST.attacker)).length, 0);
   } finally {

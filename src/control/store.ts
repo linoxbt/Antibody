@@ -86,9 +86,12 @@ export interface PaymentEntry {
   coinType: string;
   amount: string;
   status: 'pending' | 'executed' | 'failed' | 'unknown';
+  /** The transaction's digest, known from its bytes before it is signed (B2). */
   digest?: string;
   error?: string;
   at: number;
+  /** Set when a human or a chain lookup settled an unknown outcome. */
+  resolvedBy?: 'chain' | 'human';
 }
 
 export class PaymentLog {
@@ -114,8 +117,62 @@ export class PaymentLog {
       const i = s.findIndex((x) => x.key === e.key);
       if (i >= 0) s[i] = e;
       else s.push(e);
-      // Bounded: keep the most recent 1000 entries.
-      if (s.length > 1000) s.splice(0, s.length - 1000);
+      // Bounded: keep the most recent 1000 settled entries. Pending and unknown
+      // entries are never evicted (S9): they are what stops a blind retry.
+      const settled = s.filter((x) => x.status === 'executed' || x.status === 'failed');
+      if (settled.length > 1000) {
+        const drop = new Set(settled.slice(0, settled.length - 1000));
+        for (let k = s.length - 1; k >= 0; k--) if (drop.has(s[k]!)) s.splice(k, 1);
+      }
+    });
+  }
+
+  /** Pending or unknown entries: payments whose outcome is not settled yet (B2). */
+  unresolved(): PaymentEntry[] {
+    return this.list().filter((x) => x.status === 'pending' || x.status === 'unknown');
+  }
+
+  /** Find one entry by its key or a unique prefix of it (at least 8 characters). */
+  find(prefix: string): PaymentEntry {
+    if (prefix.length < 8) throw new Error('give at least 8 characters of the payment key');
+    const hits = this.list().filter((x) => x.key.startsWith(prefix) || x.digest === prefix);
+    if (hits.length !== 1) throw new Error(hits.length === 0 ? `no payment ${prefix}` : `${prefix} matches ${hits.length} payments; give more of the key`);
+    return hits[0]!;
+  }
+}
+
+/**
+ * B4: decision records not yet stored on Walrus. A payment's decision is put
+ * here (a local write) before the network write, so a relayer failure after a
+ * payment went out never loses the record; it is retried before the next payment.
+ */
+export interface PendingDecision {
+  id: string;
+  text: string;
+  at: number;
+}
+
+export class DecisionOutbox {
+  private readonly store: JsonFileStore<PendingDecision[]>;
+
+  constructor(dir: string) {
+    this.store = new JsonFileStore(join(dir, 'decision-outbox.json'), () => []);
+  }
+
+  list(): PendingDecision[] {
+    return this.store.read();
+  }
+
+  add(d: PendingDecision): void {
+    this.store.update((s) => {
+      if (!s.some((x) => x.id === d.id)) s.push(d);
+    });
+  }
+
+  remove(id: string): void {
+    this.store.update((s) => {
+      const i = s.findIndex((x) => x.id === id);
+      if (i >= 0) s.splice(i, 1);
     });
   }
 }

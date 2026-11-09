@@ -80,6 +80,10 @@ export class FixtureChain implements ChainReader {
     return this.store.read().coinMetadata[normalizeCoinType(coinType)] ?? null;
   }
 
+  txDigest(txBytes: Uint8Array): string {
+    return txDigest(txBytes);
+  }
+
   async getTransaction(digest: string): Promise<TxInfo | null> {
     return this.store.read().txs[digest] ?? null;
   }

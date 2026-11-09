@@ -53,6 +53,8 @@ export interface ChainReader {
   listOwnedObjects(owner: string): Promise<OwnedObject[]>;
   getCoinMetadata(coinType: string): Promise<CoinMeta | null>;
   getTransaction(digest: string): Promise<TxInfo | null>;
+  /** The digest a transaction will have, computed from its unsigned bytes (B2: known before signing). */
+  txDigest?(txBytes: Uint8Array): string;
   /** Unsigned transaction bytes for a plain transfer. */
   buildTransfer(req: TransferRequest): Promise<Uint8Array>;
   /** Dry-run (sui_dryRunTransactionBlock / SimulateTransaction). */

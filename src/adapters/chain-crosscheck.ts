@@ -93,6 +93,10 @@ export class CrossCheckedChain implements ChainReader {
   getTransaction(digest: string) {
     return this.primary.getTransaction(digest);
   }
+  txDigest(txBytes: Uint8Array) {
+    if (!this.primary.txDigest) throw new Error('primary chain reader cannot compute digests');
+    return this.primary.txDigest(txBytes);
+  }
   buildTransfer(req: Parameters<ChainReader['buildTransfer']>[0]) {
     return this.primary.buildTransfer(req);
   }

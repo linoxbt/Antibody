@@ -9,7 +9,7 @@ import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { GrpcTransport } from '@protobuf-ts/grpc-transport';
 import { RateLimitRetry } from './rate-limit.ts';
 import { JsonRpcHTTPTransport, SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
-import { coinWithBalance, Transaction } from '@mysten/sui/transactions';
+import { coinWithBalance, Transaction, TransactionDataBuilder } from '@mysten/sui/transactions';
 import { normalizeCoinType, normalizeSuiAddress, SUI_COIN_TYPE } from '../core/encoding.ts';
 import type { AccountState } from '../core/lanes.ts';
 import type { SimulationResult } from '../core/policy.ts';
@@ -124,6 +124,10 @@ export class SdkChainReader implements ChainReader {
   async getCoinMetadata(coinType: string): Promise<CoinMeta | null> {
     const { coinMetadata } = await this.client.core.getCoinMetadata({ coinType });
     return coinMetadata;
+  }
+
+  txDigest(txBytes: Uint8Array): string {
+    return TransactionDataBuilder.getDigestFromBytes(txBytes);
   }
 
   async getTransaction(digest: string): Promise<TxInfo | null> {

@@ -16,7 +16,7 @@ import { OfflineRelayer } from './adapters/memwal-offline.ts';
 import { LocalReportStore, TatumStorage, type ReportStore } from './adapters/storage-tatum.ts';
 import { createLogger, type Logger } from './log.ts';
 import { checkIsolation } from './keystore.ts';
-import { resilient } from './ops/resilience.ts';
+import { isTransient, resilient } from './ops/resilience.ts';
 import { ensureState } from './ops/state.ts';
 
 export const SIMULATED_BANNER = '━━ SIMULATED ━━ offline backend: fixture chain + local relayer, nothing touches Sui or Walrus ━━';
@@ -69,7 +69,8 @@ export function createRuntime(cfg: Config, role: Role | 'cli', o: { readOnly?: b
   }
 
   // Retries with backoff for transient RPC/relayer failures; anything that still fails throws and fails closed.
-  const chainOpts = { writes: ['execute'], skip: ['watchCheckpoints'] } as const;
+  // B7: 429 / RESOURCE_EXHAUSTED is already retried inside the gRPC transport (RateLimitRetry); retrying it here too would multiply the attempts.
+  const chainOpts = { writes: ['execute'], skip: ['watchCheckpoints'], retryable: (e: unknown) => isTransient(e) && !(cfg.chainTransport === 'grpc' && /\b429\b|too many requests|RESOURCE_EXHAUSTED/i.test(String((e as Error)?.message ?? e))) } as const;
   const tatum = resilient(new SdkChainReader({
     transport: cfg.chainTransport,
     network: cfg.network,

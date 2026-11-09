@@ -228,8 +228,19 @@ export function unixTransport(socketPath: string, timeoutMs = 120_000): Transpor
           });
         },
       );
-      r.on('timeout', () => r.destroy(new Error(`IPC timeout on ${req.path}`)));
-      r.on('error', (e) => reject(new Error(`cannot reach ${socketPath} (${(e as Error).message}); is the daemon running?`)));
+      // B7: a timeout means the daemon got the request and may still apply it; only a refused
+      // or missing socket is "cannot reach" (which callers may fall back on safely).
+      let timedOut = false;
+      r.on('timeout', () => {
+        timedOut = true;
+        r.destroy(new Error(`IPC timeout on ${req.path} after ${Math.round(timeoutMs / 1000)} s; the daemon may still complete it`));
+      });
+      r.on('error', (e) => {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (timedOut) reject(e);
+        else if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'EACCES') reject(new Error(`cannot reach ${socketPath} (${(e as Error).message}); is the daemon running?`));
+        else reject(new Error(`IPC ${req.path} failed (${(e as Error).message}); the daemon may still complete it`));
+      });
       r.end(req.body);
     });
 }

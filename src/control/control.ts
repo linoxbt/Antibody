@@ -89,6 +89,9 @@ export const x402ArgsSchema = z
   .object({ turn: turnSchema, readSet: readSetSchema, url: z.string().min(1).max(2048), payeeLabel: z.string().max(64).optional(), reason: z.string().max(1000), execute: z.boolean().default(false) })
   .strict();
 
+/** S4: verdict text can quote model input; control characters are escaped so it stays one line. */
+const oneLine = (t: string) => t.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, (c) => JSON.stringify(c).slice(1, -1));
+
 /** How long to wait for a just-submitted transaction to become readable (B2). */
 const TX_WAIT_MS = 30_000;
 
@@ -682,13 +685,14 @@ export class Control {
     const amount = a.ev.base !== null && a.ev.decimals !== null ? `${formatUnits(a.ev.base, a.ev.decimals)} (${a.ev.base} base units)` : a.proposal.amount;
     const lines = [
       `Payment decision: ${v.decision}${v.code === 'OK' ? '' : ` ${v.code}`}`,
-      `Proposal (${a.channel}): pay ${amount} of ${a.ev.coinType ?? a.proposal.coinType ?? '?'} to ${a.proposal.recipient}${a.proposal.payeeLabel ? ` labelled "${a.proposal.payeeLabel}"` : ''}`,
+      // S4: everything the model chose is quoted (JSON), so it reads as data and cannot forge lines.
+      `Proposal (${a.channel}): pay ${a.ev.base !== null ? amount : JSON.stringify(amount)} of ${a.ev.coinType ?? JSON.stringify(a.proposal.coinType ?? '?')} to ${JSON.stringify(a.proposal.recipient)}${a.proposal.payeeLabel ? ` labelled ${JSON.stringify(a.proposal.payeeLabel)}` : ''}`,
       `Model's reason: ${JSON.stringify(a.proposal.reason.slice(0, 300))}`,
-      `Verdict: ${v.reasons.join('; ')}`,
-      `Rules: ${v.rules.map((r) => `${r.rule} ${r.pass ? 'pass' : 'FAIL'} (${r.detail})`).join(' | ')}`,
+      `Verdict: ${oneLine(v.reasons.join('; '))}`,
+      `Rules: ${v.rules.map((r) => `${r.rule} ${r.pass ? 'pass' : 'FAIL'} (${oneLine(r.detail)})`).join(' | ')}`,
       `Ledger head: ${!a.ev.snap ? 'unavailable' : a.ev.snap.ledger.ok ? `#${a.ev.snap.ledger.head.seq}` : a.ev.snap.ledger.code}; checkpoint ${a.ev.snap?.ckpt ?? 'unavailable'}; turn ${a.turn}`,
-      a.proposal.cites?.length ? `Model citations (display only, never policy input): ${a.proposal.cites.join(', ')}` : 'Model citations: none',
-      a.txDigest ? `Transaction: ${a.txDigest} (${a.executed ? 'executed' : 'not executed'})` : a.error ? `Transaction: outcome ${/refused/.test(a.error) ? 'refused' : 'unknown'} (${a.error.slice(0, 200)})` : v.decision === 'ALLOW' ? 'Transaction: none (dry-run only)' : 'Transaction: none (blocked, nothing signed)',
+      a.proposal.cites?.length ? `Model citations (display only, never policy input): ${JSON.stringify(a.proposal.cites)}` : 'Model citations: none',
+      a.txDigest ? `Transaction: ${a.txDigest} (${a.executed ? 'executed' : 'not executed'})` : a.error ? `Transaction: outcome ${/refused/.test(a.error) ? 'refused' : 'unknown'} (${oneLine(a.error.slice(0, 200))})` : v.decision === 'ALLOW' ? 'Transaction: none (dry-run only)' : 'Transaction: none (blocked, nothing signed)',
     ];
     const id = uuidv7(this.now());
     const src = a.txDigest ? [{ t: 'tx', digest: a.txDigest }] : [];

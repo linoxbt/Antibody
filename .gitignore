@@ -10,7 +10,8 @@ coverage/
 dist/
 site/
 .netlify/
-.claude/
+.claude/*
+!.claude/settings.json
 *.tgz
 *.enc
 antibody-*-home*

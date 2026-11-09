@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'DM Sans'; src: url(assets/dm-sans-latin-wght-normal.woff2) format('woff2'); font-weight: 100 1000; }
+@font-face { font-family: 'JetBrains Mono'; src: url(assets/jetbrains-mono-latin-wght-normal.woff2) format('woff2'); font-weight: 100 800; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1280px; height: 720px; overflow: hidden; background: #030407; }
+#c { position: relative; width: 1280px; height: 720px; overflow: hidden; color: #f4f6fb; font-family: 'DM Sans', sans-serif;
+  background:
+    radial-gradient(60% 75% at 74% 46%, rgba(43,127,255,.38), rgba(43,127,255,.08) 45%, transparent 70%),
+    radial-gradient(40% 50% at 12% 95%, rgba(255,92,122,.16), transparent 70%),
+    #030407; }
+.ring { position: absolute; border-radius: 50%; border: 1.5px solid rgba(166,202,255,.13); }
+.star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: rgba(220,232,255,.55); }
+.brand { position: absolute; left: 64px; top: 52px; display: flex; align-items: center; gap: 14px; font-size: 34px; font-weight: 500; letter-spacing: -.02em; }
+.brand img { width: 46px; height: 46px; }
+.tag { position: absolute; right: 64px; top: 60px; font: 600 17px 'JetBrains Mono', monospace; letter-spacing: .2em; color: #a6caff; padding: 10px 18px; border: 1px solid rgba(122,177,254,.4); border-radius: 999px; background: rgba(43,127,255,.08); }
+h1 { position: absolute; left: 62px; top: 138px; font-size: 104px; line-height: .98; font-weight: 600; letter-spacing: -.05em; }
+h1 .r { color: #ff5c7a; text-shadow: 0 0 40px rgba(255,92,122,.45); }
+.sub { position: absolute; left: 66px; top: 482px; font-size: 32px; color: #c9d1e0; letter-spacing: -.01em; }
+.sub b { color: #fff; font-weight: 500; }
+.chips { position: absolute; left: 64px; bottom: 58px; display: flex; gap: 14px; }
+.chip { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 999px; font-size: 21px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); }
+.dot { width: 11px; height: 11px; border-radius: 50%; background: currentColor; box-shadow: 0 0 14px currentColor; }
+.mark { position: absolute; left: 790px; top: 150px; width: 400px; height: 400px; filter: drop-shadow(0 0 60px rgba(43,127,255,.55)); }
+.coin { position: absolute; left: 1060px; top: 430px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 35% 30%,#fff3d6,#fbbf5a 45%,#a5600b); display: grid; place-items: center; font: 700 30px 'JetBrains Mono', monospace; color: #3a2300; box-shadow: 0 0 60px rgba(251,191,90,.45); transform: rotate(-12deg); opacity: .92; }
+.stamp { position: absolute; left: 905px; top: 560px; padding: 8px 22px; border: 5px solid #ff5c7a; border-radius: 14px; font: 800 40px 'JetBrains Mono', monospace; letter-spacing: .14em; color: #ff5c7a; background: rgba(24,3,9,.75); transform: rotate(-8deg); box-shadow: 0 0 50px rgba(255,92,122,.5); }
+#grain { position: absolute; inset: 0; opacity: .06; mix-blend-mode: overlay; }
+#vig { position: absolute; inset: 0; background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(0,0,0,.6) 100%); }
+</style></head><body><div id="c">
+<div class="ring" style="left:540px;top:-190px;width:1100px;height:1100px"></div>
+<div class="ring" style="left:690px;top:-40px;width:800px;height:800px;border-style:dashed;border-color:rgba(166,202,255,.1)"></div>
+<div id="stars"></div>
+<div class="brand"><img src="assets/mark.svg">antibody</div>
+<div class="tag">TOTAL RECALL · TATUM × WALRUS</div>
+<h1>Poisoned<br>memory.<br><span class="r">Blocked.</span></h1>
+<div class="sub">An immune system for <b>AI agent memory</b></div>
+<div class="chips">
+  <span class="chip"><span class="dot" style="color:#7ab1fe"></span>Walrus Memory</span>
+  <span class="chip"><span class="dot" style="color:#3ddc97"></span>Tatum</span>
+  <span class="chip"><span class="dot" style="color:#3ddc97"></span>Live on Sui mainnet</span>
+</div>
+<img class="mark" src="assets/mark.svg">
+<div class="coin">USDCR</div>
+<div class="stamp">BLOCKED</div>
+<canvas id="grain" width="1280" height="720"></canvas>
+<div id="vig"></div>
+</div><script>
+let s=5;const r=()=>((s=s*16807%2147483647)/2147483647);
+document.getElementById('stars').innerHTML=Array.from({length:120},()=>`<div class="star" style="left:${r()*1280}px;top:${r()*720}px;opacity:${.2+r()*.8};transform:scale(${.5+r()*1.4})"></div>`).join('');
+const g=document.getElementById('grain').getContext('2d'),im=g.createImageData(1280,720);for(let i=0;i<im.data.length;i+=4){const v=r()*255;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255}g.putImageData(im,0,0);
+</script></body></html>

@@ -52,8 +52,11 @@ const FAIL_LIMIT = 10;
 /** S8: bounded state for unauthenticated callers. */
 const MAX_CHALLENGES = 10_000;
 const MAX_CHALLENGES_PER_ADDRESS = 5;
+/** S6: challenges are counted per (address, client), so one client cannot evict another's. */
+const MAX_CHALLENGES_PER_CLIENT = 20;
+const ZKLOGIN_PER_CLIENT_PER_MINUTE = 5;
 const MAX_SESSIONS_PER_ADDRESS = 5;
-const ZKLOGIN_PER_MINUTE = 30;
+const ZKLOGIN_PER_MINUTE = 60;
 
 export class AuthError extends Error {
   readonly status: number;
@@ -134,6 +137,8 @@ export class Auth {
   /** Outstanding challenge messages per address (S8: no full scan to count them). */
   private byAddress = new Map<string, string[]>();
   private zkTimes: number[] = [];
+  private zkByClient = new Map<string, number[]>();
+  private byClient = new Map<string, string[]>();
 
   /** S8: expire challenges, failures and sessions in bulk, at most every few seconds (never a full scan per request). */
   private sweep(force = false) {
@@ -145,11 +150,14 @@ export class Auth {
       if (c.expiresAt >= t) break;
       this.challenges.delete(m);
     }
-    for (const [a, list] of this.byAddress) {
-      const live = list.filter((m) => this.challenges.has(m));
-      if (live.length) this.byAddress.set(a, live);
-      else this.byAddress.delete(a);
+    for (const index of [this.byAddress, this.byClient]) {
+      for (const [a, list] of index) {
+        const live = list.filter((m) => this.challenges.has(m));
+        if (live.length) index.set(a, live);
+        else index.delete(a);
+      }
     }
+    for (const [c, times] of this.zkByClient) if (!times.some((x) => t - x < 60_000)) this.zkByClient.delete(c);
     for (const [k, v] of this.failures) if (!v.some((f) => t - f < FAIL_WINDOW)) this.failures.delete(k);
     let removed = false;
     for (const [h, sess] of this.sessions) if (sess.expiresAt < t) (this.sessions.delete(h), (removed = true));
@@ -182,16 +190,22 @@ export class Auth {
       `Issued At: ${new Date(issued).toISOString()}`,
       `Expiration Time: ${new Date(expiresAt).toISOString()}`,
     ].join('\n');
-    // S8: at most a few outstanding challenges per address (oldest dropped), and a global cap.
-    const mine = (this.byAddress.get(address) ?? []).filter((m) => this.challenges.has(m));
+    // S8/S6: at most a few outstanding challenges per address and client (oldest dropped, so a
+    // client only ever evicts its own), a cap per client, and a global cap.
+    const slot = `${address}|${client}`;
+    const mine = (this.byAddress.get(slot) ?? []).filter((m) => this.challenges.has(m));
     if (mine.length >= MAX_CHALLENGES_PER_ADDRESS) this.challenges.delete(mine.shift()!);
+    const fromClient = (this.byClient.get(client) ?? []).filter((m) => this.challenges.has(m));
+    if (fromClient.length >= MAX_CHALLENGES_PER_CLIENT) throw new AuthError(429, 'too many sign-ins started from here; finish one or wait a few minutes');
     if (this.challenges.size >= MAX_CHALLENGES) {
       this.sweep(true);
       if (this.challenges.size >= MAX_CHALLENGES) throw new AuthError(503, 'too many sign-ins in progress; try again in a minute');
     }
     this.challenges.set(message, { address, expiresAt });
     mine.push(message);
-    this.byAddress.set(address, mine);
+    this.byAddress.set(slot, mine);
+    fromClient.push(message);
+    this.byClient.set(client, fromClient);
     return { message, expiresAt };
   }
 
@@ -215,9 +229,14 @@ export class Auth {
     if (isZkLogin(signature)) {
       // S8: each zkLogin check is an outbound RPC call: rate-limited on its own.
       const t = this.now();
+      // S6: per client first, so one client cannot use up everyone's budget.
+      const mineZk = (this.zkByClient.get(client) ?? []).filter((x) => t - x < 60_000);
+      if (mineZk.length >= ZKLOGIN_PER_CLIENT_PER_MINUTE) throw new AuthError(429, 'too many zkLogin sign-ins from here; try again in a minute');
       this.zkTimes = this.zkTimes.filter((x) => t - x < 60_000);
       if (this.zkTimes.length >= ZKLOGIN_PER_MINUTE) throw new AuthError(503, 'zkLogin sign-in is busy; try again in a minute');
       this.zkTimes.push(t);
+      mineZk.push(t);
+      this.zkByClient.set(client, mineZk);
     }
     try {
       // zkLogin signatures (e.g. Slush accounts made with Google) are checked against the chain.

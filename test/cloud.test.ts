@@ -102,3 +102,42 @@ test('reset gives a fresh world; capacity is enforced for new wallets', async ()
   const r = await post('/api/auth/wallet', { address: fourth.toSuiAddress(), message: ch.message, signature: await sign(fourth, ch.message) });
   assert.equal(r.status, 503);
 });
+
+test('S7: a simulated world never sees the host’s secrets', async () => {
+  const { createWorld } = await import('../src/dev/world.ts');
+  process.env.TATUM_API_KEY = 'host-tatum';
+  process.env.LLM_API_KEY = 'host-llm';
+  process.env.ANTIBODY_WEB_TOKEN = 'host-web';
+  try {
+    const w = await createWorld();
+    try {
+      assert.equal(w.cfg.tatumApiKey ?? null, null);
+      assert.equal(w.cfg.llm.apiKey ?? null, null);
+    } finally {
+      w.dispose();
+    }
+  } finally {
+    delete process.env.TATUM_API_KEY;
+    delete process.env.LLM_API_KEY;
+    delete process.env.ANTIBODY_WEB_TOKEN;
+  }
+});
+
+test('S6: one client cannot evict another client’s sign-in challenge, and is capped on its own', async () => {
+  const { Auth } = await import('../src/web/auth.ts');
+  const a = new Auth(null, {});
+  const victim = '0x' + '11'.repeat(32);
+  const mine = a.challenge(victim, 'https://x.test', 'victim-ip');
+  for (let i = 0; i < 30; i++) a.challenge(victim, 'https://x.test', 'attacker-ip'); // churns only its own slot
+  let capped = false;
+  for (let i = 0; i < 30; i++) {
+    try {
+      a.challenge('0x' + (i + 16).toString(16).padStart(64, '0'), 'https://x.test', 'attacker-ip');
+    } catch (e) {
+      capped = /too many/.test((e as Error).message);
+      break;
+    }
+  }
+  assert.ok(capped, 'the attacking client hits its own cap across addresses');
+  assert.ok((a as unknown as { challenges: Map<string, unknown> }).challenges.has(mine.message), 'the victim’s challenge survives');
+});

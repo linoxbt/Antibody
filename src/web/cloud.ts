@@ -103,6 +103,8 @@ interface Tenant {
   last: number;
   queue: Promise<unknown>;
   hits: number[];
+  /** Operations queued or running; a busy world is never evicted (B14). */
+  busy: number;
 }
 
 export class Tenants {
@@ -118,6 +120,9 @@ export class Tenants {
   private readonly resetsPerHour: number;
   private globalHits: number[] = [];
   private created: number[] = [];
+  /** S6: new worlds per client per hour, so one client cannot use up the hourly budget. */
+  private createdBy = new Map<string, number[]>();
+  private readonly newPerClientPerHour = 3;
   readonly metrics: Metrics;
 
   constructor(o: Pick<CloudOptions, 'dataDir' | 'maxTenants' | 'maxOpen' | 'ratePerMinute' | 'globalRatePerMinute' | 'newTenantsPerHour' | 'idleDays' | 'resetsPerHour'>, metrics = new Metrics()) {
@@ -187,7 +192,7 @@ export class Tenants {
   }
 
   /** The visitor's world, created on first use and seeded with the demo household. */
-  async get(address: string, o: { reset?: boolean } = {}): Promise<Tenant> {
+  async get(address: string, o: { reset?: boolean; client?: string } = {}): Promise<Tenant> {
     const key = normalizeSuiAddress(address);
     const t = this.open.get(key);
     if (t) {
@@ -207,6 +212,13 @@ export class Tenants {
           const now = Date.now();
           this.created = this.created.filter((c) => now - c < 60 * 60_000);
           if (this.created.length >= this.newPerHour) throw new AuthError(503, 'the sandbox is busy creating worlds; try again in a few minutes');
+          if (o.client) {
+            const mine = (this.createdBy.get(o.client) ?? []).filter((c) => now - c < 60 * 60_000);
+            if (mine.length >= this.newPerClientPerHour) throw new AuthError(429, 'too many new sandboxes from here this hour; sign in with a wallet you already used, or try later');
+            mine.push(now);
+            this.createdBy.set(o.client, mine);
+            if (this.createdBy.size > 10_000) this.createdBy.delete(this.createdBy.keys().next().value!);
+          }
           this.created.push(now);
         }
       }
@@ -217,7 +229,7 @@ export class Tenants {
         this.metrics.inc('antibody_sandbox_worlds_created_total');
       }
       this.touch(home);
-      const tenant: Tenant = { world, revoke: new RevokeFlow(world.rt, world.control), last: Date.now(), queue: Promise.resolve(), hits: [] };
+      const tenant: Tenant = { world, revoke: new RevokeFlow(world.rt, world.control), last: Date.now(), queue: Promise.resolve(), hits: [], busy: 0 };
       this.open.set(key, tenant);
       this.evict();
       return tenant;
@@ -228,7 +240,8 @@ export class Tenants {
 
   private evict() {
     while (this.open.size > this.maxOpen) {
-      const [oldest] = [...this.open.entries()].sort((a, b) => a[1].last - b[1].last);
+      // B14: a world with work queued or running is never closed under it.
+      const [oldest] = [...this.open.entries()].filter(([, t]) => t.busy === 0).sort((a, b) => a[1].last - b[1].last);
       if (!oldest) return;
       this.open.delete(oldest[0]);
       oldest[1].world.dispose(); // files stay; the world reopens on the next visit
@@ -247,7 +260,11 @@ export class Tenants {
       t.hits.push(now);
       this.globalHits.push(now);
     }
-    const next = t.queue.then(() => fn(t));
+    t.busy++;
+    const next = t.queue.then(() => fn(t)).finally(() => {
+      t.busy--;
+      this.evict();
+    });
     t.queue = next.catch(() => undefined);
     return next;
   }
@@ -347,7 +364,7 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         if (url.pathname === '/api/auth/wallet') {
           const address = await auth.verifyWallet(String(body.address ?? ''), String(body.message ?? ''), String(body.signature ?? ''), client);
           // S8: the world first; a refused world (sandbox full or busy) leaves no session behind.
-          await tenants.get(address);
+          await tenants.get(address, { client });
           const s = auth.openWallet(address);
           metrics.inc('antibody_sandbox_sign_ins_total');
           return send(200, { authenticated: true, method: s.method, address: s.address, expiresAt: s.expiresAt }, { 'set-cookie': auth.cookie(s, o.secureCookies !== false) });

@@ -76,10 +76,14 @@ export interface World {
   dispose(): void;
 }
 
+const SECRET_NAME = /KEY|TOKEN|SECRET|PASSPHRASE|PRIVATE|WEBHOOK|CHAT_ID|PASSWORD/;
+
 export async function createWorld(opts: { home?: string; model?: ChatModel; keep?: boolean; ownerSecret?: string; ownerAddress?: string; open?: boolean } = {}): Promise<World> {
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'antibody-'));
-  const env = { ...process.env, ANTIBODY_HOME: home, ANTIBODY_BACKEND: 'offline', ANTIBODY_KEY_ISOLATION: 'simulated', ANTIBODY_ROLE: '' };
-  delete (env as Record<string, string | undefined>).ANTIBODY_ROLE;
+  // S7: a simulated world (the hosted sandbox opens one per visitor) sees only non-secret
+  // ANTIBODY_* settings from the host, never its API keys, tokens, owner key or passphrases.
+  const settings = Object.entries(process.env).filter(([k, v]) => v !== undefined && k.startsWith('ANTIBODY_') && !SECRET_NAME.test(k) && k !== 'ANTIBODY_ROLE' && k !== 'ANTIBODY_DAEMON');
+  const env: NodeJS.ProcessEnv = { ...Object.fromEntries(settings), ANTIBODY_HOME: home, ANTIBODY_BACKEND: 'offline', ANTIBODY_KEY_ISOLATION: 'simulated' };
   const readKey = (role: Role) => readKeyText(keyPath(home, role));
   // open: reattach to a world set up earlier in `home` (the hosted sandbox reopens visitors' worlds).
   const setup = opts.open ? await reopen(loadConfig(env)) : await setupOffline(loadConfig(env), { readKeyFile: readKey, ownerSecret: opts.ownerSecret, ownerAddress: opts.ownerAddress });

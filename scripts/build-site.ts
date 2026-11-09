@@ -6,6 +6,7 @@
  *
  *   npx tsx scripts/build-site.ts    → site/
  */
+import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -144,6 +145,18 @@ async function main() {
     if (!html.includes('name="antibody-build"')) writeFileSync(join(OUT, f), html.replace(/<head>/i, `<head>\n    <meta name="antibody-build" content="${build}" />`));
   }
   copyFileSync('docs/attack-set-results.md', join(OUT, 'attack-set-results.md'));
+  // S10: pin the installers to the commit this site was built from (it must already be on GitHub).
+  // Netlify names the commit in COMMIT_REF; elsewhere ask git. No commit: the installers stay unpinned (main).
+  let pin = process.env.COMMIT_REF ?? '';
+  if (!pin) {
+    try {
+      pin = execSync('git rev-parse HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch {
+      pin = '';
+    }
+  }
+  if (/^[0-9a-f]{40}$/.test(pin)) for (const f of ['install.sh', 'install.ps1']) writeFileSync(join(OUT, f), readFileSync(join(OUT, f), 'utf8').replaceAll('__ANTIBODY_PIN__', pin));
+  else console.warn('installers left unpinned: no commit id (COMMIT_REF or git)');
   // Checksums for the installers, so a download can be verified before it runs (see /install).
   const sums = ['install.sh', 'install.ps1'].map((f) => `${createHash('sha256').update(readFileSync(join(OUT, f))).digest('hex')}  ${f}`);
   writeFileSync(join(OUT, 'SHA256SUMS'), sums.join('\n') + '\n');

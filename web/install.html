@@ -102,7 +102,7 @@ winget install OpenJS.NodeJS.LTS</pre>
           <pre class="code" data-copy>antibody --help</pre>
           <details class="howto">
             <summary>Verify the installer before running it</summary>
-            <p>Each release publishes SHA-256 checksums of both installers at <a href="/SHA256SUMS">/SHA256SUMS</a>. Download, compare, then run:</p>
+            <p>Each release publishes SHA-256 checksums of both installers at <a href="/SHA256SUMS">/SHA256SUMS</a>. They come from this same site, so they catch a damaged download, not a compromised site. For that, read the installer before running it: it is short, and it installs exactly the commit named in its <code>PIN=</code> line, which you can look up on <a href="https://github.com/linoxbt/Antibody/commits/main" target="_blank" rel="noopener">GitHub</a>; it refuses any other source. Download, compare, then run:</p>
             <pre class="code" data-copy>curl -fsSLO https://antibody-memory.netlify.app/install.sh
 curl -fsSL https://antibody-memory.netlify.app/SHA256SUMS | grep ' install.sh$' | shasum -a 256 -c -
 bash install.sh</pre>

@@ -14,6 +14,11 @@ set -euo pipefail
 main() {
 REPO="${ANTIBODY_REPO:-https://github.com/linoxbt/Antibody.git}"
 REF="${ANTIBODY_REF:-main}"
+# S10: the site's build pins the exact commit it was built from; the installer checks it out
+# and verifies it. ANTIBODY_REF (your own choice) turns the pin off.
+PIN="__ANTIBODY_PIN__"
+case "$PIN" in __*|"") PIN="" ;; esac
+[ -n "${ANTIBODY_REF:-}" ] && PIN=""
 DIR="${ANTIBODY_APP_DIR:-$HOME/.antibody-app}"
 BIN="${ANTIBODY_BIN_DIR:-$HOME/.local/bin}"
 
@@ -58,6 +63,11 @@ elif [ -e "$DIR" ]; then
 else
   bold "Downloading Antibody into $DIR"
   git clone -q --depth 1 --branch "$REF" "$REPO" "$DIR" || fail "Could not download Antibody from $REPO." "Check your internet connection, or a proxy/firewall blocking github.com."
+fi
+if [ -n "$PIN" ]; then
+  git -C "$DIR" fetch -q --depth 1 origin "$PIN" && git -C "$DIR" checkout -q --detach FETCH_HEAD || fail "Could not fetch the pinned version $PIN." "Check your connection to github.com, or set ANTIBODY_REF=main to install the latest main."
+  [ "$(git -C "$DIR" rev-parse HEAD)" = "$PIN" ] || fail "The downloaded source is not the pinned commit $PIN." "Do not use this download; report it."
+  ok "source pinned to $PIN"
 fi
 ok "source at $(git -C "$DIR" rev-parse --short HEAD)"
 

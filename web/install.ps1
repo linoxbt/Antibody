@@ -12,6 +12,9 @@
   $ErrorActionPreference = 'Continue'
   $Repo = if ($env:ANTIBODY_REPO) { $env:ANTIBODY_REPO } else { 'https://github.com/linoxbt/Antibody.git' }
   $Ref = if ($env:ANTIBODY_REF) { $env:ANTIBODY_REF } else { 'main' }
+  # S10: the site's build pins the exact commit it was built from; ANTIBODY_REF turns the pin off.
+  $Pin = '__ANTIBODY_PIN__'
+  if ($Pin.StartsWith('__') -or $env:ANTIBODY_REF) { $Pin = '' }
   $Root = Join-Path $env:LOCALAPPDATA 'Antibody'
   $Dir = if ($env:ANTIBODY_APP_DIR) { $env:ANTIBODY_APP_DIR } else { Join-Path $Root 'app' }
   $Bin = Join-Path $Root 'bin'
@@ -57,6 +60,13 @@
     New-Item -ItemType Directory -Force -Path (Split-Path $Dir) | Out-Null
     git clone -q --depth 1 --branch $Ref $Repo "$Dir"
     if ($LASTEXITCODE -ne 0) { Fail "Could not download Antibody from $Repo." @('Check your internet connection, or a proxy/firewall blocking github.com.') }
+  }
+  if ($Pin) {
+    git -C "$Dir" fetch -q --depth 1 origin $Pin
+    if ($LASTEXITCODE -eq 0) { git -C "$Dir" checkout -q --detach FETCH_HEAD }
+    if ($LASTEXITCODE -ne 0) { Fail "Could not fetch the pinned version $Pin." @('Check your connection to github.com, or set $env:ANTIBODY_REF = "main" to install the latest main.') }
+    if ((git -C "$Dir" rev-parse HEAD) -ne $Pin) { Fail "The downloaded source is not the pinned commit $Pin." @('Do not use this download; report it.') }
+    Ok "source pinned to $Pin"
   }
   Ok "source at $(git -C "$Dir" rev-parse --short HEAD)"
 

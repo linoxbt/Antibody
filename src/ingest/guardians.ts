@@ -55,3 +55,29 @@ export function blocklisted(g: GuardianLists, type: string): boolean {
   const t = norm(type);
   return g.coinBlocklist.has(t) || g.objectBlocklist.has(t);
 }
+
+/** How often the Sui Guardians lists are fetched again by a long-running process (B15). */
+export const GUARDIANS_TTL_MS = 6 * 60 * 60_000;
+
+/**
+ * B15: a loader that refreshes itself. The first call fetches; later calls
+ * return the lists at once and, once they are older than the TTL, fetch new
+ * ones in the background (a failed refresh keeps the previous lists).
+ */
+export function refreshingGuardians(load: () => Promise<GuardianLists>, ttlMs = GUARDIANS_TTL_MS, now: () => number = Date.now): { get(): Promise<GuardianLists>; current(): GuardianLists | null } {
+  let lists: GuardianLists | null = null;
+  let at = 0;
+  let inflight: Promise<GuardianLists> | null = null;
+  const fetchNow = () =>
+    (inflight ??= load()
+      .then((l) => ((lists = l), (at = now()), l))
+      .finally(() => (inflight = null)));
+  return {
+    async get() {
+      if (!lists) return fetchNow();
+      if (now() - at > ttlMs) void fetchNow().catch(() => undefined);
+      return lists;
+    },
+    current: () => lists,
+  };
+}

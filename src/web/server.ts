@@ -216,18 +216,19 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         if (origin && !allowed.has(origin.replace(/^https?:\/\//, '').toLowerCase())) return send(403, { error: 'cross-origin request refused' });
         if (req.headers['sec-fetch-site'] === 'cross-site') return send(403, { error: 'cross-site request refused' });
       }
-      if (req.method === 'GET' && MOVED[url.pathname]) {
+      if ((req.method === 'GET' || req.method === 'HEAD') && MOVED[url.pathname]) {
         res.writeHead(301, { location: MOVED[url.pathname] + url.search, 'cache-control': 'no-store' });
         res.end();
         return;
       }
-      if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+      // B15: HEAD gets the same status and headers as GET, without the body.
+      if ((req.method === 'GET' || req.method === 'HEAD') && !url.pathname.startsWith('/api/')) {
         const file = staticFile(url.pathname);
         const status = file ? 200 : 404;
         const path = file ?? join(WEB, '404.html');
         const bytes = readFileSync(path); // before writeHead, so a read error still gets a clean 500
         res.writeHead(status, { 'content-type': TYPES[extname(path)]!, 'cache-control': 'no-store', 'content-security-policy': CSP, ...SECURITY_HEADERS });
-        res.end(bytes);
+        res.end(req.method === 'HEAD' ? undefined : bytes);
         return;
       }
       const session = a.fromCookie(req.headers.cookie, req.headers['x-antibody-session']);

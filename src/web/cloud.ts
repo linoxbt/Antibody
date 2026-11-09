@@ -337,12 +337,13 @@ export async function startCloud(o: CloudOptions): Promise<{ server: Server; ten
         res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', 'cache-control': 'no-store' });
         return res.end(metrics.render({ antibody_sandbox_worlds: tenants.count(), antibody_sandbox_worlds_open: tenants.openCount, antibody_sandbox_sessions: auth.sessionCount, antibody_sandbox_uptime_seconds: Math.round((Date.now() - metrics.started) / 1000), process_resident_memory_bytes: mem.rss, nodejs_heap_used_bytes: mem.heapUsed }));
       }
-      if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+      // B15: HEAD gets the same status and headers as GET, without the body.
+      if ((req.method === 'GET' || req.method === 'HEAD') && !url.pathname.startsWith('/api/')) {
         const file = staticFile(url.pathname);
         const path = file ?? join(WEB, '404.html');
         const bytes = readFileSync(path);
         res.writeHead(file ? 200 : 404, { 'content-type': TYPES[extname(path)]!, 'content-security-policy': CSP, ...SECURITY_HEADERS, 'cache-control': 'no-cache' });
-        res.end(bytes);
+        res.end(req.method === 'HEAD' ? undefined : bytes);
         return;
       }
 

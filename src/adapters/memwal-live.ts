@@ -35,12 +35,18 @@ export class LiveMemoryClient implements MemoryClient {
   async inventory(namespace: string): Promise<InventoryEntry[]> {
     const out: InventoryEntry[] = [];
     let cursor: string | undefined;
-    for (;;) {
+    const seen = new Set<string>();
+    // B15: an inventory that stops early would hide records (a later quarantine, say) from the
+    // completeness check, so any paging anomaly fails closed instead of returning a partial list.
+    for (let pages = 0; ; pages++) {
+      if (pages >= 1000) throw new Error(`inventory of ${namespace} did not end after 1000 pages`);
       const page = await this.mw.listMemories({ namespace, limit: 500, ...(cursor ? { cursor } : {}) });
       for (const m of page.memories) out.push({ blobId: m.blob_id, createdAt: m.created_at, agentId: m.agent_id });
       if (!page.has_more) break;
       cursor = page.next_cursor ?? undefined;
-      if (!cursor) break;
+      if (!cursor) throw new Error(`inventory of ${namespace}: the relayer said there is more but gave no cursor`);
+      if (seen.has(cursor)) throw new Error(`inventory of ${namespace}: the relayer repeated a cursor`);
+      seen.add(cursor);
     }
     return out;
   }

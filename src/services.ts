@@ -20,7 +20,7 @@ import { loadLaneKey, loadWalletSecret } from './keystore.ts';
 import { createRuntime, type Runtime } from './runtime.ts';
 import { Signer, type SignRequest } from './signer/signer.ts';
 import { ingestExternalText, scanWallet, type IngestDeps, type SentinelSink } from './ingest/scan.ts';
-import { loadGuardians, type GuardianLists } from './ingest/guardians.ts';
+import { loadGuardians, refreshingGuardians } from './ingest/guardians.ts';
 import { watchWallet, type WatchOptions } from './ingest/watch.ts';
 import { OpenAIModel, ScriptedModel, type ChatModel } from './steward/model.ts';
 import { runTurn, type StewardControl, type TurnResult } from './steward/turn.ts';
@@ -100,7 +100,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
   const cfg = rt.cfg;
   const key = loadLaneKey(cfg, 'control');
   const alerter = new Alerter(alertConfigFrom(), { log: rt.log, simulated: rt.simulated, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
-  let guardians: Promise<GuardianLists> | null = null;
+  const guardians = refreshingGuardians(() => loadGuardians(cacheDir(cfg), { offline: cfg.backend === 'offline' }));
   const signerTransport = opts.signer === undefined ? unixTransport(socketPath(cfg, 'signer')) : opts.signer;
   return new Control({
     acct: requireAccount(cfg),
@@ -122,7 +122,7 @@ export function buildControl(rt: Runtime, opts: { signer?: Transport | null; noC
     autoQuarantineScore: cfg.autoQuarantineScore,
     x402Allow: cfg.x402Allow,
     ...(alerter.enabled ? { alert: (a: Alert) => void alerter.send(a).catch(() => undefined) } : {}),
-    guardians: () => (guardians ??= loadGuardians(cacheDir(cfg), { offline: cfg.backend === 'offline' })),
+    guardians: () => guardians.get(),
     ...(opts.noCache ? { noCache: true } : {}),
     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
   });
@@ -269,7 +269,8 @@ async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Prom
   const dir = prepareIngestDir(rt.cfg);
   await startupCheck(rt, 'wallet-objects', key.publicKeyHex);
   const sink = sinkOverride === undefined ? remoteSentinelSink(new IpcClient(key, unixTransport(socketPath(rt.cfg, 'control')), Date.now, laneServer(rt, 'antibody'))) : sinkOverride;
-  const guardians = await loadGuardians(dir, { offline: rt.cfg.backend === 'offline' });
+  const lists = refreshingGuardians(() => loadGuardians(dir, { offline: rt.cfg.backend === 'offline' }));
+  await lists.get();
   return {
     acct: requireAccount(rt.cfg),
     wallet: requireWallet(rt.cfg),
@@ -277,7 +278,11 @@ async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Prom
     mem: rt.memory(key),
     key,
     sink,
-    guardians,
+    // B15: read on every scan, refreshed in the background every few hours.
+    get guardians() {
+      void lists.get().catch(() => undefined);
+      return lists.current()!;
+    },
     log: rt.log,
     cacheDir: dir,
     threshold: rt.cfg.sentinelThreshold,

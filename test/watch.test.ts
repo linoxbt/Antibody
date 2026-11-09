@@ -175,3 +175,28 @@ test('heartbeats keep a quiet stream alive', async () => {
   assert.equal(opens, 1, 'one stream, kept open by heartbeats');
   assert.ok(!events.includes('stream.stale'));
 });
+
+test('B15: the Guardians lists refresh in the background once stale, and a failed refresh keeps the old lists', async () => {
+  const { refreshingGuardians } = await import('../src/ingest/guardians.ts');
+  let t = 0;
+  let n = 0;
+  let fail = false;
+  const g = refreshingGuardians(async () => {
+    if (fail) throw new Error('offline');
+    n++;
+    return { coinBlocklist: new Set([`c${n}`]), objectBlocklist: new Set(), source: 'network' as const };
+  }, 1000, () => t);
+  assert.ok((await g.get()).coinBlocklist.has('c1'));
+  t = 500;
+  await g.get();
+  assert.equal(n, 1, 'fresh lists are reused');
+  t = 2000;
+  await g.get();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(g.current()!.coinBlocklist.has('c2'), 'refreshed after the TTL');
+  fail = true;
+  t = 5000;
+  await g.get();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(g.current()!.coinBlocklist.has('c2'), 'a failed refresh keeps the previous lists');
+});

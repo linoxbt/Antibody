@@ -184,7 +184,7 @@ function renderTop() {
     const [full, compact] = modeLabel(s);
     parts.push(el('span', { class: 'pill live' }, el('span', { class: 'pl' }, full), el('span', { class: 'ps', 'aria-hidden': 'true' }, compact)));
     const r = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Refresh', title: 'Refresh' }, icon('refresh'));
-    r.addEventListener('click', () => ctx.act(async () => (await src.refresh(), route({ keepScroll: true, preserve: true }), toast('Refreshed from Walrus + Sui.'))));
+    r.addEventListener('click', () => ctx.act(async () => (await src.refresh(), route({ keepScroll: true, preserve: true }), toast(src.state?.sandbox || src.state?.backend !== 'live' ? 'Refreshed (simulated chain and relayer).' : 'Refreshed from Walrus + Sui.'))));
     parts.push(r);
   }
   tbRight.replaceChildren(...parts);

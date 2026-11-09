@@ -73,7 +73,7 @@ export default {
           rebuildDigest = r.digest ?? null;
           await src.refresh();
           rebuildAgainst = src.state.digest;
-          ctx.toast(`Rebuilt ${plural(r.memories ?? 0, 'memory')} from Walrus + Sui in ${r.ms ?? '?'} ms.`);
+          ctx.toast(`Rebuilt ${plural(r.memories ?? 0, 'memory')} from ${src.state?.sandbox || src.state?.backend !== 'live' ? 'the simulated chain and relayer' : 'Walrus + Sui'} in ${r.ms ?? '?'} ms.`);
         } finally {
           rebuilding = false;
           ctx.rerender();

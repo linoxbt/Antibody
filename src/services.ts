@@ -8,8 +8,10 @@
  *   signer   (wallet key)     ← antibody: /sign
  *   agent    (agent + LLM key) ← antibody: /turn   (the web UI's "run" button)
  */
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Ed25519PublicKey } from '@mysten/sui/keypairs/ed25519';
-import { ipcPath, socketPath, cacheDir, requireAccount, requireWallet, type Config } from './config.ts';
+import { ipcPath, socketPath, cacheDir, ingestDir, requireAccount, requireWallet, type Config } from './config.ts';
 import { assertOwnLane, bindLanes } from './core/lanes.ts';
 import { LABEL_LANE, LANE_LABEL, type Lane } from './core/types.ts';
 import { Control } from './control/control.ts';
@@ -216,11 +218,32 @@ export function remoteSentinelSink(client: IpcClient): SentinelSink {
   };
 }
 
+/**
+ * B1: the sentinel keeps its state in its own directory (control's cache is
+ * control-only under role isolation). Files from older builds, which kept them
+ * in cache/, are carried over once so objects already observed are not observed again.
+ */
+function prepareIngestDir(cfg: Config): string {
+  const dir = ingestDir(cfg);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  for (const f of ['ingest-seen.json', 'ingest-outbox.json']) {
+    const from = join(cacheDir(cfg), f);
+    const to = join(dir, f);
+    try {
+      if (!existsSync(to) && existsSync(from)) copyFileSync(from, to);
+    } catch {
+      /* unreadable legacy file (another role owns cache/): start fresh */
+    }
+  }
+  return dir;
+}
+
 async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Promise<IngestDeps> {
   const key = loadLaneKey(rt.cfg, 'ingest');
+  const dir = prepareIngestDir(rt.cfg);
   await startupCheck(rt, 'wallet-objects', key.publicKeyHex);
   const sink = sinkOverride === undefined ? remoteSentinelSink(new IpcClient(key, unixTransport(socketPath(rt.cfg, 'control')), Date.now, laneServer(rt, 'antibody'))) : sinkOverride;
-  const guardians = await loadGuardians(cacheDir(rt.cfg), { offline: rt.cfg.backend === 'offline' });
+  const guardians = await loadGuardians(dir, { offline: rt.cfg.backend === 'offline' });
   return {
     acct: requireAccount(rt.cfg),
     wallet: requireWallet(rt.cfg),
@@ -230,7 +253,7 @@ async function ingestDeps(rt: Runtime, sinkOverride?: SentinelSink | null): Prom
     sink,
     guardians,
     log: rt.log,
-    cacheDir: cacheDir(rt.cfg),
+    cacheDir: dir,
     threshold: rt.cfg.sentinelThreshold,
   };
 }

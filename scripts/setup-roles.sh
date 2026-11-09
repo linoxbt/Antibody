@@ -81,6 +81,13 @@ done
 mkdir -p "$HOME_DIR/cache"
 chown -R antibody-control:"$GROUP" "$HOME_DIR/cache"
 chmod 0700 "$HOME_DIR/cache"
+# The sentinel's own state (seen objects, outbox, scan lock, Guardians lists): ingest only (B1).
+mkdir -p "$HOME_DIR/ingest"
+for f in ingest-seen.json ingest-outbox.json; do
+  [ -e "$HOME_DIR/cache/$f" ] && [ ! -e "$HOME_DIR/ingest/$f" ] && cp "$HOME_DIR/cache/$f" "$HOME_DIR/ingest/$f"
+done
+chown -R antibody-ingest:"$GROUP" "$HOME_DIR/ingest"
+chmod 0700 "$HOME_DIR/ingest"
 [ -e "$HOME_DIR/hwm.json" ] && chown antibody-control:"$GROUP" "$HOME_DIR/hwm.json" && chmod 0600 "$HOME_DIR/hwm.json"
 # Non-secret settings everyone reads; the home is writable by the group for atomic renames.
 chgrp "$GROUP" "$HOME_DIR" "$HOME_DIR/antibody.json"

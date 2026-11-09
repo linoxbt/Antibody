@@ -35,6 +35,16 @@ function breakIfAbandoned(lock: string, staleMs: number): void {
   }
 }
 
+/**
+ * B1: only "already exists" means someone else holds the lock. Anything else
+ * (EACCES on a directory another role owns, ENOSPC, EROFS) will never clear by
+ * waiting, so it fails at once with the path in the message.
+ */
+function rethrowUnlessHeld(e: unknown, lock: string): void {
+  const code = (e as NodeJS.ErrnoException).code;
+  if (code !== 'EEXIST') throw new Error(`cannot take lock ${lock}: ${code ?? (e as Error).message}${code === 'EACCES' ? ' (this role has no write access to that directory)' : ''}`);
+}
+
 function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -74,7 +84,8 @@ export class JsonFileStore<T> {
         mkdirSync(lock);
         claim(lock);
         break;
-      } catch {
+      } catch (e) {
+        rethrowUnlessHeld(e, lock);
         // Break locks left by a crashed process (never a live one).
         breakIfAbandoned(lock, 15_000);
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${lock}`);
@@ -115,7 +126,8 @@ export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, ti
         mkdirSync(lockPath);
         claim(lockPath);
         break;
-      } catch {
+      } catch (e) {
+        rethrowUnlessHeld(e, lockPath);
         breakIfAbandoned(lockPath, HEARTBEAT_STALE_MS);
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${lockPath}`);
         await new Promise((r) => setTimeout(r, 20));

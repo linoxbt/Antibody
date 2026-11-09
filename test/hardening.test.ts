@@ -157,3 +157,38 @@ test('two scans at once observe a new coin once (sentinel + manual scan race)', 
     w.dispose();
   }
 });
+
+test('B1: file locks fail at once when the directory is not writable, instead of waiting out the timeout', async (t) => {
+  const { mkdtempSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { withFileLock, JsonFileStore } = await import('../src/adapters/filestore.ts');
+  if (process.getuid?.() === 0) return t.skip('root ignores directory permissions');
+  const dir = mkdtempSync(join(tmpdir(), 'antibody-lock-'));
+  chmodSync(dir, 0o500);
+  const t0 = Date.now();
+  await assert.rejects(withFileLock(join(dir, 'x.lock'), async () => 1, 30_000), /EACCES/);
+  assert.throws(() => new JsonFileStore(join(dir, 's.json'), () => ({})).update(() => undefined), /EACCES/);
+  assert.ok(Date.now() - t0 < 2000);
+  chmodSync(dir, 0o700);
+});
+
+test('B1: the sentinel keeps its state in its own directory and carries over seen objects from cache/', async () => {
+  const { existsSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const w = await createWorld();
+  after(() => w.dispose());
+  await seedBaseline(w);
+  const home = w.cfg.home;
+  await w.scan();
+  assert.ok(existsSync(join(home, 'ingest')));
+  for (const f of ['ingest-seen.json', 'ingest-outbox.json', 'ingest-scan.lock']) assert.ok(!existsSync(join(home, 'cache', f)), f);
+  // An older build's file is migrated once.
+  const w2 = await createWorld();
+  after(() => w2.dispose());
+  await seedBaseline(w2);
+  mkdirSync(join(w2.cfg.home, 'cache'), { recursive: true });
+  writeFileSync(join(w2.cfg.home, 'cache', 'ingest-seen.json'), JSON.stringify({ '0xlegacy': 'x' }));
+  await w2.scan();
+  assert.ok('0xlegacy' in JSON.parse(readFileSync(join(w2.cfg.home, 'ingest', 'ingest-seen.json'), 'utf8')));
+});

@@ -239,5 +239,7 @@ export function ipcPath(cfg: Config, name: 'control' | 'signer' | 'agent'): stri
 export const isPipe = (p: string) => p.startsWith('\\\\.\\pipe\\');
 export const socketPath = (cfg: Config, role: 'control' | 'signer') => ipcPath(cfg, role);
 export const cacheDir = (cfg: Config) => join(cfg.home, 'cache');
+/** The sentinel's own state (seen objects, outbox, scan lock); separate from control's cache so roles can own each (B1). */
+export const ingestDir = (cfg: Config) => join(cfg.home, 'ingest');
 export const offlineDir = (cfg: Config) => join(cfg.home, 'offline');
 export const logDir = (cfg: Config) => join(cfg.home, 'logs');

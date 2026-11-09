@@ -108,7 +108,9 @@ export async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
     try {
       out.push(await d.sink.incident(p));
     } catch (e) {
-      if (!/incident rejected/.test((e as Error).message)) break; // control still unreachable: keep the rest
+      // Control unreachable, or the observation still not indexed (B6): keep this and the rest.
+      if (!/incident rejected/.test((e as Error).message)) break;
+      d.log.warn('ingest.incident_rejected', { objectId: p.objectId, error: (e as Error).message });
     }
     box.update((q) => {
       const i = q.findIndex((x) => x.observationId === p.observationId);
@@ -116,6 +118,23 @@ export async function flushOutbox(d: IngestDeps): Promise<Incident[]> {
     });
   }
   return out;
+}
+
+/**
+ * B6: lessons from control, remembered locally, so a scan still scores against
+ * what was learned when control is briefly unreachable (its incidents queue).
+ */
+async function currentLessons(d: IngestDeps): Promise<LessonEntry[]> {
+  if (!d.sink) return [];
+  const cache = new JsonFileStore<LessonEntry[]>(join(d.cacheDir, 'lessons.json'), () => []);
+  try {
+    const l = await d.sink.lessons();
+    cache.update(() => l, true);
+    return l;
+  } catch (e) {
+    d.log.warn('ingest.lessons_cached', { error: (e as Error).message });
+    return cache.read();
+  }
 }
 
 /**
@@ -131,7 +150,7 @@ async function scanWalletLocked(d: IngestDeps): Promise<ScanResult> {
   const now = d.now ?? Date.now;
   await flushOutbox(d);
   const seen = new JsonFileStore<Record<string, string>>(join(d.cacheDir, 'ingest-seen.json'), () => ({}));
-  const [objects, ckpt, lessons] = await Promise.all([d.chain.listOwnedObjects(d.wallet), d.chain.latestCheckpoint(), d.sink ? d.sink.lessons() : Promise.resolve([] as LessonEntry[])]);
+  const [objects, ckpt, lessons] = await Promise.all([d.chain.listOwnedObjects(d.wallet), d.chain.latestCheckpoint(), currentLessons(d)]);
   const items: ScanItem[] = [];
   let skipped = 0;
 

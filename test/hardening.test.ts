@@ -305,3 +305,21 @@ test('S5: a revoke must cite the owner’s remove_delegate_key call for that ver
   await assert.rejects(w.control.recordRevoke(agent, 'agent', addOther), /does not call account::remove_delegate_key/);
   await assert.rejects(w.control.recordRevoke(agent, 'agent', rmIngest), /does not name key/);
 });
+
+test('B6: an incident whose observation is not indexed yet is deferred and queued, and scans survive a control outage with cached lessons', async () => {
+  const w = await world();
+  await assert.rejects(
+    w.control.incident({ objectId: '0x' + 'cd'.repeat(32), observationId: '01900000-0000-7000-8000-0000000000ff', score: 0, rules: [], lessonMatches: [], blocklisted: false, proposedSeed: { type: 'source', value: '0x' + 'cd'.repeat(32) } }),
+    /incident deferred/,
+  );
+  const { scanWallet } = await import('../src/ingest/scan.ts');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'antibody-ingest-'));
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(join(dir, 'lessons.json'), '[]');
+  const sink = { lessons: async () => { throw new Error('control unreachable'); }, incident: async () => { throw new Error('control unreachable'); } };
+  const res = await scanWallet({ acct: w.setup.accountId, wallet: w.setup.wallet, chain: w.rt.chain, mem: w.rt.memory((await import('../src/core/keys.ts')).laneKeyFromSeedHex(w.readKey('ingest'))), key: (await import('../src/core/keys.ts')).laneKeyFromSeedHex(w.readKey('ingest')), sink, guardians: { coinBlocklist: new Set(), objectBlocklist: new Set(), source: 'none' }, log: w.rt.log, cacheDir: dir, threshold: 0.5 } as never);
+  assert.ok(res, 'the scan completes without control');
+});

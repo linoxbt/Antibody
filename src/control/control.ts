@@ -789,6 +789,8 @@ export class Control {
     if (i.proposedSeed.value !== i.objectId) throw new Error('incident rejected: the proposed seed must be the observed object itself');
     const snap = await this.snapshot();
     const obs = i.observationId ? snap.projection.lineage.nodes.get(i.observationId) : undefined;
+    // B6: a just-written observation may not be indexed by the relayer yet: deferred, not rejected.
+    if (i.observationId && !obs && !snap.projection.lineage.forensic.some((f) => f.header?.id === i.observationId)) throw new Error(`incident deferred: observation ${i.observationId} is not visible to control yet`);
     const h = obs?.env.header;
     if (!obs || !h || h.lane !== 'wallet-objects' || h.kind !== 'observation' || !h.src.some((r) => srcIdentifiers(r).includes(normalizeIdentifierSafe(i.objectId)))) {
       throw new Error('incident rejected: it does not cite a verified wallet-objects observation of that object');

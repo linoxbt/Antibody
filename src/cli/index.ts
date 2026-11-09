@@ -301,7 +301,7 @@ async function main(argv: string[]): Promise<void> {
           res = await setupLive(cfg, {
             readKeyFile: read,
             createAccount: (chain) => createAccountAsOwner(chain, cfg, session),
-            ...(session ? { admin: (owner: string, chain: SdkChainReader) => walletAccountAdmin({ session, owner, accountId: cfg.accountId!, chain, reader: chain, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network }) } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY }),
+            ...(session ? { admin: (owner: string, chain: SdkChainReader, accountId: string) => walletAccountAdmin({ session, owner, accountId, chain, reader: chain, packageId: cfg.packageId, registryId: cfg.registryId, network: cfg.network }) } : { ownerSecret: process.env.OWNER_SUI_PRIVATE_KEY }),
           });
         }
         await session?.finish({ ok: true, text: `Antibody is set up. Owner ${short(res.owner, 14)}; the lane keys are registered${res.simulated ? ' (simulated)' : ' on Sui'}. Back in the terminal: antibody up.` });

@@ -85,7 +85,7 @@ export async function setupLive(
   cfgIn: Config,
   opts: {
     ownerSecret?: string;
-    admin?: (owner: string, chain: SdkChainReader) => AccountAdmin & { addDelegateKeys?(keys: { pub: string; label: string }[]): Promise<{ digest: string }> };
+    admin?: (owner: string, chain: SdkChainReader, accountId: string) => AccountAdmin & { addDelegateKeys?(keys: { pub: string; label: string }[]): Promise<{ digest: string }> };
     /** No MEMWAL_ACCOUNT_ID: create the MemWalAccount on-chain first (the owner signs create_account). */
     createAccount?: (chain: SdkChainReader) => Promise<{ accountId: string; digest: string }>;
     readKeyFile: (role: Role) => string;
@@ -104,7 +104,8 @@ export async function setupLive(
   const account = await chain.getAccount(accountId);
   const owner = normalizeSuiAddress(account.owner);
   let admin: ReturnType<NonNullable<typeof opts.admin>>;
-  if (opts.admin) admin = opts.admin(owner, chain);
+  // B5: the account id is passed in, since setup may have just created the account.
+  if (opts.admin) admin = opts.admin(owner, chain, accountId);
   else {
     if (!opts.ownerSecret) throw new Error('the owner must sign: run antibody setup --wallet (your browser wallet), or set OWNER_SUI_PRIVATE_KEY for a throwaway demo owner');
     const ownerAddr = normalizeSuiAddress(Ed25519Keypair.fromSecretKey(opts.ownerSecret).toSuiAddress());

@@ -175,6 +175,11 @@ Amounts are small: rent was 0.01 SUI.
   ([report](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA)).
 
 In all: 21 records on Walrus Memory mainnet (13 memories, 8 ledger records).
+Four days later the owner revoked Steward's agent key and rotated in a fresh one
+([`QyoP9h…`](https://suiscan.xyz/mainnet/tx/QyoP9hy3BCphMdYhPDE3mkLovjHweW5s4GdFZh282vQ),
+[`5eckAm…`](https://suiscan.xyz/mainnet/tx/5eckAme6ikVJunXvyd8yxTSQMJdCo4mYLYL3DfPvEBAP)):
+two more ledger records, every earlier memory still verified, and a fresh rebuild
+matched again.
 The run also found three bugs that only show up on a real network (Tatum's rate
 limit during setup, two scans observing one coin, a documented setting the code
 read differently); all three are fixed and tested.

@@ -102,12 +102,14 @@ account, with every identifier recorded by `antibody evidence` in
 | Sentinel incident, blocked theft (`LABEL_MISMATCH`), quarantine and lesson | Ledger records #3 and #4 on Walrus |
 | Repeat attack auto-quarantined by the lesson (same sender, same package) | Ledger record #5 on Walrus |
 | Fresh rebuild from Walrus and Sui with a matching projection digest | `ff7317f7…80c5` |
+| Agent key revoked by the owner and a fresh one rotated in (9 November): ledger records #8 and #9, earlier memories stay valid, fresh rebuild matches again (`5a588326…a3c3`) | [`QyoP9h…`](https://suiscan.xyz/mainnet/tx/QyoP9hy3BCphMdYhPDE3mkLovjHweW5s4GdFZh282vQ) · [`5eckAm…`](https://suiscan.xyz/mainnet/tx/5eckAme6ikVJunXvyd8yxTSQMJdCo4mYLYL3DfPvEBAP) |
 | Allowance paid after restoration | [`GDRCJq…`](https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ) |
 | Electricity bill paid over x402 (our own bill server and facilitator), settled on Sui | [`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2) |
 | Incident report published through Tatum's Storage API | [Walrus blob](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA) |
 
-In total, 21 records were written to Walrus Memory on mainnet (13 memories and 8
-ledger records). Amounts were deliberately small: rent was 0.01 SUI.
+In total, 21 records were written to Walrus Memory in the 5 November run (13
+memories and 8 ledger records), and 2 more ledger records by the 9 November
+revocation and rotation. Amounts were deliberately small: rent was 0.01 SUI.
 
 ## Quick start
 
@@ -563,7 +565,7 @@ docs/           blog · runbooks · design notes · attack-set results · mainne
 | Ledger beyond 90 records (cap 5,000) | Verified with a 260-record cold rebuild | Same code |
 | Installers on Linux, macOS and Windows | Verified in CI | |
 | Standalone probe P-2 to P-8 (`scripts/probe.ts`) | | Not run as a separate probe; the mainnet run exercised delegate registration, the Tatum gateway and restoration |
-| Lane revocation and rotation | Verified (tests and the hosted sandbox) | Not exercised on mainnet. Probe P-5 (the relayer refuses a removed key's writes) is unverified; Antibody does not rely on it, since envelopes signed after a revocation fail verification (`SIGNER_REVOKED`) |
+| Lane revocation and rotation | Verified (tests and the hosted sandbox) | Verified on 9 November: the agent key was removed by the owner and rotated (ledger #8, #9). Probe P-5 (the relayer refuses a removed key's writes) is unverified; Antibody does not rely on it, since envelopes signed after a revocation fail verification (`SIGNER_REVOKED`) |
 
 ## Total Recall criteria
 

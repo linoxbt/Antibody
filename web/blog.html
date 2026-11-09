@@ -179,6 +179,11 @@ Qwen&#39;s first x402 attempt used the wrong payee label and was blocked too.</l
 (<a href="https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA" target="_blank" rel="noopener">report</a>).</li>
 </ul>
 <p>In all: 21 records on Walrus Memory mainnet (13 memories, 8 ledger records).
+Four days later the owner revoked Steward&#39;s agent key and rotated in a fresh one
+(<a href="https://suiscan.xyz/mainnet/tx/QyoP9hy3BCphMdYhPDE3mkLovjHweW5s4GdFZh282vQ" target="_blank" rel="noopener"><code>QyoP9h…</code></a>,
+<a href="https://suiscan.xyz/mainnet/tx/5eckAme6ikVJunXvyd8yxTSQMJdCo4mYLYL3DfPvEBAP" target="_blank" rel="noopener"><code>5eckAm…</code></a>):
+two more ledger records, every earlier memory still verified, and a fresh rebuild
+matched again.
 The run also found three bugs that only show up on a real network (Tatum&#39;s rate
 limit during setup, two scans observing one coin, a documented setting the code
 read differently); all three are fixed and tested.</p>

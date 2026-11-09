@@ -30,7 +30,7 @@ Every finding of the second full audit, what was done, and how it was verified.
 | B8 | Daemons exited on a brief outage; the supervisor gave up after 12 exits | **Fixed.** Startup waits out an outage; only a configuration error (exit 78) stops the supervisor | `ops.test.ts` B8 |
 | B9 / M2 | Report uploads never polled; the link served the whole Walrus quilt | **Fixed.** Job followed to `CERTIFIED`, quilt-patch link, `antibody report status`; mainnet report republished and all links updated | live link serves the JSON report |
 | M3 | Evidence did not record the rebuild digest | **Fixed.** Both digests recorded; they match on mainnet | `docs/mainnet-evidence.md` |
-| M4 | No mainnet revoke or rotate | **Not done.** The on-chain key change was refused by this session's permission policy; the README says revocation was not exercised on mainnet | needs the owner's go-ahead |
+| M4 | No mainnet revoke or rotate | **Fixed.** On 9 November the owner removed the agent key (`QyoP9hy3…`) and registered a fresh one (`5eckAme6…`); `lane.revoke` and `lane.rotate` are ledger #8 and #9 | `verify-ledger` passes; the fresh rebuild matches (`5a588326…a3c3`); all 13 earlier memories still verify |
 | M5 | Probe P-5 unverified | **Labelled** in the README (Antibody does not rely on it) | |
 | M6 | Qwen attack set listed as mainnet | **Fixed** (labelled simulated chain, real model calls) | |
 | M7 | Blog claimed per-role OS users on mainnet | **Fixed** (qualified) | |

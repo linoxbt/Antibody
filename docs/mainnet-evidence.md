@@ -1,6 +1,6 @@
 # Antibody · mainnet evidence
 
-Generated 2026-11-09T18:09:30.442Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 343442474.
+Generated 2026-11-09T19:17:32.752Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 343459261.
 
 ## Submission form
 
@@ -8,15 +8,16 @@ Generated 2026-11-09T18:09:30.442Z by `antibody evidence`. Chain reads via tatum
 | --- | --- |
 | Account ID (MemWalAccount) | [`0x2e31cec493d7a1a7da0ea9cc40a7c7b12d64754332d7f991e5fd7ed9af29a500`](https://suiscan.xyz/mainnet/object/0x2e31cec493d7a1a7da0ea9cc40a7c7b12d64754332d7f991e5fd7ed9af29a500) |
 | SUI address (owner) | [`0xd8d6ea54011cfa35a1538fa47219caa13066a68b9a16a7e74e7987f6927f3215`](https://suiscan.xyz/mainnet/account/0xd8d6ea54011cfa35a1538fa47219caa13066a68b9a16a7e74e7987f6927f3215) |
-| MEMWAL_AGENT_ID (Steward's `antibody:agent` delegate key) | `1817572d00c0171582d537dbb55c2140a22d843fc5b761d3ef7b71a79e8d053f` |
+| MEMWAL_AGENT_ID (Steward's `antibody:agent` delegate key) | `03ec6e75b908ce079af66d2fb0c212112e8ebb8effccad407f4e9c03c2639dab` |
 | Steward's wallet | [`0x8a57ec1f69b28d25f79ce882b3affdae85b5058d298b186717bef125b1d0a5cb`](https://suiscan.xyz/mainnet/account/0x8a57ec1f69b28d25f79ce882b3affdae85b5058d298b186717bef125b1d0a5cb) |
-| Memories on Walrus | **21** (13 memories + 8 ledger records) |
+| Memories on Walrus | **23** (13 memories + 10 ledger records) |
 
 ## Lanes (delegate keys on the account)
 
 | Label | Public key | Status | Registered in |
 | --- | --- | --- | --- |
-| `antibody:agent` | `1817572d00c0171582d537dbb55c2140a22d843fc5b761d3ef7b71a79e8d053f` | active | [`JE4oUXpD5iPPJmnu5GzWFAgmcaDJUw4E4ov4zsxJgLjk`](https://suiscan.xyz/mainnet/tx/JE4oUXpD5iPPJmnu5GzWFAgmcaDJUw4E4ov4zsxJgLjk) |
+| `antibody:agent` | `03ec6e75b908ce079af66d2fb0c212112e8ebb8effccad407f4e9c03c2639dab` | active | on-chain (see the account) |
+| `antibody:agent` | `1817572d00c0171582d537dbb55c2140a22d843fc5b761d3ef7b71a79e8d053f` | revoked | [`JE4oUXpD5iPPJmnu5GzWFAgmcaDJUw4E4ov4zsxJgLjk`](https://suiscan.xyz/mainnet/tx/JE4oUXpD5iPPJmnu5GzWFAgmcaDJUw4E4ov4zsxJgLjk) |
 | `antibody:control` | `183a8e176fa66f65fdb1d6c6e9ce54eeb35cf217daf08074ff40925158e58e78` | active | [`9CSuLZ19JrXphuLmmZp5jX9QjpddmfQ1EZCCFPVwkjqK`](https://suiscan.xyz/mainnet/tx/9CSuLZ19JrXphuLmmZp5jX9QjpddmfQ1EZCCFPVwkjqK) |
 | `antibody:user` | `0f4b57112c27a4913468439d58667be6b4eea87e5f1f3638cd811009c14a5a91` | active | [`JAj5QbmFAWoWSgYo9GjGFRs69kK53UtSV6mCa95BnJTk`](https://suiscan.xyz/mainnet/tx/JAj5QbmFAWoWSgYo9GjGFRs69kK53UtSV6mCa95BnJTk) |
 | `antibody:wallet-objects` | `d091e4b15dbf83b3c77db232e94518c2def560de67f9e226faf40cd51e1c4124` | active | [`5Td8EiEckYHXmToSNRYnfhK8vVh7GDwsMH24w88ruGNx`](https://suiscan.xyz/mainnet/tx/5Td8EiEckYHXmToSNRYnfhK8vVh7GDwsMH24w88ruGNx) |
@@ -34,7 +35,7 @@ Attacker [`0xa15842b3ddf6e4c2b3f0a590c5e0a6461e63a57ffdeaa218f4ea6ed655905f2a`](
 
 ## Control ledger (hash-chained, on Walrus)
 
-Head: seq **7**, hash `5466e9072b253a35f868ace6f7bbb4ffe34cd724b29cbc7e167a95bf2c0e20dc`.
+Head: seq **9**, hash `6388036ca98df55531b74f6cef874799d20ae20ae98542e5eab917956f5d8dd4`.
 
 | Seq | Record | Blob | On-chain |
 | --- | --- | --- | --- |
@@ -46,6 +47,8 @@ Head: seq **7**, hash `5466e9072b253a35f868ace6f7bbb4ffe34cd724b29cbc7e167a95bf2
 | 5 | `quarantine` | [`75ioex6aDddqUB4DxRNgmSE3LYiP5dx3PHE5LXI-we0`](https://walruscan.com/mainnet/blob/75ioex6aDddqUB4DxRNgmSE3LYiP5dx3PHE5LXI-we0) |  |
 | 6 | `lesson` | [`vOr22jhBna_j-iewmPUtTa7y_2QMRif22QL4J2Sw8Tk`](https://walruscan.com/mainnet/blob/vOr22jhBna_j-iewmPUtTa7y_2QMRif22QL4J2Sw8Tk) |  |
 | 7 | `payee.add` | [`iWwGJG31zEBWtAZ-poGvajVvIRk7uY-DB85L9JGMGQs`](https://walruscan.com/mainnet/blob/iWwGJG31zEBWtAZ-poGvajVvIRk7uY-DB85L9JGMGQs) |  |
+| 8 | `lane.revoke` | [`-NWa47bcBsBloSzWbkf7KX2oisPT-5FMoKJ0R9IywjE`](https://walruscan.com/mainnet/blob/-NWa47bcBsBloSzWbkf7KX2oisPT-5FMoKJ0R9IywjE) | [`QyoP9hy3BCphMdYhPDE3mkLovjHweW5s4GdFZh282vQ`](https://suiscan.xyz/mainnet/tx/QyoP9hy3BCphMdYhPDE3mkLovjHweW5s4GdFZh282vQ) |
+| 9 | `lane.rotate` | [`KlyvHV9m6B-47nTWRBj9ADylDrEin_0I14jlVenbIa0`](https://walruscan.com/mainnet/blob/KlyvHV9m6B-47nTWRBj9ADylDrEin_0I14jlVenbIa0) | [`5eckAme6ikVJunXvyd8yxTSQMJdCo4mYLYL3DfPvEBAP`](https://suiscan.xyz/mainnet/tx/5eckAme6ikVJunXvyd8yxTSQMJdCo4mYLYL3DfPvEBAP) |
 
 Lessons learned: 2 (2 active). Quarantine records: 2.
 
@@ -92,7 +95,7 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 
 ## Restore
 
-Projection digest (this machine, with its cache): `ff7317f701d517a3baa215f5f70e3f22e4fa2e9001454ef2e0267707228380c5`
-Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, 2026-11-09T18:09:30.441Z): `ff7317f701d517a3baa215f5f70e3f22e4fa2e9001454ef2e0267707228380c5`
+Projection digest (this machine, with its cache): `5a58832605ec91dcb853763e1032c50db258b97f5feb0a9f6184b328e9caa3c3`
+Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, 2026-11-09T19:17:32.750Z): `5a58832605ec91dcb853763e1032c50db258b97f5feb0a9f6184b328e9caa3c3`
 
-**Match.** The fresh rebuild read 13 memories in 2 recall queries (4.6 s) and reached the same state.
+**Match.** The fresh rebuild read 13 memories in 2 recall queries (6.8 s) and reached the same state.

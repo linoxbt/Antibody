@@ -869,6 +869,16 @@ async function main(argv: string[]): Promise<void> {
       const r = rt('control');
       const control = buildControl(r, { signer: null });
       const state = (await stateJson(r, control)) as unknown as EvidenceState;
+      // M3: also rebuild from scratch (empty cache) and record both digests.
+      const tmp = mkdtempSync(join(tmpdir(), 'antibody-evidence-'));
+      try {
+        const t0 = Date.now();
+        const fresh = await buildControl(r, { signer: null, noCache: true, cacheDirOverride: tmp }).snapshot();
+        state.rebuild = { digest: fresh.projection.digest, memories: fresh.projection.lineage.nodes.size, queries: fresh.coverage.queries, ms: Date.now() - t0, at: new Date().toISOString() };
+        if (state.rebuild.digest !== state.digest) console.log(red(`fresh rebuild digest ${state.rebuild.digest} differs from ${state.digest}`));
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
       const md = renderEvidence(state, { setup: loadSetupEvidence(r.cfg.home), payments: control.payments.list(), attack: loadAttackEvidence(r.cfg.home), generatedAt: new Date().toISOString(), tatumHost: new URL(r.cfg.chainTransport === 'grpc' ? r.cfg.tatumGrpcUrl : r.cfg.tatumRpcUrl).host });
       const out = String(values.out);
       mkdirSync(dirname(resolve(out)), { recursive: true });

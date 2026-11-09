@@ -168,7 +168,7 @@ Amounts are small: rent was 0.01 SUI.
   ([`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2)).
   Qwen's first x402 attempt used the wrong payee label and was blocked too.
 - **An incident report**, published to Walrus through Tatum's Storage API
-  ([report](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/5Fqo1B_suneX8GX7db49TlcvtL0uV7u3FNiig0Ikea8)).
+  ([report](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA)).
 
 In all: 21 records on Walrus Memory mainnet (13 memories, 8 ledger records).
 The run also found three bugs that only show up on a real network (Tatum's rate

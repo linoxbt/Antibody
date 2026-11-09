@@ -104,7 +104,7 @@ account, with every identifier recorded by `antibody evidence` in
 | Fresh rebuild from Walrus and Sui with a matching projection digest | `ff7317f7…80c5` |
 | Allowance paid after restoration | [`GDRCJq…`](https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ) |
 | Electricity bill paid over x402, settled on Sui | [`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2) |
-| Incident report published through Tatum's Storage API | [Walrus blob](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/5Fqo1B_suneX8GX7db49TlcvtL0uV7u3FNiig0Ikea8) |
+| Incident report published through Tatum's Storage API | [Walrus blob](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA) |
 
 In total, 21 records were written to Walrus Memory on mainnet (13 memories and 8
 ledger records). Amounts were deliberately small: rent was 0.01 SUI.

@@ -1,6 +1,6 @@
 # Antibody · mainnet evidence
 
-Generated 2026-11-05T16:50:58.728Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 341978483.
+Generated 2026-11-09T18:09:30.442Z by `antibody evidence`. Chain reads via tatum-grpc (sui-mainnet-grpc.gateway.tatum.io), checkpoint 343442474.
 
 ## Submission form
 
@@ -78,7 +78,7 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 
 </details>
 
-## Payments (executed through the signer)
+## Payments (signed by Steward's signer, confirmed on-chain)
 
 | Status | Amount (base units) | Recipient | Transaction |
 | --- | --- | --- | --- |
@@ -88,8 +88,11 @@ Lessons learned: 2 (2 active). Quarantine records: 2.
 
 ## Incident reports (Tatum Storage API → Walrus)
 
-- ledger #3: [https://aggregator.walrus-mainnet.walrus.space/v1/blobs/5Fqo1B_suneX8GX7db49TlcvtL0uV7u3FNiig0Ikea8](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/5Fqo1B_suneX8GX7db49TlcvtL0uV7u3FNiig0Ikea8)
+- ledger #3: [https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA)
 
 ## Restore
 
-Projection digest `ff7317f701d517a3baa215f5f70e3f22e4fa2e9001454ef2e0267707228380c5`. A fresh process (`antibody rebuild --fresh`) must print the same digest from Walrus and Sui alone.
+Projection digest (this machine, with its cache): `ff7317f701d517a3baa215f5f70e3f22e4fa2e9001454ef2e0267707228380c5`
+Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, 2026-11-09T18:09:30.441Z): `ff7317f701d517a3baa215f5f70e3f22e4fa2e9001454ef2e0267707228380c5`
+
+**Match.** The fresh rebuild read 13 memories in 2 recall queries (4.6 s) and reached the same state.

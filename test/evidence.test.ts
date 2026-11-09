@@ -41,7 +41,7 @@ test('offline evidence says SIMULATED and does not claim Tatum', () => {
   const md = renderEvidence(state(true), { setup: null, payments: [], generatedAt: 'now', tatumHost: 'sui-mainnet-grpc.gateway.tatum.io' });
   assert.match(md, /SIMULATED evidence/);
   assert.doesNotMatch(md, /gateway\.tatum\.io/);
-  assert.match(md, /Payments \(executed through the signer\)\n\nNone yet\./);
+  assert.match(md, /Payments \(signed by Steward's signer, confirmed on-chain\)\n\nNone yet\./);
 });
 
 test('B9: a Tatum upload links the quilt patch (the JSON file), never the bare quilt blob or /undefined', async () => {

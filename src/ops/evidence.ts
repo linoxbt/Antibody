@@ -35,6 +35,8 @@ export interface EvidenceState {
   nodes: { id: string; lane: string; kind: string; cls: string; quarantined: boolean; blobIds: string[] }[];
   digest: string;
   reports: { seq: number; url: string; blobId?: string; simulated: boolean }[];
+  /** M3: the digest a fresh process rebuilt from Walrus and Sui alone (empty cache), when it was run. */
+  rebuild?: { digest: string; memories: number; queries: number; ms: number; at: string };
 }
 
 export interface EvidencePayment {
@@ -117,15 +119,27 @@ export function renderEvidence(s: EvidenceState, o: { setup: SetupEvidence | nul
   lines.push('', '## Memories', '', '| Lane · kind | Count |', '| --- | --- |', ...[...byLane].sort().map(([k, v]) => `| ${k} | ${v} |`), '');
   lines.push('<details><summary>Every memory blob</summary>', '', '| Memory | Lane · kind | Class | Blob |', '| --- | --- | --- | --- |');
   for (const n of memories) lines.push(`| \`${n.id}\` | ${n.lane} · ${n.kind} | ${n.cls}${n.quarantined ? ' (quarantined)' : ''} | ${blobLink(n.blobIds[0]!, net)} |`);
-  lines.push('', '</details>', '', '## Payments (executed through the signer)', '');
+  lines.push('', '</details>', '', '## Payments (signed by Steward\'s signer, confirmed on-chain)', '');
   const paid = o.payments.filter((p) => p.digest);
   if (paid.length) {
     lines.push('| Status | Amount (base units) | Recipient | Transaction |', '| --- | --- | --- | --- |');
     for (const p of paid) lines.push(`| ${p.status} | ${p.amount} ${p.coinType.split('::').pop()} | ${addrLink(p.recipient, net)} | ${txLink(p.digest!, net)} |`);
   } else lines.push('None yet.');
   lines.push('', '## Incident reports (Tatum Storage API → Walrus)', '');
-  if (s.reports.length) for (const r of s.reports) lines.push(`- ledger #${r.seq}: ${r.simulated ? '(simulated) ' : ''}[${r.url}](${r.url})`);
-  else lines.push('None yet: `antibody report <quarantine seq>`.');
-  lines.push('', '## Restore', '', `Projection digest \`${s.digest}\`. A fresh process (\`antibody rebuild --fresh\`) must print the same digest from Walrus and Sui alone.`, '');
+  // The latest readable upload per quarantine (earlier uploads linked the bare quilt, which is not the JSON file).
+  const latest = new Map<number, (typeof s.reports)[number]>();
+  for (const r of s.reports) if (/^https:\/\//.test(r.url) || r.simulated) latest.set(r.seq, r);
+  for (const r of latest.values()) lines.push(`- ledger #${r.seq}: ${r.simulated ? '(simulated) ' : ''}[${r.url}](${r.url})`);
+  if (latest.size === 0) lines.push('None yet: `antibody report <quarantine seq>`.');
+  lines.push('', '## Restore', '', `Projection digest (this machine, with its cache): \`${s.digest}\``);
+  if (s.rebuild) {
+    const same = s.rebuild.digest === s.digest;
+    lines.push(
+      `Projection digest (fresh rebuild, empty cache, Walrus and Sui alone, ${s.rebuild.at}): \`${s.rebuild.digest}\``,
+      '',
+      same ? `**Match.** The fresh rebuild read ${s.rebuild.memories} memories in ${s.rebuild.queries} recall queries (${(s.rebuild.ms / 1000).toFixed(1)} s) and reached the same state.` : '**MISMATCH**: the fresh rebuild disagrees with this machine. Investigate before trusting either.',
+      '',
+    );
+  } else lines.push('', 'A fresh process (`antibody rebuild --fresh`) must print the same digest from Walrus and Sui alone.', '');
   return lines.join('\n');
 }

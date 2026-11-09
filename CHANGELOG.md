@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.2.0 — 2026-11-09
+
+Second full audit; every finding and its verification is in
+[docs/audit-status.md](docs/audit-status.md).
+
+### Security
+- Ledger checkpoints only move forward: a leaked key can no longer backdate a
+  record around its own signer-window quarantine (S1).
+- The ingest lane can only raise incidents about objects really in Steward's
+  wallet, and cannot reach a user statement (S2).
+- Daemons keep only their own role's secrets; the owner key reaches none (S3).
+- Model text in decision records is quoted; untrusted decisions say so (S4).
+- Recorded revokes and rotations must be the exact owner call for that key (S5).
+- Sandbox: per-client sign-in and world limits; worlds see no host secrets (S6, S7).
+- Duplicate guard covers any payment to the same recipient and coin within ten
+  minutes; IPC lane lookup re-reads the chain when stale (S8, S9).
+- Site installers are pinned to a released commit and verify it (S10).
+
+### Payments and reliability
+- Payment outcomes settle from the chain (digest known before signing);
+  `antibody payments [list|reconcile|resolve]` (B2).
+- x402 honours dry-run; decisions are never lost to a relayer failure (B3, B4).
+- Daemons wait out a brief outage; the supervisor no longer gives up (B8).
+- Incident reports are followed to certification and linked as JSON;
+  `antibody report status`; the mainnet report was republished (B9).
+- The sentinel keeps its own state directory; deferred incidents; cached
+  lessons; Guardians lists refresh (B1, B6, B15).
+- `antibody evidence` records the fresh-rebuild digest next to the cached one (M3).
+
 ## 1.1.0 — 2026-11-02
 
 ### Mainnet run (2026-11-05)

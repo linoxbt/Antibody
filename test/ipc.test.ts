@@ -53,7 +53,8 @@ test('B7: an IPC timeout is reported as a timeout, never as "cannot reach" (whic
   const { join } = await import('node:path');
   const { createServer } = await import('node:http');
   const { unixTransport } = await import('../src/ipc.ts');
-  const sock = join(mkdtempSync(join(tmpdir(), 'ab-ipc-')), 's.sock');
+  // Windows serves IPC on named pipes (as the daemons do), elsewhere on a Unix socket.
+  const sock = process.platform === 'win32' ? `\\\\.\\pipe\\ab-ipc-test-${process.pid}-${Date.now()}` : join(mkdtempSync(join(tmpdir(), 'ab-ipc-')), 's.sock');
   const server = createServer(() => undefined); // never answers
   await new Promise<void>((r) => server.listen(sock, r));
   try {

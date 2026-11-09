@@ -164,6 +164,7 @@ test('B1: file locks fail at once when the directory is not writable, instead of
   const { join } = await import('node:path');
   const { withFileLock, JsonFileStore } = await import('../src/adapters/filestore.ts');
   if (process.getuid?.() === 0) return t.skip('root ignores directory permissions');
+  if (process.platform === 'win32') return t.skip('chmod does not restrict directories on Windows');
   const dir = mkdtempSync(join(tmpdir(), 'antibody-lock-'));
   chmodSync(dir, 0o500);
   const t0 = Date.now();

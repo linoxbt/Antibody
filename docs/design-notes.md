@@ -45,8 +45,9 @@ registered to 0x7a…") true whether or not the model passes a label.
 
 The learning loop has to be durable, rebuildable and tamper-evident, and poison
 must not be able to teach it. A `lesson` record type (antibody-signed) is
-derived deterministically from a human-confirmed quarantine. It reverts when
-that quarantine is released, and it is covered by the projection digest. Lessons
+derived deterministically from a quarantine (human-confirmed, or automatic from
+a lesson match or the Guardians blocklist) when it names a sender, coin type or
+package no active lesson covers. It reverts when that quarantine is released, and it is covered by the projection digest. Lessons
 tighten the sentinel only; they never reach the policy engine.
 
 ## 5. The lane tag carries the envelope id
@@ -150,3 +151,27 @@ so the local console also requires the session's secret in an
 an allowlist (DNS rebinding), and Origin / Sec-Fetch-Site. The hosted sandbox
 uses `__Host-` cookies, opens a session only after the visitor's world exists,
 and names its configured site (not the request's Host) in sign-in messages.
+
+## 19. The console is plain JavaScript modules
+
+The spec left the front end open. The console and site are ES modules with no
+framework and no build step: the same files are served by the local console,
+the hosted sandbox and Netlify, a strict CSP needs no inline script, and there is
+no bundler or framework supply chain inside the tool that guards a wallet.
+
+## 20. The ledger cap is 5,000 records
+
+The first build stopped at 90 records because one recall returns at most 100
+hits. Retrieval now follows up per missing sequence number and caches immutable
+blobs, so the cap only bounds a cold rebuild's query count and verification
+time (`LEDGER_CAP` in `src/core/ledger.ts`). Completeness is still checked
+against the relayer's inventory: anything retrieval misses fails closed.
+
+## 21. Checkpoints in the ledger only move forward
+
+A record's checkpoint is chosen by its signer. In the ledger, sequence order is
+authoritative, so a record may not claim an earlier checkpoint than the one
+before it, nor one far ahead of the chain; control refuses such an append before
+storing it. An open-ended signer-window quarantine also covers every later
+ledger record of that key. Without this, a leaked key could backdate a record
+to slip outside its own quarantine.

@@ -107,8 +107,10 @@ records stay untrusted for anything that matters.
 - **Quarantine is exclusion, not deletion**, computed fresh at every projection,
   so even notes written after the quarantine from stale context are excluded.
 - **Separate processes, separate keys**: model, control, signer, ingest and
-  human each run as their own OS user. The signer only obeys control, and it
-  re-runs the dry-run before signing.
+  human each hold only their own key, and `scripts/setup-roles.sh` gives each
+  its own OS user on Linux and macOS. (The mainnet demo ran them as one user,
+  with simulated isolation.) The signer only obeys control, and it re-runs the
+  dry-run before signing.
 
 ## Results
 
@@ -126,7 +128,7 @@ override, "skip checks"):
 it believes every injection.)*
 
 We ran the same 20 attacks against a real model, **Qwen 3.8 27B on the
-Fortytwo network**. It was not fooled once: in every run it paid the real
+Fortytwo network** (real model calls, on the simulated chain and relayer). It was not fooled once: in every run it paid the real
 landlord. That is good news about the model, and it is also the point. A model
 that resists today can be fooled by tomorrow's injection, and Antibody's
 guarantees do not depend on which one you get. With the gullible model the
@@ -166,6 +168,8 @@ Amounts are small: rent was 0.01 SUI.
   ([`GDRCJq…`](https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ)),
   and the electricity bill over **x402**, settled on Sui
   ([`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2)).
+  The bill server and the x402 facilitator were our own (no utility takes x402
+  yet); the payment itself is a real Sui transfer.
   Qwen's first x402 attempt used the wrong payee label and was blocked too.
 - **An incident report**, published to Walrus through Tatum's Storage API
   ([report](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA)).

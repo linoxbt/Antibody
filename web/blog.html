@@ -119,8 +119,10 @@ proposal citing ten convincing memories gets the same verdict as one citing none
 <li><strong>Quarantine is exclusion, not deletion</strong>, computed fresh at every projection,
 so even notes written after the quarantine from stale context are excluded.</li>
 <li><strong>Separate processes, separate keys</strong>: model, control, signer, ingest and
-human each run as their own OS user. The signer only obeys control, and it
-re-runs the dry-run before signing.</li>
+human each hold only their own key, and <code>scripts/setup-roles.sh</code> gives each
+its own OS user on Linux and macOS. (The mainnet demo ran them as one user,
+with simulated isolation.) The signer only obeys control, and it re-runs the
+dry-run before signing.</li>
 </ul>
 <h2 id="results">Results</h2>
 <p>Twenty attack variants (coin descriptions, NFT names, a peer agent&#39;s message,
@@ -132,7 +134,7 @@ override, &quot;skip checks&quot;):</p>
 <p><em>(Offline run with a deliberately gullible scripted model, the worst case:
 it believes every injection.)</em></p>
 <p>We ran the same 20 attacks against a real model, <strong>Qwen 3.8 27B on the
-Fortytwo network</strong>. It was not fooled once: in every run it paid the real
+Fortytwo network</strong> (real model calls, on the simulated chain and relayer). It was not fooled once: in every run it paid the real
 landlord. That is good news about the model, and it is also the point. A model
 that resists today can be fooled by tomorrow&#39;s injection, and Antibody&#39;s
 guarantees do not depend on which one you get. With the gullible model the
@@ -170,6 +172,8 @@ everything from Walrus and Sui alone and printed the same projection digest.</li
 (<a href="https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ" target="_blank" rel="noopener"><code>GDRCJq…</code></a>),
 and the electricity bill over <strong>x402</strong>, settled on Sui
 (<a href="https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2" target="_blank" rel="noopener"><code>DJYbNY…</code></a>).
+The bill server and the x402 facilitator were our own (no utility takes x402
+yet); the payment itself is a real Sui transfer.
 Qwen&#39;s first x402 attempt used the wrong payee label and was blocked too.</li>
 <li><strong>An incident report</strong>, published to Walrus through Tatum&#39;s Storage API
 (<a href="https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA" target="_blank" rel="noopener">report</a>).</li>

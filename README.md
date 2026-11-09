@@ -84,7 +84,7 @@ gets in and makes sure it cannot move money, can be traced, and can be removed.
 | **Payments decided by code** | A pure policy engine pays only payees the human registered with a signed, typed confirmation, within a cap, after an exact dry run through Tatum. The model can only propose. |
 | **Real-time detection** | A sentinel follows Sui checkpoints through Tatum's gRPC stream and scores everything that lands in the wallet. |
 | **Blast radius and quarantine** | From any poisoned source, Antibody computes every memory and decision it reached, and excludes all of it with one signed ledger record. Nothing is deleted; the evidence stays on Walrus. |
-| **A learning loop** | Each confirmed quarantine becomes a lesson in the ledger. A repeat attack from the same sender or package is quarantined before the agent ever reads it. |
+| **A learning loop** | A quarantine that reveals a new sender, coin type or package becomes a lesson in the ledger. A repeat attack from the same sender or package is quarantined before the agent ever reads it. |
 | **Deterministic restoration** | A fresh machine with an empty cache rebuilds the full trusted state, quarantines included, from Walrus and Sui alone, and the projection digests match. |
 | **Agent payments over x402** | HTTP 402 bills settle on Sui through the same policy: a server is paid only if its `payTo` is a registered payee within cap. |
 
@@ -103,7 +103,7 @@ account, with every identifier recorded by `antibody evidence` in
 | Repeat attack auto-quarantined by the lesson (same sender, same package) | Ledger record #5 on Walrus |
 | Fresh rebuild from Walrus and Sui with a matching projection digest | `ff7317f7…80c5` |
 | Allowance paid after restoration | [`GDRCJq…`](https://suiscan.xyz/mainnet/tx/GDRCJqUA4pbGhd7GMG4f68i16Trvx6d8FNfWzxdm3ZdJ) |
-| Electricity bill paid over x402, settled on Sui | [`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2) |
+| Electricity bill paid over x402 (our own bill server and facilitator), settled on Sui | [`DJYbNY…`](https://suiscan.xyz/mainnet/tx/DJYbNY5wrHCgd1ZsFqX99XvoTgKAvhRcuRCRtfWq8cn2) |
 | Incident report published through Tatum's Storage API | [Walrus blob](https://aggregator.walrus-mainnet.walrus.space/v1/blobs/by-quilt-patch-id/iHHNPFOwt1Y0L-3qDGKOZul8xY9fmEoXJZACAhbnIj4BAQALAA) |
 
 In total, 21 records were written to Walrus Memory on mainnet (13 memories and 8
@@ -269,7 +269,7 @@ citing none.
 | R1 | The recipient is a canonical Sui address; names are never resolved |
 | R2 | The recipient is an active payee in the ledger |
 | R3 | The label the model used belongs to that payee |
-| R4 | The amount is within the payee's cap, and the same payment has not gone out in the last 10 minutes |
+| R4 | The amount is within the payee's cap, and no identical payment (same recipient, coin and amount) is in flight, of unknown outcome, or went out in the last 10 minutes |
 | R5 | A dry run through Tatum shows exactly "recipient +amount, Steward −amount −gas", nothing else |
 
 ### Quarantine and blast radius
@@ -284,10 +284,13 @@ user-signed decision.
 
 ### The learning loop
 
-1. A human confirms a quarantine.
+1. A quarantine is written: confirmed by a human, or automatic (a lesson match
+   or the Sui Guardians blocklist).
 2. Control derives a **lesson** from the excluded observations (sender, coin
-   type, package and salient words) and appends it to the hash-chained ledger on
-   Walrus.
+   type, package and salient words) and, when it names something no active
+   lesson already covers, appends it to the hash-chained ledger on Walrus. An
+   automatic quarantine can therefore teach a lesson too (on mainnet, record #6
+   came from the auto-quarantine #5).
 3. The sentinel recalls every active lesson on every scan. A new object matching
    a lesson's sender, coin type or package is **auto-quarantined** with a ledger
    record citing the lesson, before Steward reads it.
@@ -385,7 +388,8 @@ fails on any regression.
 
 A strong model resisted these attacks on its own; a gullible one was fooled every
 time and still could not move money. Antibody's guarantees do not depend on which
-model you get. Full tables: [scripted model](docs/attack-set-results.md),
+model you get. Both runs use the simulated chain and relayer; the Qwen run makes
+real model calls to Fortytwo. Full tables: [scripted model](docs/attack-set-results.md),
 [Qwen on Fortytwo](docs/attack-set-results-llm.md).
 
 ## Running on mainnet
@@ -551,14 +555,15 @@ docs/           blog · runbooks · design notes · attack-set results · mainne
 
 | Area | Offline (CI) | Sui mainnet |
 | --- | --- | --- |
-| Invariants, learning loop, x402, sign-in, revocation, sentinel, sandbox | Verified by 149 tests | Same code |
+| Invariants, learning loop, x402, sign-in, revocation, sentinel, sandbox | Verified by the test suite (`npm test`) | Same code |
 | Full story: setup, payees, live attack, block, quarantine, lesson, repeat attack, rebuild, payments, x402, report | `scripts/demo-m1.ts` | Verified on 5 November 2026 ([evidence](docs/mainnet-evidence.md)) |
-| Attack set, 20 variants | Verified with the scripted model | Verified with Qwen on Fortytwo |
+| Attack set, 20 variants | Verified with the scripted model, and with Qwen on Fortytwo (real model calls; simulated chain and relayer) | Not run as a set; the mainnet run covered one live attack and its repeat |
 | Tatum Sui gRPC: reads, checkpoint stream, dry runs, execution | Fixture chain | Verified |
 | Second-RPC cross-check of the delegate set | Verified: a forged key blocks every payment | Enable with `ANTIBODY_CROSSCHECK_RPC_URL` |
 | Ledger beyond 90 records (cap 5,000) | Verified with a 260-record cold rebuild | Same code |
 | Installers on Linux, macOS and Windows | Verified in CI | |
 | Standalone probe P-2 to P-8 (`scripts/probe.ts`) | | Not run as a separate probe; the mainnet run exercised delegate registration, the Tatum gateway and restoration |
+| Lane revocation and rotation | Verified (tests and the hosted sandbox) | Not exercised on mainnet. Probe P-5 (the relayer refuses a removed key's writes) is unverified; Antibody does not rely on it, since envelopes signed after a revocation fail verification (`SIGNER_REVOKED`) |
 
 ## Total Recall criteria
 

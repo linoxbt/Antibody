@@ -299,7 +299,7 @@ Remove-Item "$([Environment]::GetFolderPath('Programs'))\Antibody.lnk", "$([Envi
             <details class="ts"><summary><code>payee changes need a typed confirmation: pass --confirm &lt;last 6 characters&gt;</code></summary><p>A deliberate speed bump. Add <code>--confirm</code> with the last six characters of the address, e.g. <code>--confirm 001a2d</code>.</p></details>
             <details class="ts"><summary><code>address must be a canonical Sui address (0x + 64 lowercase hex)</code></summary><p>Use the full address, all lowercase. Names like SuiNS are never resolved, on purpose.</p></details>
             <details class="ts"><summary>Steward says "I could not find a landlord address in memory"</summary><p>Steward only uses what you told it. Add a fact with <code>antibody statement "Rent is 450 USDC … to my landlord at 0x…"</code>.</p></details>
-            <details class="ts"><summary><code>ledger is at the MVP cap of 90 records</code></summary><p>This version keeps at most 90 control records. Start a fresh account for now; larger ledgers come later.</p></details>
+            <details class="ts"><summary><code>ledger is at the cap of 5000 records</code></summary><p>This version keeps at most 5,000 control records, which bounds how long a cold rebuild takes. Start a fresh account if you reach it.</p></details>
             <details class="ts"><summary><code>Tatum Storage upload failed: HTTP 401/403</code></summary><p>Incident reports need a mainnet Tatum key. Check <code>TATUM_API_KEY</code>. Without one, reports are saved locally and labelled simulated.</p></details>
           </div>
 

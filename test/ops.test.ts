@@ -245,3 +245,12 @@ test('B8: the startup check waits out a brief chain outage, and a wrong key is a
     w.dispose();
   }
 });
+
+test('a home too deep for a Unix socket fails with a plain message, not a truncated socket', async () => {
+  const { ipcPath, loadConfig } = await import('../src/config.ts');
+  if (process.platform === 'win32') return;
+  const cfg = loadConfig({ ANTIBODY_HOME: '/' + 'd'.repeat(120), ANTIBODY_BACKEND: 'offline' } as NodeJS.ProcessEnv);
+  assert.throws(() => ipcPath(cfg, 'signer'), /too deep for a Unix socket/);
+  const ok = loadConfig({ ANTIBODY_HOME: '/home/someone/.antibody', ANTIBODY_BACKEND: 'offline' } as NodeJS.ProcessEnv);
+  assert.match(ipcPath(ok, 'signer'), /signer\.sock$/);
+});

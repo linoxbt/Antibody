@@ -220,7 +220,14 @@ export async function runDoctor(cfg: Config, d: DoctorDeps = {}): Promise<Check[
   // Daemons
   const up: string[] = [];
   const down: string[] = [];
-  for (const n of ['control', 'signer', 'agent'] as const) ((await accepts(ipcPath(cfg, n))) ? up : down).push(n);
+  let socketError: string | null = null;
+  try {
+    ipcPath(cfg, 'control');
+  } catch (e) {
+    socketError = (e as Error).message;
+  }
+  if (socketError) add({ name: 'Home path', status: 'fail', detail: socketError, fix: 'set ANTIBODY_HOME to a shorter path, e.g. ~/.antibody' });
+  else for (const n of ['control', 'signer', 'agent'] as const) ((await accepts(ipcPath(cfg, n))) ? up : down).push(n);
   (pidAlive(join(runDir(cfg), 'ingest.pid')) ? up : down).push('sentinel');
   add(down.length === 0 ? { name: 'Daemons', status: 'ok', detail: up.join(', ') + ' running' } : { name: 'Daemons', status: up.length ? 'fail' : 'warn', detail: up.length ? `${down.join(', ')} not running (${up.join(', ')} up)` : 'not running', fix: up.length ? 'antibody down && antibody up; logs in ' + join(cfg.home, 'logs') : 'antibody up' });
   if (up.includes('control')) {

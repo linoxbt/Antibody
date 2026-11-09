@@ -263,8 +263,14 @@ export const runDir = (cfg: Config) => join(cfg.home, 'run');
  */
 export function ipcPath(cfg: Config, name: 'control' | 'signer' | 'agent'): string {
   if (process.platform === 'win32') return `\\\\.\\pipe\\antibody-${createHash('sha256').update(resolve(cfg.home)).digest('hex').slice(0, 12)}-${name}`;
-  return join(runDir(cfg), `${name}.sock`);
+  const p = join(runDir(cfg), `${name}.sock`);
+  // Unix socket paths are limited to about 104 to 108 bytes (macOS, Linux); a longer one is
+  // silently truncated and the daemon dies with a confusing ENOENT. Say so plainly instead.
+  if (Buffer.byteLength(p) > MAX_SOCKET_PATH) throw new Error(`ANTIBODY_HOME is too deep for a Unix socket: ${p} is ${Buffer.byteLength(p)} bytes (limit ${MAX_SOCKET_PATH}). Use a shorter ANTIBODY_HOME, e.g. ~/.antibody`);
+  return p;
 }
+/** The portable Unix socket path limit (macOS allows 104 bytes including the terminator). */
+export const MAX_SOCKET_PATH = 103;
 export const isPipe = (p: string) => p.startsWith('\\\\.\\pipe\\');
 export const socketPath = (cfg: Config, role: 'control' | 'signer') => ipcPath(cfg, role);
 export const cacheDir = (cfg: Config) => join(cfg.home, 'cache');

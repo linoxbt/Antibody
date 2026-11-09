@@ -12,14 +12,14 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { ipcPath, isPipe, loadConfig, requireAccount, ROLES, runDir, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
+import { ipcPath, isPipe, loadConfig, requireAccount, ROLES, runDir, scrubDaemonEnv, socketPath, USDC_MAINNET, type Config, type Role } from '../config.ts';
 import { isCanonicalSuiAddress, normalizeCoinType, normalizeSuiAddress, sha256Hex, SUI_COIN_TYPE } from '../core/encoding.ts';
 import { generateSeedHex, laneKeyFromSeedHex } from '../core/keys.ts';
 import type { LedgerState } from '../core/ledger.ts';
 import { toBaseUnits, formatUnits } from '../core/units.ts';
 import { LANES, LANE_LABEL, type Lane, type QuarantineSeed } from '../core/types.ts';
 import { IpcClient, unixTransport } from '../ipc.ts';
-import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, passphraseVars, readKeyText, sealKeyText } from '../keystore.ts';
+import { encryptKeysInPlace, keyPassphrase, keyPath, loadLaneKey, readKeyText, sealKeyText } from '../keystore.ts';
 import { createRuntime, type Runtime } from '../runtime.ts';
 import { setupLive, setupOffline } from '../setup.ts';
 import {
@@ -270,6 +270,10 @@ function printLedger(l: LedgerState) {
 
 async function main(argv: string[]): Promise<void> {
   const [cmd, sub, ...rest] = argv;
+  // S3: a daemon started by `up` or the service drops the secrets its role may not hold,
+  // including any the settings file put back when this process started.
+  const daemonRole = process.env.ANTIBODY_DAEMON === '1' ? (ROLES as readonly string[]).find((r) => r === process.env.ANTIBODY_ROLE) : undefined;
+  if (daemonRole) scrubDaemonEnv(process.env, daemonRole as Role);
   const opts = (args: string[], spec: NonNullable<ParseArgsConfig['options']>) => parseArgs({ args, options: spec ?? {}, allowPositionals: true, strict: true });
 
   switch (cmd) {
@@ -1051,9 +1055,8 @@ async function waitForHttp(url: string, ms: number) {
 
 /** A daemon's environment: its role, and only its own role's key passphrase (S16). */
 function roleEnv(role: Role): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ANTIBODY_ROLE: role };
-  for (const other of ROLES) if (other !== role) for (const v of passphraseVars(other)) delete env[v];
-  return env;
+  // S3: ANTIBODY_DAEMON makes the child scrub again after it reloads antibody.env (bin/antibody.mjs).
+  return scrubDaemonEnv({ ...process.env, ANTIBODY_ROLE: role, ANTIBODY_DAEMON: '1' }, role);
 }
 
 /**

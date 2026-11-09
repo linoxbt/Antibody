@@ -11,6 +11,35 @@ import type { Lane } from './core/types.ts';
 export const ROLES = ['control', 'user', 'agent', 'ingest', 'signer'] as const;
 export type Role = (typeof ROLES)[number];
 
+/**
+ * S3: secrets and the daemon roles allowed to see them. A daemon started by
+ * `antibody up` or the service gets only its own (and its own key passphrase);
+ * the owner's private key reaches no daemon at all. Anything not listed here
+ * (TATUM_API_KEY, MEMWAL_ACCOUNT_ID, settings) every role may read.
+ */
+export const ROLE_SECRET_VARS: Readonly<Record<string, readonly Role[]>> = {
+  OWNER_SUI_PRIVATE_KEY: [],
+  LLM_API_KEY: ['agent'],
+  FORTYTWO_API_KEY: ['agent'],
+  ANTIBODY_WEB_TOKEN: ['control'],
+  ANTIBODY_METRICS_TOKEN: ['control'],
+  ANTIBODY_ALERT_WEBHOOK: ['control'],
+  ANTIBODY_TELEGRAM_BOT_TOKEN: ['control'],
+  ANTIBODY_TELEGRAM_CHAT_ID: ['control'],
+};
+
+/** Remove from `env` every secret this daemon role may not hold, and every other role's key passphrase. */
+export function scrubDaemonEnv(env: NodeJS.ProcessEnv, role: Role): NodeJS.ProcessEnv {
+  for (const [name, roles] of Object.entries(ROLE_SECRET_VARS)) if (!roles.includes(role)) delete env[name];
+  for (const other of ROLES) {
+    if (other === role) continue;
+    const R = other.toUpperCase();
+    delete env[`ANTIBODY_KEY_PASSPHRASE_${R}`];
+    delete env[`ANTIBODY_KEY_PASSPHRASE_${R}_FILE`];
+  }
+  return env;
+}
+
 /** The lane each role signs with; the signer holds the Steward wallet key instead. */
 export const ROLE_LANE: Readonly<Record<Role, Lane | null>> = {
   control: 'antibody',

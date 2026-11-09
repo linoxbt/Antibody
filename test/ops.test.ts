@@ -214,3 +214,14 @@ test('B8: config rejects typos instead of silently disabling protection; blanks 
   assert.equal(c.accountId, '0x' + 'ab'.repeat(32), 'an empty line in antibody.env keeps the saved account');
   assert.equal(loadConfig({ ANTIBODY_HOME: '~/.antibody-x' } as NodeJS.ProcessEnv).home, join(homedir(), '.antibody-x'), '~ expands');
 });
+
+test('S3: a daemon keeps only the secrets its role needs; the owner key reaches none', async () => {
+  const { scrubDaemonEnv } = await import('../src/config.ts');
+  const base = () => ({ OWNER_SUI_PRIVATE_KEY: 'suiprivkey1x', LLM_API_KEY: 'l', FORTYTWO_API_KEY: 'f', TATUM_API_KEY: 't', ANTIBODY_WEB_TOKEN: 'w', ANTIBODY_KEY_PASSPHRASE_AGENT: 'pa', ANTIBODY_KEY_PASSPHRASE_SIGNER: 'ps', ANTIBODY_KEY_PASSPHRASE: 'shared' });
+  const agent = scrubDaemonEnv(base(), 'agent');
+  assert.deepEqual(Object.keys(agent).sort(), ['ANTIBODY_KEY_PASSPHRASE', 'ANTIBODY_KEY_PASSPHRASE_AGENT', 'FORTYTWO_API_KEY', 'LLM_API_KEY', 'TATUM_API_KEY']);
+  const signer = scrubDaemonEnv(base(), 'signer');
+  assert.deepEqual(Object.keys(signer).sort(), ['ANTIBODY_KEY_PASSPHRASE', 'ANTIBODY_KEY_PASSPHRASE_SIGNER', 'TATUM_API_KEY']);
+  const control = scrubDaemonEnv(base(), 'control');
+  assert.ok(!('OWNER_SUI_PRIVATE_KEY' in control) && !('LLM_API_KEY' in control) && control.ANTIBODY_WEB_TOKEN === 'w');
+});

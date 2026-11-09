@@ -468,7 +468,7 @@ export class Control {
     const dup = this.payments.duplicate({ key, recipient, coinType, amount: base.toString() }, this.now(), DUPLICATE_WINDOW_MS);
     if (!dup) return { verdict: v, key };
     const same = dup.amount === base.toString() ? 'the same payment' : `a payment to this recipient (${dup.amount} base units)`;
-    const why = dup.status === 'executed' ? `${same} went out ${Math.round((this.now() - dup.at) / 1000)} s ago (tx ${dup.digest ?? '?'})` : `${same} is ${dup.status === 'pending' ? 'still in flight' : 'of unknown outcome; check the wallet before paying again'}`;
+    const why = dup.status === 'executed' ? `${same} went out ${Math.round((this.now() - dup.at) / 1000)} s ago (tx ${dup.digest ?? '?'})` : `${same} is ${dup.status === 'pending' ? 'still in flight' : 'of unknown outcome; check the wallet, then settle it with `antibody payments reconcile` or `antibody payments resolve <key>`'}`;
     return { key, verdict: { decision: 'BLOCK', code: 'DUPLICATE_PAYMENT', reasons: [why], rules: [...v.rules, { rule: 'R4', pass: false, detail: `duplicate: ${why}` }], ...(v.payeeId ? { payeeId: v.payeeId } : {}) } };
   }
 

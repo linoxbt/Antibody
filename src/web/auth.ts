@@ -306,6 +306,16 @@ export class Auth {
   }
 
   /** The session named by a Cookie header, if live (and, on the local console, proven by its x-antibody-session secret). */
+  /**
+   * B13: sign out by cookie alone. Ending a session needs no session secret
+   * (the page may have lost it), and it only ever removes access.
+   */
+  endByCookie(header: string | undefined): void {
+    const id = parseCookies(header)[this.cookieName];
+    if (!id) return;
+    if (this.sessions.delete(idHash(id))) this.save();
+  }
+
   fromCookie(header: string | undefined, sessionHeader?: string | string[]): Session | null {
     const id = parseCookies(header)[this.cookieName];
     if (!id) return null;

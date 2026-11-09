@@ -936,11 +936,17 @@ async function main(argv: string[]): Promise<void> {
     case 'cloud': {
       // The hosted sandbox behind the public website (see src/web/cloud.ts). Every visitor's world is SIMULATED.
       if (sub !== 'serve') throw new Error('usage: antibody cloud serve');
-      const port = Number(process.env.PORT ?? 8080);
+      // B12: a limit that is not a positive number fails at start, never silently becomes NaN (which disables the check).
+      const positive = (k: string, v: string) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0) throw new Error(`${k} must be a positive number, got ${JSON.stringify(v)}`);
+        return n;
+      };
+      const port = positive('PORT', process.env.PORT ?? '8080');
       const dataDir = process.env.ANTIBODY_CLOUD_DATA ?? join(process.env.ANTIBODY_HOME ?? join(homedir(), '.antibody'), 'cloud');
       const { startCloud } = await import('../web/cloud.ts');
       const env = process.env;
-      const num = (k: string) => (env[k] ? Number(env[k]) : undefined);
+      const num = (k: string) => (env[k]?.trim() ? positive(k, env[k]!.trim()) : undefined);
       const { server, auth, tenants } = await startCloud({
         dataDir,
         port,

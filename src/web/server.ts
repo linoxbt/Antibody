@@ -241,6 +241,7 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
         if (url.pathname === '/api/auth/challenge') return send(200, a.challenge(String(body.address ?? ''), `http://${String(req.headers.host).toLowerCase()}`));
         if (url.pathname === '/api/auth/logout') {
           if (session) a.end(session.id);
+          else a.endByCookie(req.headers.cookie);
           return send(200, { ok: true }, { 'set-cookie': a.clearCookieHeader() });
         }
         const s =

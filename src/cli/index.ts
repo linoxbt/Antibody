@@ -25,6 +25,7 @@ import { setupLive, setupOffline } from '../setup.ts';
 import {
   laneServer,
   buildControl,
+  ConfigError,
   buildSigner,
   createModel,
   runIngestPaste,
@@ -1117,12 +1118,14 @@ async function supervise(cfg: Config): Promise<void> {
       // B24: a daemon that keeps dying fast is a configuration problem, not a hiccup: stop and say so
       // (the OS service manager may retry later with a fresh process).
       quick.set(name, next === 0 ? 0 : (quick.get(name) ?? 0) + 1);
-      if ((quick.get(name) ?? 0) >= 12) {
-        console.error(red(`${name} keeps exiting within a minute of starting; giving up. Run \`antibody doctor\` and read ${join(cfg.home, 'logs', `${name}.out`)}`));
+      // B8: only a configuration error (exit 78: wrong or unbound key) stops everything. Anything
+      // else (an RPC outage, a relayer hiccup) keeps being retried, slowly after many fast exits.
+      if (code === 78) {
+        console.error(red(`${name} cannot start with this configuration; stopping. Run \`antibody doctor\` and read ${join(cfg.home, 'logs', `${name}.out`)}`));
         stop(1);
         return;
       }
-      const delay = Math.min(30_000, 1000 * 2 ** Math.max(0, next - 1));
+      const delay = (quick.get(name) ?? 0) >= 12 ? 5 * 60_000 : Math.min(30_000, 1000 * 2 ** Math.max(0, next - 1));
       console.log(yellow(`${new Date().toISOString()} ${name} exited (${code ?? signal}); restarting in ${delay / 1000}s`) + dim(` log ${join(cfg.home, 'logs', `${name}.out`)}`));
       setTimeout(() => !stopping && start(name, args, role, next), delay);
     });
@@ -1242,5 +1245,5 @@ Env: ANTIBODY_BACKEND=live|offline, ANTIBODY_HOME, MEMWAL_ACCOUNT_ID, TATUM_API_
 main(process.argv.slice(2)).catch((e: Error) => {
   console.error(red(`error: ${e.message}`));
   if (process.env.ANTIBODY_DEBUG) console.error(e.stack);
-  process.exit(1);
+  process.exit(e instanceof ConfigError ? 78 : 1);
 });

@@ -225,3 +225,23 @@ test('S3: a daemon keeps only the secrets its role needs; the owner key reaches 
   const control = scrubDaemonEnv(base(), 'control');
   assert.ok(!('OWNER_SUI_PRIVATE_KEY' in control) && !('LLM_API_KEY' in control) && control.ANTIBODY_WEB_TOKEN === 'w');
 });
+
+test('B8: the startup check waits out a brief chain outage, and a wrong key is a configuration error', async () => {
+  const { createWorld, seedBaseline } = await import('../src/dev/world.ts');
+  const { startupCheck, ConfigError } = await import('../src/services.ts');
+  const w = await createWorld();
+  try {
+    await seedBaseline(w);
+    const real = w.rt.chain.getAccount.bind(w.rt.chain);
+    let fails = 2;
+    (w.rt.chain as { getAccount: typeof real }).getAccount = async (id) => {
+      if (fails-- > 0) throw new Error('503 service unavailable');
+      return real(id);
+    };
+    const agentPub = (await real(w.setup.accountId)).delegateKeys.find((k) => k.label === 'antibody:agent')!.publicKeyHex;
+    await startupCheck(w.rt, 'agent', agentPub, { sleep: async () => undefined });
+    await assert.rejects(startupCheck(w.rt, 'agent', 'ab'.repeat(32), { sleep: async () => undefined }), (e) => e instanceof ConfigError);
+  } finally {
+    w.dispose();
+  }
+});

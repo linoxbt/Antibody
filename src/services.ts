@@ -64,11 +64,34 @@ export function chainLaneOf(rt: Runtime): (pub: string) => Promise<Lane | undefi
 }
 
 /** Startup check: this role's lane key must be the single active key on-chain. */
-export async function startupCheck(rt: Runtime, lane: Lane, pub: string): Promise<void> {
-  const a = await rt.chain.getAccount(requireAccount(rt.cfg));
+/** B8: a problem a restart cannot fix (wrong key, unbound lane); the daemon exits with EX_CONFIG (78) and the supervisor stops. */
+export class ConfigError extends Error {}
+
+/**
+ * The daemon's key must be the lane's bound key on-chain. B8: a chain that is
+ * briefly unreachable is retried for up to two minutes instead of exiting.
+ */
+export async function startupCheck(rt: Runtime, lane: Lane, pub: string, o: { waitMs?: number; sleep?: (ms: number) => Promise<void> } = {}): Promise<void> {
+  const deadline = Date.now() + (o.waitMs ?? 120_000);
+  const sleep = o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  let a;
+  for (let delay = 1000; ; delay = Math.min(delay * 2, 15_000)) {
+    try {
+      a = await rt.chain.getAccount(requireAccount(rt.cfg));
+      break;
+    } catch (e) {
+      if (Date.now() >= deadline) throw e;
+      rt.log.warn('startup.chain_unreachable', { lane, error: (e as Error).message, retryInMs: delay });
+      await sleep(delay);
+    }
+  }
   const b = bindLanes(a);
-  if (!b.ok) throw new Error(b.error);
-  assertOwnLane(b.bindings, lane, pub);
+  if (!b.ok) throw new ConfigError(b.error);
+  try {
+    assertOwnLane(b.bindings, lane, pub);
+  } catch (e) {
+    throw new ConfigError((e as Error).message);
+  }
 }
 
 // ---- control -----------------------------------------------------------------

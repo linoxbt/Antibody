@@ -784,6 +784,9 @@ export class Control {
 
   /** Active lessons for the sentinel (wallet-objects lane may read these). */
   async lessons() {
+    // Performance: the sentinel asks on every scan. Lessons change only through this process's
+    // own ledger appends (which refresh the snapshot), so a verified snapshot under a minute old answers.
+    if (this.last?.ledger.ok && this.now() - this.lastAt < 60_000) return this.last.ledger.lessons;
     const { ledger } = await this.verifiedLedger();
     return ledger.lessons;
   }

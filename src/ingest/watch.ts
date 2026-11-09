@@ -21,6 +21,8 @@ export interface WatchOptions {
   scan: () => Promise<ScanResult>;
   signal: AbortSignal;
   pollMs?: number;
+  /** Least time between two scans in polling mode (default 15 s). */
+  pollScanMs?: number;
   minScanGapMs?: number;
   /** How long to poll after a stream failure before trying to stream again. */
   retryStreamMs?: number;
@@ -44,6 +46,8 @@ const sleep = (ms: number, signal: AbortSignal) =>
 export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mode: 'stream' | 'poll' }> {
   const log = o.log ?? (() => {});
   const pollMs = o.pollMs ?? 4000;
+  // An explicit pollMs (tests, a quiet test chain) keeps one scan per poll unless pollScanMs says otherwise.
+  const pollScanMs = o.pollScanMs ?? (o.pollMs !== undefined ? o.pollMs : 15_000);
   const gap = o.minScanGapMs ?? 1500;
   const retryStreamMs = o.retryStreamMs ?? 180_000;
   const staleMs = o.staleMs ?? 120_000;
@@ -132,10 +136,16 @@ export async function watchWallet(o: WatchOptions): Promise<{ scans: number; mod
     }
     // Poll, and give streaming another chance after a while.
     const until = Date.now() + (o.chain.watchCheckpoints ? retryStreamMs : Infinity);
+    let lastPollScan = 0;
     while (!o.signal.aborted && Date.now() < until) {
       try {
         const seq = await o.chain.latestCheckpoint();
-        if (seq > want) trigger(seq, 'poll');
+        // Performance: Sui makes several checkpoints a second, so without the stream (which only
+        // reports checkpoints touching the wallet) a scan runs at most every pollScanMs.
+        if (seq > want && Date.now() - lastPollScan >= pollScanMs) {
+          lastPollScan = Date.now();
+          trigger(seq, 'poll');
+        }
       } catch (e) {
         log('poll.error', { error: (e as Error).message });
       }

@@ -14,8 +14,8 @@ start() { # role, args...
   [ -r "$CONF/$role.env" ] || { echo "missing $CONF/$role.env" >&2; exit 1; }
   # Behind an egress proxy, pass it (and its CA, copied to $CONF/ca-bundle.crt) through.
   local net=()
-  for v in HTTPS_PROXY https_proxy NO_PROXY no_proxy; do [ -n "${!v:-}" ] && net+=("$v=${!v}"); done
-  [ -r "$CONF/ca-bundle.crt" ] && net+=("NODE_EXTRA_CA_CERTS=$CONF/ca-bundle.crt")
+  for v in HTTPS_PROXY https_proxy NO_PROXY no_proxy; do if [ -n "${!v:-}" ]; then net+=("$v=${!v}"); fi; done
+  if [ -r "$CONF/ca-bundle.crt" ]; then net+=("NODE_EXTRA_CA_CERTS=$CONF/ca-bundle.crt"); fi
   runuser -u "antibody-$role" -- env -i PATH="$PATH" HOME="$H" "${net[@]}" ANTIBODY_ENV_FILE="$CONF/$role.env" \
     nohup node "$APP/bin/antibody.mjs" "$@" >> "$H/logs/$role.out" 2>&1 &
   echo "$!" > "$H/run/$role.pid"

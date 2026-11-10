@@ -1,0 +1,14 @@
+# Always-on Antibody for one real account (mainnet): control, signer, agent and
+# the sentinel, each as its own OS user with an encrypted key. No owner key, no
+# public console: alerts go to Telegram, state lives on a volume at /srv/antibody.
+FROM node:22-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production ANTIBODY_HOME=/srv/antibody
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+COPY . .
+RUN groupadd --system antibody \
+ && for r in control user agent ingest signer; do useradd --system --gid antibody --home-dir /srv/antibody --shell /usr/sbin/nologin "antibody-$r"; done \
+ && chown -R root:root /app && chmod -R a+rX,go-w /app
+EXPOSE 8080
+CMD ["bash", "/app/scripts/railway-mainnet.sh"]

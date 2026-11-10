@@ -50,8 +50,9 @@ const pidAlive = (p: string) => {
   try {
     process.kill(Number(readFileSync(p, 'utf8')), 0);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    // EPERM: the process exists but belongs to another OS user (one user per role).
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
 };
 

@@ -532,8 +532,19 @@ Four protections are off by default; `antibody doctor` warns about each.
    that role's settings; the owner key goes in none of them), then
    `sudo ANTIBODY_HOME=/srv/antibody scripts/start-roles.sh` (`stop-roles.sh` to stop).
 
-The mainnet demo account runs with all four on: each daemon as its own user, encrypted
-keys, the fullnode cross-check and Telegram alerts.
+The mainnet demo account runs with all four on, always-on, as the `antibody-mainnet`
+service on Railway: each daemon as its own user, encrypted keys, the fullnode cross-check
+and Telegram alerts.
+
+**Deploying it on Railway.** The repo `Dockerfile` serves both the public sandbox and one
+real account. Set `ANTIBODY_MODE=mainnet`, attach a volume at `/srv/antibody`, and set
+`ANTIBODY_SEED_B64` (a base64 tar.gz of an existing home: `antibody.json`, the encrypted
+`keys/`, `hwm.json`, `payments.json`, `ingest/ingest-seen.json`), one
+`ANTIBODY_KEY_PASSPHRASE_<ROLE>` per role, and the usual `TATUM_API_KEY`, `MEMWAL_ACCOUNT_ID`,
+`LLM_*`, `ANTIBODY_CROSSCHECK_RPC_URL` and Telegram variables. The owner key is never on the
+server. `scripts/railway-mainnet.sh` unpacks the seed on first boot, gives each role only its
+own settings, starts the four daemons as separate users and answers `/healthz`. Run only one
+copy per account: two machines writing one ledger would conflict.
 
 ## Development
 

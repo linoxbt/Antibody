@@ -71,6 +71,11 @@ http.createServer((q, s) => {
 pids+=("$!")
 tail -n0 -F "$H"/logs/*.out &
 echo "Antibody mainnet up: every role as its own user"
+# Tell the owner it (re)started; logs whether the alert channel works. Never fatal.
+if [ -n "${ANTIBODY_TELEGRAM_BOT_TOKEN:-}${ANTIBODY_ALERT_WEBHOOK:-}" ]; then
+  runuser -u antibody-control -- env -i PATH="$PATH" HOME="$H" NODE_ENV=production "${net[@]}" ANTIBODY_ENV_FILE="$CONF/control.env" \
+    node "$APP/bin/antibody.mjs" alert started 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^━━' | sed 's/^/alerts: /' || echo "alerts: start notice failed (check the bot token and chat id)"
+fi
 wait -n "${pids[@]}"
 echo "a daemon exited; restarting the container" >&2
 exit 1

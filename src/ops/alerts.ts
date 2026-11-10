@@ -8,7 +8,7 @@
  */
 import type { Logger } from '../log.ts';
 
-export type AlertKind = 'incident' | 'auto-quarantine' | 'quarantine' | 'ledger-unverified' | 'payment-blocked' | 'test';
+export type AlertKind = 'incident' | 'auto-quarantine' | 'quarantine' | 'ledger-unverified' | 'payment-blocked' | 'test' | 'started';
 
 export interface Alert {
   kind: AlertKind;

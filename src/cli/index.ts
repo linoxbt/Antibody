@@ -853,13 +853,18 @@ async function main(argv: string[]): Promise<void> {
     }
 
     case 'alert': {
-      if (sub !== 'test') throw new Error('usage: antibody alert test');
+      // test: a one-off check. started: the always-on service announces each (re)start, so a crash loop is visible too.
+      if (sub !== 'test' && sub !== 'started') throw new Error('usage: antibody alert test | started');
       const cfg = loadConfig();
       const a = new Alerter(alertConfigFrom(), { simulated: cfg.backend === 'offline' });
       if (!a.enabled) throw new Error('no alert channel configured: set ANTIBODY_ALERT_WEBHOOK, or ANTIBODY_TELEGRAM_BOT_TOKEN and ANTIBODY_TELEGRAM_CHAT_ID (in ~/.antibody/antibody.env)');
-      const ok = await a.send({ kind: 'test', severity: 'info', key: `test:${Date.now()}`, title: 'test alert', text: `Alerts from ${cfg.home} reach you. Incidents, quarantines and ledger failures will arrive here.` });
+      const ok = await a.send(
+        sub === 'started'
+          ? { kind: 'started', severity: 'info', key: `started:${Date.now()}`, title: 'Antibody started', text: `Control, signer, agent and the sentinel are running${cfg.network ? ` on ${cfg.network}` : ''}, each as its own user. Incidents, quarantines, blocked payments and ledger failures will arrive here.` }
+          : { kind: 'test', severity: 'info', key: `test:${Date.now()}`, title: 'test alert', text: `Alerts from ${cfg.home} reach you. Incidents, quarantines and ledger failures will arrive here.` },
+      );
       if (!ok.length) throw new Error('every alert channel refused the test alert: check the URL, bot token and chat id (set ANTIBODY_LOG=stderr for details)');
-      console.log(green(`test alert delivered via ${ok.join(' and ')}`));
+      console.log(green(`${sub === 'started' ? 'start notice' : 'test alert'} delivered via ${ok.join(' and ')}`));
       return;
     }
 

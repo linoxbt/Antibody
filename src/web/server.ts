@@ -6,7 +6,7 @@
  * x-antibody-ui header so a cross-site form post cannot trigger them.
  */
 import { execFile } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -199,7 +199,10 @@ export async function startWeb(rt: Runtime, control: Control, port: number, auth
   };
   const revoke = new RevokeFlow(rt, control);
   mkdirSync(join(rt.cfg.home, 'run'), { recursive: true, mode: 0o700 });
-  writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600 });
+  // Replace rather than rewrite: a token file left by another OS user (a single-user install moved to
+  // one user per role) cannot be chmod-ed by this one, and must not stay readable as it was.
+  rmSync(tokenPath(rt), { force: true });
+  writeFileSync(tokenPath(rt), a.operatorToken, { mode: 0o600, flag: 'wx' });
   chmodSync(tokenPath(rt), 0o600);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');

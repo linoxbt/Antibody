@@ -88,7 +88,10 @@ for f in ingest-seen.json ingest-outbox.json; do
 done
 chown -R antibody-ingest:"$GROUP" "$HOME_DIR/ingest"
 chmod 0700 "$HOME_DIR/ingest"
-[ -e "$HOME_DIR/hwm.json" ] && chown antibody-control:"$GROUP" "$HOME_DIR/hwm.json" && chmod 0600 "$HOME_DIR/hwm.json"
+# Control's files in the home: the high-water mark, the payment log and the decision outbox.
+for f in hwm.json payments.json decision-outbox.json; do
+  [ -e "$HOME_DIR/$f" ] && chown antibody-control:"$GROUP" "$HOME_DIR/$f" && chmod 0600 "$HOME_DIR/$f"
+done
 # Non-secret settings everyone reads; the home is writable by the group for atomic renames.
 chgrp "$GROUP" "$HOME_DIR" "$HOME_DIR/antibody.json"
 chmod 0640 "$HOME_DIR/antibody.json"

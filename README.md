@@ -517,6 +517,24 @@ start rather than guessed.
 - **State:** the local state format is versioned, with migrations and backups.
   The local cache is disposable; the truth lives on Walrus and Sui.
 
+### Hardened setup (real money)
+
+Four protections are off by default; `antibody doctor` warns about each.
+
+1. **Second-RPC cross-check:** `ANTIBODY_CROSSCHECK_RPC_URL=https://fullnode.mainnet.sui.io:443`.
+   Every payment is refused if an independent fullnode disagrees with Tatum on the account's keys.
+2. **Keys encrypted at rest:** give each role its own passphrase file
+   (`ANTIBODY_KEY_PASSPHRASE_<ROLE>_FILE`) and run `antibody keys encrypt`.
+3. **Alerts:** `ANTIBODY_TELEGRAM_BOT_TOKEN` and `ANTIBODY_TELEGRAM_CHAT_ID` (or
+   `ANTIBODY_ALERT_WEBHOOK`), then `antibody alert test`.
+4. **One OS user per role:** `sudo ANTIBODY_HOME=/srv/antibody scripts/setup-roles.sh`, write
+   `/etc/antibody/<role>.env` and `<role>.pass` (0400, owned by `antibody-<role>`, each with only
+   that role's settings; the owner key goes in none of them), then
+   `sudo ANTIBODY_HOME=/srv/antibody scripts/start-roles.sh` (`stop-roles.sh` to stop).
+
+The mainnet demo account runs with all four on: each daemon as its own user, encrypted
+keys, the fullnode cross-check and Telegram alerts.
+
 ## Development
 
 ### Repository layout

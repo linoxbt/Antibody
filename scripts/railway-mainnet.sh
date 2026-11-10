@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Entrypoint for Dockerfile.mainnet (runs as root, then drops to one user per role).
+# Entrypoint for ANTIBODY_MODE=mainnet (the repo Dockerfile) (runs as root, then drops to one user per role).
 #  - First boot: unpacks ANTIBODY_SEED_B64 (a tar.gz of an existing home: antibody.json,
 #    encrypted keys/, hwm.json, payments.json, ingest/) onto the volume.
 #  - Writes /etc/antibody/<role>.env and <role>.pass (0400, owned by that role) from
@@ -8,7 +8,7 @@
 #    exits, the container exits and the platform restarts it.
 #  - Answers GET /healthz on $PORT (status only, no data).
 set -euo pipefail
-H="${ANTIBODY_HOME:-/srv/antibody}"
+H="${ANTIBODY_MAINNET_HOME:-/srv/antibody}"
 CONF="${ANTIBODY_ROLE_CONF:-/etc/antibody}"
 APP="${ANTIBODY_APP:-$(cd "$(dirname "$0")/.." && pwd)}"
 mkdir -p "$H" "$CONF"; chmod 0755 "$CONF"

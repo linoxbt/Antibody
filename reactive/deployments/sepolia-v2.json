@@ -89,6 +89,14 @@
       "events": [
         "GuardianSet"
       ]
+    },
+    {
+      "step": "set GuardReactive v5 as guardian",
+      "hash": "0xd843d1324f4cd5d5aef889ad394f0fd8867eb021b852e8a5011e16260f2ee895",
+      "block": 12168977,
+      "events": [
+        "GuardianSet"
+      ]
     }
   ],
   "vault": "0xb30ccddd31c4e14186801d74ea45a905b7305d4b",

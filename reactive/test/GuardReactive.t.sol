@@ -60,7 +60,17 @@ contract GuardReactiveTest is Test {
     RiskOracle oracle;
     address constant SCORER = address(0x5C0E);
 
+    GuardVault extra;
+
+    /// Relay with one more vault on chain A (a second vault on the same chain).
+    function _relayMany(GuardVault v) internal {
+        extra = v;
+        _relay();
+        extra = GuardVault(payable(address(0)));
+    }
+
     function _chainOf(address emitter) internal view returns (uint256) {
+        if (address(extra) != address(0) && emitter == address(extra)) return A;
         if (emitter == address(oracle) && address(oracle) != address(0)) return A;
         if (emitter == address(va)) return A;
         if (emitter == address(vb)) return B;
@@ -101,8 +111,8 @@ contract GuardReactiveTest is Test {
             any = true;
             ISystemContract.CallbackConfiguration_V_1_0 memory c = sys.cb(delivered);
             assertGe(c.gasLimit, 100_000, "the network ignores callbacks below 100k gas");
-            GuardVault v = _vaultOf(c.chainId);
-            assertEq(c.recipient, address(v), "callback to the vault on its own chain");
+            GuardVault v = GuardVault(payable(c.recipient));
+            assertEq(_chainOf(c.recipient) == 0 ? c.chainId : _chainOf(c.recipient), c.chainId, "callback to a vault on its own chain");
             bytes memory p = c.payload;
             address reactive = address(rx);
             assembly { mstore(add(p, 36), reactive) } // the proxy writes the sender into the first argument
@@ -143,22 +153,22 @@ contract GuardReactiveTest is Test {
 
     function test_onlyOwnerConfigures() public {
         vm.startPrank(address(0xBAD));
-        vm.expectRevert(GuardReactive.NotOwner.selector);
+        vm.expectRevert(GuardReactive.NotRegistrar.selector);
         rx.watch(1, address(1));
         vm.expectRevert(GuardReactive.NotOwner.selector);
         rx.setSettings(1, 1, 1, 1);
-        vm.expectRevert(GuardReactive.NotOwner.selector);
-        rx.unwatch(A);
-        vm.expectRevert(GuardReactive.NotOwner.selector);
-        rx.immunize(A, 0, 1);
+        vm.expectRevert(GuardReactive.NotRegistrar.selector);
+        rx.unwatch(A, address(va));
+        vm.expectRevert(GuardReactive.NotRegistrar.selector);
+        rx.immunize(A, address(va), 0, 1);
         vm.expectRevert(GuardReactive.NotOwner.selector);
         rx.setCronTopic(1);
         vm.stopPrank();
     }
 
-    function test_oneVaultPerChain() public {
+    function test_sameVaultTwiceIsRefused() public {
         vm.expectRevert(GuardReactive.AlreadyWatched.selector);
-        rx.watch(A, address(2));
+        rx.watch(A, address(va));
     }
 
     function test_reactOnlyFromSystem() public {
@@ -179,10 +189,10 @@ contract GuardReactiveTest is Test {
     }
 
     function test_unwatchUnsubscribes() public {
-        rx.unwatch(A);
-        (address v,,,,,) = rx.watched(A);
-        assertEq(v, address(0));
-        assertEq(rx.chainCount(), 0);
+        rx.unwatch(A, address(va));
+        (bool active,,,,,) = rx.watched(A, address(va));
+        assertFalse(active);
+        assertEq(rx.vaultCount(), 0);
         assertEq(sys.unsubCount(), 10);
     }
 
@@ -202,8 +212,8 @@ contract GuardReactiveTest is Test {
         _propose(va, ATTACKER, 0.1 ether, "alice");
         _relay();
         assertTrue(va.quarantined(ATTACKER));
-        assertTrue(rx.quarantinedOn(A, ATTACKER));
-        assertEq(rx.quarantineRequestedAt(A, ATTACKER), 0, "confirmed");
+        assertTrue(rx.quarantinedOn(A, address(va), ATTACKER));
+        assertEq(rx.quarantineRequestedAt(A, address(va), ATTACKER), 0, "confirmed");
         assertTrue(rx.knownBad(ATTACKER));
         assertEq(rx.lessonCount(), 1);
         assertEq(uint8(_propose(va, ATTACKER, 0.2 ether, "alice")), uint8(IGuardVault.RefusalCode.Quarantined));
@@ -240,7 +250,7 @@ contract GuardReactiveTest is Test {
         assertTrue(va.frozen());
         va.unfreeze();
         _relay();
-        (, bool frozen, bool confirmed,,,) = rx.watched(A);
+        (, bool frozen, bool confirmed,,,) = rx.watched(A, address(va));
         assertFalse(frozen);
         assertFalse(confirmed);
         vm.warp(block.timestamp + 1 hours);
@@ -254,7 +264,7 @@ contract GuardReactiveTest is Test {
         _relay();
         va.release(ATTACKER);
         _relay();
-        assertFalse(rx.quarantinedOn(A, ATTACKER));
+        assertFalse(rx.quarantinedOn(A, address(va), ATTACKER));
         assertTrue(rx.knownBad(ATTACKER));
     }
 
@@ -300,7 +310,7 @@ contract GuardReactiveTest is Test {
         _relay();
         assertTrue(va.quarantined(ATTACKER), "quarantined where it was seen");
         assertTrue(vb.quarantined(ATTACKER), "and on the other chain");
-        assertTrue(rx.quarantinedOn(B, ATTACKER));
+        assertTrue(rx.quarantinedOn(B, address(vb), ATTACKER));
         assertEq(uint8(_propose(vb, ATTACKER, 0.1 ether, "alice")), uint8(IGuardVault.RefusalCode.Quarantined));
     }
 
@@ -357,14 +367,14 @@ contract GuardReactiveTest is Test {
         delivered = sys.cbCount(); // dropped
         assertFalse(va.frozen());
         vm.expectRevert(GuardReactive.NothingToRetry.selector);
-        rx.retryFreeze(A);
+        rx.retryFreeze(A, address(va));
         vm.warp(block.timestamp + rx.RETRY_AFTER());
         vm.prank(address(0xD00D));
-        rx.retryFreeze(A);
+        rx.retryFreeze(A, address(va));
         _relay();
         assertTrue(va.frozen());
         vm.expectRevert(GuardReactive.NothingToRetry.selector);
-        rx.retryFreeze(A); // confirmed now
+        rx.retryFreeze(A, address(va)); // confirmed now
     }
 
     function test_repeatedDeliveryIsHarmless() public {
@@ -400,7 +410,7 @@ contract GuardReactiveTest is Test {
         _cronTick();
         assertEq(ALICE.balance, 0.1 ether, "paid again when due");
         (,,,, uint64 nextDue,) = va.schedules(id);
-        (,,, uint64 mirrored,) = rx.schedules(0);
+        (,,,, uint64 mirrored,) = rx.schedules(0);
         assertEq(mirrored, nextDue, "next due time mirrored from the vault");
     }
 
@@ -513,5 +523,38 @@ contract GuardReactiveTest is Test {
         assertEq(next.lessonCount(), 1);
         next.importLessons(address(rx), 0, 10); // again: no duplicates
         assertEq(next.lessonCount(), 1);
+    }
+
+    // ---- many vaults, and the registrar ------------------------------------------------------------
+
+    function test_twoVaultsOnOneChainShareLessons() public {
+        GuardVault vc = _vault(PROXY_A); // a second vault on chain A (a visitor's own)
+        rx.watch(A, address(vc));
+        _relay();
+        _propose(va, ATTACKER, 0.1 ether, "alice");
+        _relayMany(vc);
+        assertTrue(va.quarantined(ATTACKER));
+        assertTrue(vc.quarantined(ATTACKER), "the other vault on the same chain learned it");
+    }
+
+    function test_registrarCanWatchButNothingElse() public {
+        address reg = address(0x5E9);
+        rx.setRegistrar(reg);
+        vm.startPrank(reg);
+        rx.watch(B, address(vb));
+        rx.unwatch(B, address(vb));
+        vm.expectRevert(GuardReactive.NotOwner.selector);
+        rx.withdraw(payable(reg), 1);
+        vm.expectRevert(GuardReactive.NotOwner.selector);
+        rx.setRiskThreshold(1);
+        vm.expectRevert(GuardReactive.NotOwner.selector);
+        rx.setRegistrar(reg);
+        vm.stopPrank();
+    }
+
+    function test_vaultCapIsEnforced() public {
+        for (uint256 i = rx.vaultCount(); i < rx.MAX_VAULTS(); ++i) rx.watch(1000 + i, address(uint160(0x1000 + i)));
+        vm.expectRevert(GuardReactive.TooManyVaults.selector);
+        rx.watch(9999, address(0x9999));
     }
 }

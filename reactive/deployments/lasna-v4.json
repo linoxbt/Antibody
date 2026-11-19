@@ -65,6 +65,27 @@
       "hash": "0x3f3ff9289cdb879d9af67bdfcc9add93186b609d0f6afb16f9126dbe0f592886",
       "block": 8736642,
       "events": []
+    },
+    {
+      "step": "unwatch baseSepolia (replaced by v5)",
+      "hash": "0x6438c65f69fd2385c93320fdb89e266a311cf731d903f229d0d470b061f56460",
+      "events": [
+        "Unwatched"
+      ]
+    },
+    {
+      "step": "unwatch sepolia (replaced by v5)",
+      "hash": "0x4fe3cea9704125953a6a06fbf4c2595688bc206b65c45a9d68125b652852aa1b",
+      "events": [
+        "Unwatched"
+      ]
+    },
+    {
+      "step": "withdraw 0.95 lREACT to the owner (retired)",
+      "hash": "0xbf4f2e76191cf72f7734c3b6f2ce1bece79cb312313cf766cc7a2431d59508b6",
+      "events": [
+        "Withdrawn"
+      ]
     }
   ],
   "loops": [
@@ -151,5 +172,6 @@
   },
   "verified": {
     "GuardReactive": "https://repo.sourcify.dev/5318007/0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814"
-  }
+  },
+  "retired": "replaced by GuardReactive v5 (many vaults, registrar); unwatched both vaults"
 }

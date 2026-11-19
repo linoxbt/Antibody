@@ -7,8 +7,9 @@ import { AbstractReactive } from "@reactive/src/base/AbstractReactive.sol";
 import { IGuardVault } from "./IGuardVault.sol";
 
 /**
- * @title GuardReactive: one immune system for an AI agent's vaults on several chains.
- * @notice Runs on Reactive Network. For each watched GuardVault it subscribes to the vault's events and:
+ * @title GuardReactive: one immune system for AI agents' vaults on several chains.
+ * @notice Runs on Reactive Network. It watches up to `MAX_VAULTS` GuardVaults (any number per chain),
+ *         subscribes to each vault's events, and:
  *
  *         - Burst: more than `burstLimit` payment proposals within `burstWindow` → freeze that vault.
  *         - Repeated refusals: `refusalLimit` refusals within `refusalWindow` → freeze that vault.
@@ -31,11 +32,16 @@ import { IGuardVault } from "./IGuardVault.sol";
  *         The callback gas limit is set per destination chain: it is the whole destination transaction's
  *         gas, and each chain's callback proxy keeps its own overhead out of it (about 130k on Base
  *         Sepolia, 200k on Ethereum Sepolia), so one limit does not fit every chain.
+ *
+ *         Roles: the owner configures everything; a registrar (a service key) may only add and remove
+ *         vaults, so visitors' own vaults can be watched without handing out the owner key.
  */
 contract GuardReactive is AbstractReactive {
     error NotOwner();
+    error NotRegistrar();
     error AlreadyWatched();
     error NotWatched();
+    error TooManyVaults();
     error BadSettings();
     error NothingToRetry();
     error WithdrawFailed();
@@ -48,7 +54,7 @@ contract GuardReactive is AbstractReactive {
     }
 
     struct Watched {
-        address vault;
+        bool active;
         bool frozen;            // frozen, or a freeze has been requested
         bool frozenConfirmed;   // the vault's Frozen event has been seen
         uint64 freezeRequestedAt;
@@ -56,8 +62,14 @@ contract GuardReactive is AbstractReactive {
         Window refusals;
     }
 
+    struct Target {
+        uint256 chainId;
+        address vault;
+    }
+
     struct Schedule {
         uint256 chainId;
+        address vault;
         uint256 id;
         uint64 interval;
         uint64 nextDue;
@@ -74,10 +86,11 @@ contract GuardReactive is AbstractReactive {
     event CronSubscribed(uint256 topic);
     event CronUnsubscribed(uint256 topic);
     event GasLimitSet(uint256 indexed chainId, uint64 gasLimit);
+    event Withdrawn(address indexed to, uint256 amount);
     event OracleTrusted(uint256 indexed chainId, address indexed oracle);
     event RiskThresholdSet(uint8 threshold);
     event LessonsImported(address indexed from, uint256 count);
-    event Withdrawn(address indexed to, uint256 amount);
+    event RegistrarSet(address indexed registrar);
 
     /// @notice Callback gas limit used for a chain with no setting of its own.
     uint64 public constant DEFAULT_GAS_LIMIT = 300_000;
@@ -86,6 +99,8 @@ contract GuardReactive is AbstractReactive {
     uint64 public constant MIN_GAS_LIMIT = 100_000;
     uint64 public constant MAX_GAS_LIMIT = 3_000_000;
     uint256 public constant RETRY_AFTER = 10 minutes;
+    /// @notice A lesson asks for a callback per vault inside one reaction (capped at 900k gas).
+    uint256 public constant MAX_VAULTS = 12;
     uint256 public constant MAX_SCHEDULES = 20;
     uint256 public constant MAX_IMMUNIZE = 25;
 
@@ -104,35 +119,37 @@ contract GuardReactive is AbstractReactive {
     uint256 private constant T_SCHEDULE_SET = uint256(keccak256("ScheduleSet(uint256,bytes32,address,uint256,uint256,uint256)"));
     uint256 private constant T_SCHEDULE_CANCELLED = uint256(keccak256("ScheduleCancelled(uint256)"));
     uint256 private constant T_SCHEDULE_ADVANCED = uint256(keccak256("ScheduleAdvanced(uint256,uint256,uint256)"));
-    uint256 private constant TOPICS = 10;
     uint256 private constant T_RISK = uint256(keccak256("RiskReported(address,uint8,address,bytes32,string)"));
+    uint256 private constant TOPICS = 10;
 
     address public immutable owner;
+    address public registrar;
     uint64 public burstLimit = 5;
     uint64 public burstWindow = 120;
     uint64 public refusalLimit = 3;
     uint64 public refusalWindow = 600;
     uint256 public cronTopic = CRON100;
     bool public cronOn;
+    uint8 public riskThreshold = 80;
 
     mapping(uint256 chainId => uint64) public gasLimitOf;
     /// @notice chain id => the RiskOracle trusted on that chain (one per chain).
     mapping(uint256 chainId => address) public oracleOf;
-    uint8 public riskThreshold = 80;
-    mapping(uint256 chainId => Watched) public watched;
-    uint256[] public chains;
 
-    /// @notice chain id => address => quarantined on that chain's vault (as last reported by the vault).
-    mapping(uint256 chainId => mapping(address => bool)) public quarantinedOn;
-    /// @notice chain id => address => when a quarantine was requested and not yet confirmed (0 if none).
-    mapping(uint256 chainId => mapping(address => uint256)) public quarantineRequestedAt;
+    mapping(uint256 chainId => mapping(address vault => Watched)) public watched;
+    Target[] public targets;
 
-    /// @notice Known attackers: every address quarantined on any watched vault.
+    /// @dev keyOf(chain, vault) => account => quarantined there (as last reported by the vault).
+    mapping(bytes32 => mapping(address => bool)) private _quarantinedOn;
+    /// @dev keyOf(chain, vault) => account => when a quarantine was requested and not yet confirmed.
+    mapping(bytes32 => mapping(address => uint256)) private _quarantineRequestedAt;
+
+    /// @notice Known attackers: every address quarantined on any watched vault, or reported by the AI.
     mapping(address => bool) public knownBad;
     address[] public lessons;
 
     Schedule[] public schedules;
-    mapping(uint256 chainId => mapping(uint256 id => uint256 indexPlusOne)) public scheduleIndex;
+    mapping(bytes32 => mapping(uint256 id => uint256 indexPlusOne)) private _scheduleIndex;
     uint256 public activeSchedules;
 
     modifier onlyOwner() {
@@ -140,51 +157,75 @@ contract GuardReactive is AbstractReactive {
         _;
     }
 
+    modifier onlyRegistrar() {
+        if (msg.sender != owner && msg.sender != registrar) revert NotRegistrar();
+        _;
+    }
+
     constructor() payable {
         owner = msg.sender;
     }
 
-    // ---- the owner ----------------------------------------------------------------------
+    function keyOf(uint256 chainId, address vault) public pure returns (bytes32) {
+        return keccak256(abi.encode(chainId, vault));
+    }
 
-    /// @notice Watch the GuardVault at `vault` on `chainId` (one vault per chain), and give it the
-    ///         lessons learned so far (the first `MAX_IMMUNIZE`; `immunize` sends the rest).
-    function watch(uint256 chainId, address vault) external onlyOwner {
-        if (vault == address(0) || watched[chainId].vault != address(0)) revert AlreadyWatched();
-        watched[chainId].vault = vault;
-        chains.push(chainId);
+    function quarantinedOn(uint256 chainId, address vault, address account) external view returns (bool) {
+        return _quarantinedOn[keyOf(chainId, vault)][account];
+    }
+
+    function quarantineRequestedAt(uint256 chainId, address vault, address account) external view returns (uint256) {
+        return _quarantineRequestedAt[keyOf(chainId, vault)][account];
+    }
+
+    // ---- vaults (owner or registrar) ------------------------------------------------------
+
+    /// @notice Watch the GuardVault at `vault` on `chainId` and give it the lessons learned so far
+    ///         (the first `MAX_IMMUNIZE`; `immunize` sends the rest).
+    function watch(uint256 chainId, address vault) external onlyRegistrar {
+        if (vault == address(0) || watched[chainId][vault].active) revert AlreadyWatched();
+        if (targets.length >= MAX_VAULTS) revert TooManyVaults();
+        watched[chainId][vault].active = true;
+        targets.push(Target(chainId, vault));
         uint256[TOPICS] memory topics = _topics();
         for (uint256 i; i < TOPICS; ++i) {
             SYSTEM.subscribe(chainId, vault, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
         }
         emit Watching(chainId, vault);
-        _immunize(chainId, 0, MAX_IMMUNIZE, 0);
+        _immunize(chainId, vault, 0, MAX_IMMUNIZE, 0);
     }
 
-    /// @notice Send lessons [start, start + count) to the vault on `chainId`.
-    function immunize(uint256 chainId, uint256 start, uint256 count) external onlyOwner {
-        if (watched[chainId].vault == address(0)) revert NotWatched();
-        _immunize(chainId, start, count, 0);
-    }
-
-    function unwatch(uint256 chainId) external onlyOwner {
-        address vault = watched[chainId].vault;
-        if (vault == address(0)) revert NotWatched();
+    function unwatch(uint256 chainId, address vault) external onlyRegistrar {
+        if (!watched[chainId][vault].active) revert NotWatched();
         uint256[TOPICS] memory topics = _topics();
         for (uint256 i; i < TOPICS; ++i) {
             SYSTEM.unsubscribe(chainId, vault, topics[i], REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
         }
-        delete watched[chainId];
-        for (uint256 i; i < chains.length; ++i) {
-            if (chains[i] == chainId) {
-                chains[i] = chains[chains.length - 1];
-                chains.pop();
+        delete watched[chainId][vault];
+        for (uint256 i; i < targets.length; ++i) {
+            if (targets[i].chainId == chainId && targets[i].vault == vault) {
+                targets[i] = targets[targets.length - 1];
+                targets.pop();
                 break;
             }
         }
         for (uint256 i; i < schedules.length; ++i) {
-            if (schedules[i].chainId == chainId && schedules[i].active) _deactivate(schedules[i]);
+            if (schedules[i].chainId == chainId && schedules[i].vault == vault && schedules[i].active) _deactivate(schedules[i]);
         }
         emit Unwatched(chainId, vault);
+    }
+
+    /// @notice Send lessons [start, start + count) to a watched vault.
+    function immunize(uint256 chainId, address vault, uint256 start, uint256 count) external onlyRegistrar {
+        if (!watched[chainId][vault].active) revert NotWatched();
+        _immunize(chainId, vault, start, count, 0);
+    }
+
+    // ---- the owner ------------------------------------------------------------------------
+
+    function setRegistrar(address registrar_) external onlyOwner {
+        registrar = registrar_;
+        emit RegistrarSet(registrar_);
     }
 
     function setSettings(uint64 burstLimit_, uint64 burstWindow_, uint64 refusalLimit_, uint64 refusalWindow_) external onlyOwner {
@@ -208,8 +249,7 @@ contract GuardReactive is AbstractReactive {
         emit RiskThresholdSet(threshold);
     }
 
-    /// @notice Copy lessons [start, start + count) from an earlier GuardReactive on this chain, so a
-    ///         replacement keeps what its predecessor learned. Watched vaults are immunized on `watch`.
+    /// @notice Copy lessons [start, start + count) from an earlier GuardReactive on this chain.
     function importLessons(address from, uint256 start, uint256 count) external onlyOwner {
         GuardReactive old = GuardReactive(payable(from));
         uint256 end = start + count;
@@ -253,8 +293,8 @@ contract GuardReactive is AbstractReactive {
         cronTopic = topic;
     }
 
-    function chainCount() external view returns (uint256) {
-        return chains.length;
+    function vaultCount() external view returns (uint256) {
+        return targets.length;
     }
 
     function lessonCount() external view returns (uint256) {
@@ -273,20 +313,20 @@ contract GuardReactive is AbstractReactive {
     // ---- retries (the network does not retry callbacks) ---------------------------------
 
     /// @notice Re-request a freeze that the vault has not confirmed within RETRY_AFTER. Anyone may call.
-    function retryFreeze(uint256 chainId) external {
-        Watched storage w = watched[chainId];
-        if (!w.frozen || w.frozenConfirmed || block.timestamp < uint256(w.freezeRequestedAt) + RETRY_AFTER) revert NothingToRetry();
+    function retryFreeze(uint256 chainId, address vault) external {
+        Watched storage w = watched[chainId][vault];
+        if (!w.active || !w.frozen || w.frozenConfirmed || block.timestamp < uint256(w.freezeRequestedAt) + RETRY_AFTER) revert NothingToRetry();
         w.freezeRequestedAt = uint64(block.timestamp);
-        _callback(chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), bytes32("retry")), gasLimitFor(chainId));
-        emit Decision(chainId, w.vault, Rule.Retry, address(0), "retry freeze", 0);
+        _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), bytes32("retry")), gasLimitFor(chainId));
+        emit Decision(chainId, vault, Rule.Retry, address(0), "retry freeze", 0);
     }
 
     /// @notice Re-request a quarantine that the vault has not confirmed within RETRY_AFTER. Anyone may call.
-    function retryQuarantine(uint256 chainId, address account) external {
-        uint256 at = quarantineRequestedAt[chainId][account];
-        if (at == 0 || quarantinedOn[chainId][account] || block.timestamp < at + RETRY_AFTER) revert NothingToRetry();
-        quarantineRequestedAt[chainId][account] = block.timestamp;
-        address vault = watched[chainId].vault;
+    function retryQuarantine(uint256 chainId, address vault, address account) external {
+        bytes32 k = keyOf(chainId, vault);
+        uint256 at = _quarantineRequestedAt[k][account];
+        if (at == 0 || _quarantinedOn[k][account] || block.timestamp < at + RETRY_AFTER) revert NothingToRetry();
+        _quarantineRequestedAt[k][account] = block.timestamp;
         _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, bytes32("retry")), gasLimitFor(chainId));
         emit Decision(chainId, vault, Rule.Retry, account, "retry quarantine", 0);
     }
@@ -303,8 +343,10 @@ contract GuardReactive is AbstractReactive {
             _onRisk(log);
             return;
         }
-        Watched storage w = watched[log.chainId];
-        if (w.vault == address(0) || log.contractAddress != w.vault) return;
+        Watched storage w = watched[log.chainId][log.contractAddress];
+        if (!w.active) return;
+        address vault = log.contractAddress;
+        bytes32 k = keyOf(log.chainId, vault);
         uint256 t = log.topic0;
 
         if (t == T_PROPOSED) {
@@ -314,8 +356,8 @@ contract GuardReactive is AbstractReactive {
         } else if (t == T_REFUSED) {
             address to = address(uint160(log.topic2));
             uint8 code = uint8(log.topic3);
-            if (code == uint8(IGuardVault.RefusalCode.UnknownPayee) && to != address(0) && to != w.vault) {
-                _quarantine(log.chainId, to, Rule.UnknownRecipient, "unknown recipient", log.txHash);
+            if (code == uint8(IGuardVault.RefusalCode.UnknownPayee) && to != address(0) && to != vault) {
+                _quarantine(log.chainId, vault, to, Rule.UnknownRecipient, "unknown recipient", log.txHash);
             }
             // a refusal because the vault is already frozen says nothing new about the agent
             if (code != uint8(IGuardVault.RefusalCode.Frozen) && !w.frozen && _tick(w.refusals, refusalWindow) >= refusalLimit) {
@@ -332,29 +374,29 @@ contract GuardReactive is AbstractReactive {
             delete w.refusals;
         } else if (t == T_QUARANTINED) {
             address a = address(uint160(log.topic1));
-            quarantinedOn[log.chainId][a] = true;
-            quarantineRequestedAt[log.chainId][a] = 0;
-            _learn(a, log.chainId, log.txHash);
+            _quarantinedOn[k][a] = true;
+            _quarantineRequestedAt[k][a] = 0;
+            _learn(a, log.chainId, vault, log.txHash);
         } else if (t == T_RELEASED) {
-            // the owner's call on this chain; the lesson stays for the other chains
+            // the owner's call on this vault; the lesson stays for the others
             address a = address(uint160(log.topic1));
-            quarantinedOn[log.chainId][a] = false;
-            quarantineRequestedAt[log.chainId][a] = 0;
+            _quarantinedOn[k][a] = false;
+            _quarantineRequestedAt[k][a] = 0;
         } else if (t == T_PAYEE_REQUESTED) {
             address to = address(uint160(log.topic2));
             if (knownBad[to]) {
                 bytes32 label = bytes32(log.topic1);
-                _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.vetoPayee.selector, address(0), label, to), gasLimitFor(log.chainId));
-                emit Decision(log.chainId, w.vault, Rule.PayeeVeto, to, label, log.txHash);
+                _callback(log.chainId, vault, abi.encodeWithSelector(IGuardVault.vetoPayee.selector, address(0), label, to), gasLimitFor(log.chainId));
+                emit Decision(log.chainId, vault, Rule.PayeeVeto, to, label, log.txHash);
             }
         } else if (t == T_SCHEDULE_SET) {
             (, uint256 interval, uint256 nextDue) = abi.decode(log.data, (uint256, uint256, uint256));
-            _setSchedule(log.chainId, log.topic1, uint64(interval), uint64(nextDue));
+            _setSchedule(log.chainId, vault, log.topic1, uint64(interval), uint64(nextDue));
         } else if (t == T_SCHEDULE_CANCELLED) {
-            uint256 i = scheduleIndex[log.chainId][log.topic1];
+            uint256 i = _scheduleIndex[k][log.topic1];
             if (i != 0 && schedules[i - 1].active) _deactivate(schedules[i - 1]);
         } else if (t == T_SCHEDULE_ADVANCED) {
-            uint256 i = scheduleIndex[log.chainId][log.topic1];
+            uint256 i = _scheduleIndex[k][log.topic1];
             if (i != 0) schedules[i - 1].nextDue = uint64(abi.decode(log.data, (uint256)));
         }
     }
@@ -375,27 +417,30 @@ contract GuardReactive is AbstractReactive {
         w.freezeRequestedAt = uint64(block.timestamp);
         delete w.proposals;
         delete w.refusals;
-        _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), reason), gasLimitFor(log.chainId));
-        emit Decision(log.chainId, w.vault, rule, address(0), reason, log.txHash);
+        _callback(log.chainId, log.contractAddress, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), reason), gasLimitFor(log.chainId));
+        emit Decision(log.chainId, log.contractAddress, rule, address(0), reason, log.txHash);
     }
 
-    function _quarantine(uint256 chainId, address account, Rule rule, bytes32 reason, uint256 originTx) internal {
-        if (quarantinedOn[chainId][account] || quarantineRequestedAt[chainId][account] != 0) return;
-        quarantineRequestedAt[chainId][account] = block.timestamp;
-        address vault = watched[chainId].vault;
+    function _quarantine(uint256 chainId, address vault, address account, Rule rule, bytes32 reason, uint256 originTx) internal {
+        bytes32 k = keyOf(chainId, vault);
+        if (_quarantinedOn[k][account] || _quarantineRequestedAt[k][account] != 0) return;
+        _quarantineRequestedAt[k][account] = block.timestamp;
         _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, reason), gasLimitFor(chainId));
         emit Decision(chainId, vault, rule, account, reason, originTx);
     }
 
-    /// @dev A quarantine confirmed on one chain is a lesson for all of them.
-    function _learn(address account, uint256 fromChain, uint256 originTx) internal {
+    /// @dev A quarantine confirmed on one vault is a lesson for all of them.
+    function _learn(address account, uint256 fromChain, address fromVault, uint256 originTx) internal {
         if (!knownBad[account]) {
             knownBad[account] = true;
             lessons.push(account);
             emit Lesson(account, fromChain, lessons.length);
         }
-        for (uint256 i; i < chains.length; ++i) {
-            if (chains[i] != fromChain) _quarantine(chains[i], account, Rule.CrossChainQuarantine, "learned on another chain", originTx);
+        for (uint256 i; i < targets.length; ++i) {
+            Target memory tg = targets[i];
+            if (tg.chainId != fromChain || tg.vault != fromVault) {
+                _quarantine(tg.chainId, tg.vault, account, Rule.CrossChainQuarantine, "learned on another vault", originTx);
+            }
         }
     }
 
@@ -409,28 +454,29 @@ contract GuardReactive is AbstractReactive {
             lessons.push(subject);
             emit Lesson(subject, log.chainId, lessons.length);
         }
-        for (uint256 i; i < chains.length; ++i) {
-            _quarantine(chains[i], subject, Rule.AiRisk, "AI risk score", log.txHash);
+        for (uint256 i; i < targets.length; ++i) {
+            _quarantine(targets[i].chainId, targets[i].vault, subject, Rule.AiRisk, "AI risk score", log.txHash);
         }
     }
 
-    function _immunize(uint256 chainId, uint256 start, uint256 count, uint256 originTx) internal {
+    function _immunize(uint256 chainId, address vault, uint256 start, uint256 count, uint256 originTx) internal {
         uint256 end = start + count;
         if (end > lessons.length) end = lessons.length;
         for (uint256 i = start; i < end; ++i) {
-            _quarantine(chainId, lessons[i], Rule.CrossChainQuarantine, "learned on another chain", originTx);
+            _quarantine(chainId, vault, lessons[i], Rule.CrossChainQuarantine, "learned on another vault", originTx);
         }
     }
 
     // ---- recurring payments (CRON) ------------------------------------------------------
 
-    function _setSchedule(uint256 chainId, uint256 id, uint64 interval, uint64 nextDue) internal {
-        uint256 i = scheduleIndex[chainId][id];
+    function _setSchedule(uint256 chainId, address vault, uint256 id, uint64 interval, uint64 nextDue) internal {
+        bytes32 k = keyOf(chainId, vault);
+        uint256 i = _scheduleIndex[k][id];
         if (i == 0) {
             if (schedules.length >= MAX_SCHEDULES) return; // over the cap: not driven by CRON
-            schedules.push(Schedule(chainId, id, interval, nextDue, false));
+            schedules.push(Schedule(chainId, vault, id, interval, nextDue, false));
             i = schedules.length;
-            scheduleIndex[chainId][id] = i;
+            _scheduleIndex[k][id] = i;
         }
         Schedule storage s = schedules[i - 1];
         s.interval = interval;
@@ -462,12 +508,12 @@ contract GuardReactive is AbstractReactive {
         for (uint256 i; i < schedules.length; ++i) {
             Schedule storage s = schedules[i];
             if (!s.active || block.timestamp < s.nextDue) continue;
-            Watched storage w = watched[s.chainId];
-            if (w.vault == address(0) || w.frozen) continue;
+            Watched storage w = watched[s.chainId][s.vault];
+            if (!w.active || w.frozen) continue;
             // assume it is paid; the vault's ScheduleAdvanced event sets the real next due time
             s.nextDue = uint64(block.timestamp) + s.interval;
-            _callback(s.chainId, w.vault, abi.encodeWithSelector(IGuardVault.payDue.selector, address(0), s.id), gasLimitFor(s.chainId) + PAY_EXTRA_GAS);
-            emit Decision(s.chainId, w.vault, Rule.ScheduledPayment, address(0), bytes32(s.id), 0);
+            _callback(s.chainId, s.vault, abi.encodeWithSelector(IGuardVault.payDue.selector, address(0), s.id), gasLimitFor(s.chainId) + PAY_EXTRA_GAS);
+            emit Decision(s.chainId, s.vault, Rule.ScheduledPayment, address(0), bytes32(s.id), 0);
         }
     }
 

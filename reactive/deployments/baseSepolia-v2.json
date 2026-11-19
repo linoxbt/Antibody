@@ -157,6 +157,19 @@
       "step": "[J] Steward proposes 0.001 ETH to 0x00000000000000000000000000000000000A11cE as \"alice\" (paid)",
       "hash": "0xc8afd987d368d3753d65d3ca8e487ec12a2da65aaa70f1433edd3e616a9eb6f1",
       "events": []
+    },
+    {
+      "step": "faucet: 0.03 ETH for lREACT",
+      "hash": "0x0f9c1a8e92c228ff6197a10640fff784a84b517aa3a98f8728ec3567c1bd6fd1",
+      "events": []
+    },
+    {
+      "step": "set GuardReactive v5 as guardian",
+      "hash": "0x156baf285531a673b8b7fba5df7f4349ef9b2364e053d40141ef80f3e5620f06",
+      "block": 60882405,
+      "events": [
+        "GuardianSet"
+      ]
     }
   ],
   "vault": "0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2",

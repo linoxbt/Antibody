@@ -1,0 +1,90 @@
+{
+  "network": "lasna",
+  "chainId": 5318007,
+  "txs": [
+    {
+      "step": "deploy GuardReactive v5 (funded 1.2 lREACT)",
+      "hash": "0xd8c32d0840c8cb9cb161e3e3f38691b13d70731c5aa7df7ad11b4dc68e9198a0",
+      "block": 8739966,
+      "events": []
+    },
+    {
+      "step": "reserves +0.3 lREACT (depositTo)",
+      "hash": "0x64c0f442ad0db22ec0f54852d54f2b01f9dbd1db4d1b9aeabad2b5473f113ec6",
+      "block": 8739968,
+      "events": []
+    },
+    {
+      "step": "callback gas limit for Ethereum Sepolia: 500k",
+      "hash": "0x98baeb73d6652070b3ce4d1042225a79546aa0e9820bb58eb25878f30b54c5e7",
+      "block": 8739969,
+      "events": [
+        "GasLimitSet"
+      ]
+    },
+    {
+      "step": "import the lessons learned by v4",
+      "hash": "0xc148aa97c99386490d821009130742b407131f20e2760644afbe35eb04dbc093",
+      "block": 8739971,
+      "events": [
+        "Lesson",
+        "Lesson",
+        "Lesson",
+        "LessonsImported"
+      ]
+    },
+    {
+      "step": "trust the RiskOracle on Base Sepolia",
+      "hash": "0x3def1b355387f32bef07817bb1c2781123afd58b3e119bb8211ba012f5f4ca2c",
+      "block": 8739973,
+      "events": [
+        "OracleTrusted"
+      ]
+    },
+    {
+      "step": "set the registrar (the Guard service: add and remove vaults only)",
+      "hash": "0xd9c87bdf128ff0738f56be9785e88521b0726ef7a7cdb0e885b0af5fd83b16b2",
+      "block": 8739974,
+      "events": [
+        "RegistrarSet"
+      ]
+    },
+    {
+      "step": "fund the registrar with 0.4 lREACT for watch transactions",
+      "hash": "0xea7af246889de403443137de2fd115c21a58afd98c00e2965ebf6a151f73a1f4",
+      "block": 8739986,
+      "events": []
+    },
+    {
+      "step": "watch the Base Sepolia vault",
+      "hash": "0x19ae96cd1d44409569c35d0963146083055c93a5c7a87cc718c6c4e95049b413",
+      "block": 8740001,
+      "events": [
+        "Watching",
+        "Decision",
+        "Decision",
+        "Decision"
+      ]
+    },
+    {
+      "step": "watch the Ethereum Sepolia vault",
+      "hash": "0x8741022dc1f08911ee29c595378646b7360db440b175a52c434ca6bc9d909163",
+      "block": 8740003,
+      "events": [
+        "Watching",
+        "Decision",
+        "Decision",
+        "Decision"
+      ]
+    }
+  ],
+  "loops": [],
+  "guard": "0x4d15b3af1a723d158f63f61002577e9a8b998440",
+  "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",
+  "version": 5,
+  "replaces": "0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814",
+  "registrar": "0x840c15CDEcee420Daa3E76AdCf9736eEcd93E270",
+  "verified": {
+    "GuardReactive": "https://repo.sourcify.dev/5318007/0x4d15b3af1a723d158f63f61002577e9a8b998440"
+  }
+}

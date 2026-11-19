@@ -5,12 +5,19 @@
 //   GET  /api/health   liveness
 //   GET  /api/state    vaults, GuardReactive, live and recorded loops, recent events
 //   POST /api/score    { from?, subject?, body } -> the model's verdict, and any on-chain report
+//   POST /api/watch    { chain, vault } -> GuardReactive starts watching a visitor's own GuardVault
 //
 // Limits: 2,000 characters per message; per client 3 scorings per 10 minutes; overall 30 model calls and
 // 12 on-chain reports per hour. A report can only restrict (quarantine); registered payees are never
-// reported. Env: PORT, GUARD_SCORER_KEY (testnet key allowed on the RiskOracle), LLM_API_KEY,
-// optionally LLM_BASE_URL / LLM_MODEL.
+// reported. Watch requests: only a genuine GuardVault whose guardian is already GuardReactive (which only
+// its owner can set), not yet watched, under the cap; 2 per client per hour, 6 overall. Env: PORT,
+// GUARD_SCORER_KEY (testnet key allowed on the RiskOracle), GUARD_REGISTRAR_KEY (GuardReactive's
+// registrar: may only add and remove vaults), LLM_API_KEY, optionally LLM_BASE_URL / LLM_MODEL.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { isAddress, getAddress, type Hex } from 'viem';
+import { NETWORKS } from '../networks.ts';
+import { abiOf, clients, lasnaFees, testnetKey, type NetworkName } from '../scripts/lib.ts';
 import { Indexer } from './indexer.ts';
 import { scoreAndReport } from '../agent/scorer.ts';
 
@@ -34,6 +41,46 @@ class Window {
 const perClient = new Window(3, 10 * 60_000);
 const modelCalls = new Window(30, 60 * 60_000);
 const reports = new Window(12, 60 * 60_000);
+const watchPerClient = new Window(2, 60 * 60_000);
+const watches = new Window(6, 60 * 60_000);
+
+const CODE = JSON.parse(readFileSync(new URL('../abi/GuardVault.code.json', import.meta.url), 'utf8'));
+/** Zero the bytes the constructor fills in (owner, callback proxy), so any GuardVault deployment compares equal. */
+function masked(code: string): string {
+  const hex = code.toLowerCase().replace(/^0x/, '').split('');
+  for (const refs of Object.values(CODE.immutableReferences ?? {}) as { start: number; length: number }[][]) {
+    for (const { start, length } of refs) for (let i = start * 2; i < (start + length) * 2; i++) hex[i] = '0';
+  }
+  return hex.join('');
+}
+const VAULT_CODE = masked(CODE.deployedBytecode);
+
+async function watchVault(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJson(req);
+  const chain = String(body.chain ?? '') as NetworkName;
+  if (chain !== 'baseSepolia' && chain !== 'sepolia') return send(res, 400, { error: 'chain must be baseSepolia or sepolia' });
+  if (!isAddress(String(body.vault ?? ''))) return send(res, 400, { error: 'vault must be an address' });
+  const vault = getAddress(String(body.vault)) as Hex;
+  if (!process.env.GUARD_REGISTRAR_KEY && !process.env.HTTPS_PROXY) return send(res, 503, { error: 'watch requests are not configured on this server' });
+  const d = indexer.d;
+  const pub = clients(chain, ('0x' + '11'.repeat(32)) as Hex).pub;
+  const code = await pub.getCode({ address: vault });
+  if (!code || masked(code) !== VAULT_CODE) return send(res, 400, { error: 'that address is not a GuardVault built from this repository' });
+  const guardian = (await pub.readContract({ address: vault, abi: abiOf('GuardVault'), functionName: 'guardian' })) as string;
+  if (guardian.toLowerCase() !== d.guard.toLowerCase()) return send(res, 400, { error: `set the vault's guardian to GuardReactive (${d.guard}) first; only its owner can` });
+  const reg = clients('lasna', testnetKey('registrar'));
+  const rxAbi = abiOf('GuardReactive');
+  const w = (await reg.pub.readContract({ address: d.guard, abi: rxAbi, functionName: 'watched', args: [BigInt(NETWORKS[chain].chainId), vault] })) as unknown as [boolean];
+  if (w[0]) return send(res, 409, { error: 'GuardReactive already watches this vault' });
+  if (Number(await reg.pub.readContract({ address: d.guard, abi: rxAbi, functionName: 'vaultCount' })) >= 12) return send(res, 409, { error: 'GuardReactive watches the most vaults it can (12) right now' });
+  if (!watchPerClient.take(client(req))) return send(res, 429, { error: 'at most 2 watch requests per hour from one client' });
+  if (!watches.take('all')) return send(res, 429, { error: 'the hourly budget for watch requests is spent; try again later' });
+  const hash = await reg.wallet.writeContract({ address: d.guard, abi: rxAbi, functionName: 'watch', args: [BigInt(NETWORKS[chain].chainId), vault], chain: reg.chain, account: reg.account, ...(await lasnaFees(reg.pub)) });
+  const r = await reg.pub.waitForTransactionReceipt({ hash });
+  if (r.status !== 'success') return send(res, 502, { error: 'the watch transaction failed on Lasna', tx: hash });
+  void indexer.refreshState().catch(() => {});
+  send(res, 200, { ok: true, chain, vault, tx: hash, explorer: NETWORKS.lasna.explorer });
+}
 
 function client(req: IncomingMessage): string {
   const h = (n: string) => String(req.headers[n] ?? '').split(',')[0]!.trim();
@@ -82,6 +129,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true, uptimeSeconds: Math.round((Date.now() - started) / 1000), stateAt: indexer.state.updatedAt ?? null });
     if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, indexer.snapshot());
     if (req.method === 'POST' && url.pathname === '/api/score') return await score(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/watch') return await watchVault(req, res);
     send(res, 404, { error: 'not found' });
   } catch (e) {
     const status = (e as any).status ?? 500;

@@ -21,10 +21,11 @@
     "bridge": "tsx scripts/bridge.ts",
     "phase3-cross": "tsx scripts/phase3-cross.ts",
     "phase4": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx scripts/phase4.ts",
-    "typecheck": "tsc --noEmit --module nodenext --moduleResolution nodenext --target es2023 --allowImportingTsExtensions --types node --skipLibCheck --strict agent/*.ts scripts/*.ts service/*.ts networks.ts",
+    "typecheck": "tsc --noEmit --module nodenext --moduleResolution nodenext --target es2023 --allowImportingTsExtensions --types node --skipLibCheck --strict agent/*.ts scripts/*.ts service/*.ts cli/*.ts networks.ts",
     "abi": "tsx scripts/abi.ts",
     "service": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx service/server.ts",
-    "start": "tsx service/server.ts"
+    "start": "tsx service/server.ts",
+    "guard": "tsx cli/guard.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
@@ -35,5 +36,8 @@
   "dependencies": {
     "viem": "^2.58.1",
     "tsx": "4.23.15"
+  },
+  "bin": {
+    "guard": "bin/guard.mjs"
   }
 }

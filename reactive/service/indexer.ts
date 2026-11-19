@@ -24,11 +24,11 @@ export interface Loop {
 export function deployment() {
   const base = loadRecord('baseSepolia', 'baseSepolia-v2');
   const sep = loadRecord('sepolia', 'sepolia-v2');
-  const lasna = loadRecord('lasna', 'lasna-v4');
+  const lasna = loadRecord('lasna', 'lasna-v5');
   return {
     vaults: { baseSepolia: base.vault as Hex, sepolia: sep.vault as Hex } as Record<'baseSepolia' | 'sepolia', Hex>,
-    oracle: base.oracle as Hex, guard: lasna.guard as Hex, scorer: base.scorer as Hex, agent: base.agent as Hex,
-    recordedLoops: ['lasna-v2', 'lasna-v3', 'lasna-v4'].flatMap((f) => (loadRecord('lasna', f).loops ?? []).map((l: any) => ({ ...l, file: f }))),
+    oracle: base.oracle as Hex, guard: lasna.guard as Hex, scorer: base.scorer as Hex, agent: base.agent as Hex, registrar: lasna.registrar as Hex,
+    recordedLoops: ['lasna-v2', 'lasna-v3', 'lasna-v4', 'lasna-v5'].flatMap((f) => (loadRecord('lasna', f).loops ?? []).map((l: any) => ({ ...l, file: f }))),
   };
 }
 
@@ -56,9 +56,13 @@ export class Indexer {
   private pending: Loop[] = [];
   private key = ('0x' + '11'.repeat(32)) as Hex; // read-only clients still need an account object
 
+  /** Every vault GuardReactive watches (read from Lasna), the demo vaults first. */
+  watchedVaults: { chain: NetworkName; address: Hex }[] = [];
+
   private targets(): [NetworkName, Hex[], bigint][] {
+    const on = (net: NetworkName) => [...new Set([this.d.vaults[net as 'baseSepolia' | 'sepolia'], ...this.watchedVaults.filter((v) => v.chain === net).map((v) => v.address)].filter(Boolean).map((a) => a.toLowerCase()))] as Hex[];
     // chunk sizes: Base Sepolia allows 200 blocks per getLogs and makes several blocks a second
-    return [['baseSepolia', [this.d.vaults.baseSepolia, this.d.oracle], 190n], ['sepolia', [this.d.vaults.sepolia], 500n], ['lasna', [this.d.guard], 1000n]];
+    return [['baseSepolia', [...on('baseSepolia'), this.d.oracle], 190n], ['sepolia', on('sepolia'), 500n], ['lasna', [this.d.guard], 1000n]];
   }
 
   /** Index the last `lookbackSeconds` on every chain (block times differ: Base Sepolia makes 5 a second). */
@@ -166,18 +170,26 @@ export class Indexer {
     const vaultAbi = abiOf('GuardVault');
     const rxAbi = abiOf('GuardReactive');
     const sys = parseAbi(['function debt(address) view returns (uint256)', 'function reserves(address) view returns (uint256)']);
-    const vaults = await Promise.all((Object.keys(this.d.vaults) as ('baseSepolia' | 'sepolia')[]).map(async (net) => {
-      const { pub } = clients(net, this.key);
-      const address = this.d.vaults[net];
-      const r = (fn: string, args: unknown[] = []) => pub.readContract({ address, abi: vaultAbi, functionName: fn, args });
-      const [frozen, guardian, balance, proposals] = await Promise.all([r('frozen'), r('guardian'), pub.getBalance({ address }), r('proposalCount')]);
-      return { chain: net, chainId: NETWORKS[net].chainId, address, frozen, guardian, balance: formatEther(balance), proposals: String(proposals), explorer: NETWORKS[net].explorer };
-    }));
     const { pub } = clients('lasna', this.key);
     const g = this.d.guard;
     const rr = (fn: string, args: unknown[] = []) => pub.readContract({ address: g, abi: rxAbi, functionName: fn, args });
+    const n = Number(await rr('vaultCount'));
+    const byId = Object.fromEntries(Object.entries(NETWORKS).map(([k, x]) => [String(x.chainId), k as NetworkName]));
+    const listed: { chain: NetworkName; address: Hex }[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = (await rr('targets', [BigInt(i)])) as [bigint, Hex];
+      if (byId[String(t[0])]) listed.push({ chain: byId[String(t[0])]!, address: t[1] });
+    }
+    this.watchedVaults = listed;
+    const demo = new Set(Object.values(this.d.vaults).map((a) => a.toLowerCase()));
+    const vaults = await Promise.all(listed.map(async ({ chain: net, address }) => {
+      const c = clients(net, this.key).pub;
+      const r = (fn: string, args: unknown[] = []) => c.readContract({ address, abi: vaultAbi, functionName: fn, args });
+      const [frozen, guardian, balance, proposals, owner, agent] = await Promise.all([r('frozen'), r('guardian'), c.getBalance({ address }), r('proposalCount'), r('owner'), r('agent')]);
+      return { chain: net, chainId: NETWORKS[net].chainId, address, kind: demo.has(address.toLowerCase()) ? 'demo' : 'community', owner, agent, frozen, guardian, balance: formatEther(balance), proposals: String(proposals), explorer: NETWORKS[net].explorer };
+    }));
     const [lessons, chains, cron, threshold, balance, debt, reserves] = await Promise.all([
-      rr('lessonCount'), rr('chainCount'), rr('cronOn'), rr('riskThreshold'), pub.getBalance({ address: g }),
+      rr('lessonCount'), rr('vaultCount'), rr('cronOn'), rr('riskThreshold'), pub.getBalance({ address: g }),
       pub.readContract({ address: REACTIVE_SYSTEM, abi: sys, functionName: 'debt', args: [g] }),
       pub.readContract({ address: REACTIVE_SYSTEM, abi: sys, functionName: 'reserves', args: [g] }),
     ]);
@@ -186,7 +198,7 @@ export class Indexer {
     this.state = {
       updatedAt: new Date().toISOString(),
       vaults,
-      guard: { address: g, lessons: known, chains: String(chains), cronOn: cron, riskThreshold: Number(threshold), balance: formatEther(balance), reserves: formatEther(reserves as bigint), debt: formatEther(debt as bigint), explorer: NETWORKS.lasna.explorer },
+      guard: { address: g, registrar: this.d.registrar, maxVaults: 12, lessons: known, chains: String(chains), cronOn: cron, riskThreshold: Number(threshold), balance: formatEther(balance), reserves: formatEther(reserves as bigint), debt: formatEther(debt as bigint), explorer: NETWORKS.lasna.explorer },
       oracle: { address: this.d.oracle, scorer: this.d.scorer, explorer: NETWORKS.baseSepolia.explorer },
     };
   }

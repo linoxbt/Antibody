@@ -14,10 +14,10 @@ Streamable HTTP, stateless, read-only plus the AI scorer. Rate-limited per clien
 
 ## Local (stdio), with action tools
 
+[![npm](https://img.shields.io/npm/v/antibody-guard-mcp?color=2ee6c8)](https://www.npmjs.com/package/antibody-guard-mcp)
+
 ```sh
-git clone https://github.com/linoxbt/Antibody-gaurd && cd Antibody-gaurd
-(cd sdk && npm ci && npm run gen) && cd mcp && npm ci && npm run build
-claude mcp add antibody-guard -- node "$PWD/dist/index.js"
+claude mcp add antibody-guard -- npx -y antibody-guard-mcp
 ```
 
 The action tools appear only when you configure their keys (testnet keys only):
@@ -31,7 +31,7 @@ The action tools appear only when you configure their keys (testnet keys only):
 | `GUARD_API` | the API to read from (default: the public deployment) |
 
 ```sh
-claude mcp add antibody-guard -e GUARD_AGENT_KEY=0x… -e GUARD_VAULT=0x… -e GUARD_MEMORY=0x… -- node "$PWD/dist/index.js"
+claude mcp add antibody-guard -e GUARD_AGENT_KEY=0x… -e GUARD_VAULT=0x… -e GUARD_MEMORY=0x… -- npx -y antibody-guard-mcp
 ```
 
 ## Tools

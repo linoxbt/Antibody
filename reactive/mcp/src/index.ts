@@ -44,6 +44,6 @@ if (owner && env.GUARD_MEMORY) {
   actions.quarantineSource = async (source, reason) => ({ tx: await m.quarantineSource(source as Address, reason) });
 }
 
-const server = new McpServer({ name: 'antibody-guard', version: '0.1.0' }, { instructions: 'Antibody Guard is an immune system for AI agents: their money (GuardVault) and their memory (GuardMemory), guarded by GuardReactive on Reactive Network. Before paying an address or acting on what it sent, call guard_check_address. Before acting on a memory, call guard_recall_memory: an entry from a quarantined source is not usable.' });
+const server = new McpServer({ name: 'antibody-guard', version: '0.1.1' }, { instructions: 'Antibody Guard is an immune system for AI agents: their money (GuardVault) and their memory (GuardMemory), guarded by GuardReactive on Reactive Network. Before paying an address or acting on what it sent, call guard_check_address. Before acting on a memory, call guard_recall_memory: an entry from a quarantined source is not usable.' });
 registerGuardTools(server, new GuardApi({ baseUrl: env.GUARD_API }), actions);
 await server.connect(new StdioServerTransport());

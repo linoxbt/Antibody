@@ -23,7 +23,7 @@ export default {
         el('p', { class: 'muted', style: 'margin:0 0 12px' }, 'Hosted, nothing to install: check an address before paying it, recall a memory and see if it is usable, audit what a source planted, score a message with the AI.'),
         command(`claude mcp add --transport http antibody-guard ${SITE}/mcp`),
         el('p', { class: 'muted', style: 'margin:14px 0 8px' }, 'Or locally over stdio, with action tools when you give it testnet keys (propose a payment, remember, quarantine a source):'),
-        command('git clone ' + REPO + ' && cd Antibody-gaurd/sdk && npm ci && npm run gen && cd ../mcp && npm ci && npm run build\nclaude mcp add antibody-guard -- node "$PWD/dist/index.js"'),
+        command('claude mcp add antibody-guard -- npx -y antibody-guard-mcp'),
         el('p', { class: 'hint' }, 'Tools: guard_check_address, guard_recall_memory, guard_audit_source, guard_attacker_details, guard_list_attackers, guard_list_vaults, guard_list_memories, guard_recent_decisions, guard_status, guard_score_message.'),
       ),
       card(
@@ -37,6 +37,7 @@ export default {
       card(
         'SDK: TypeScript, on viem',
         el('span', { class: 'pill plain rec' }, 'antibody-guard'),
+        command('npm install antibody-guard viem'),
         command(`import { GuardApi, GuardMemory, deployMemory, guardedAgent } from 'antibody-guard';
 
 const guard = guardedAgent(new GuardApi());
@@ -47,7 +48,7 @@ await memory.setGuardian();                       // GuardReactive v5
 await new GuardApi().watch('baseSepolia', memory.address);
 const { id } = await memory.remember(emailText, senderAddress, 'email');
 await guard.beforeActingOn(memory, id);           // throws if its source is quarantined`),
-        el('p', { class: 'hint' }, 'GuardApi, GuardVault, GuardMemory, deployVault, deployMemory, guardedAgent and the contract ABIs. ', link(`${BLOB}/sdk/README.md`, 'SDK reference'), '.'),
+        el('p', { class: 'hint' }, 'GuardApi, GuardVault, GuardMemory, deployVault, deployMemory, guardedAgent and the contract ABIs. ', link(`${BLOB}/sdk/README.md`, 'SDK reference'), ' · ', link('https://www.npmjs.com/package/antibody-guard', 'npm'), '.'),
       ),
     );
   },

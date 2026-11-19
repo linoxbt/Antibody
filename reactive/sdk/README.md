@@ -4,10 +4,10 @@ TypeScript SDK for [Antibody Guard](https://github.com/linoxbt/Antibody-gaurd): 
 agents, for their money and their memory, enforced on-chain and by Reactive Network. Built on
 [viem](https://viem.sh). Testnets: Base Sepolia, Ethereum Sepolia, Reactive Lasna.
 
+[![npm](https://img.shields.io/npm/v/antibody-guard?color=2ee6c8)](https://www.npmjs.com/package/antibody-guard)
+
 ```sh
-# from this repository (until it is published to npm)
-cd sdk && npm ci && npm run build && npm pack      # → antibody-guard-0.1.0.tgz
-npm install ./antibody-guard-0.1.0.tgz viem       # in your project
+npm install antibody-guard viem
 ```
 
 ## The two checks an agent should make

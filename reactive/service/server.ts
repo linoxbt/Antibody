@@ -44,16 +44,24 @@ const reports = new Window(12, 60 * 60_000);
 const watchPerClient = new Window(2, 60 * 60_000);
 const watches = new Window(6, 60 * 60_000);
 
-const CODE = JSON.parse(readFileSync(new URL('../abi/GuardVault.code.json', import.meta.url), 'utf8'));
-/** Zero the bytes the constructor fills in (owner, callback proxy), so any GuardVault deployment compares equal. */
-function masked(code: string): string {
+const codeOf = (c: string) => JSON.parse(readFileSync(new URL(`../abi/${c}.code.json`, import.meta.url), 'utf8'));
+const CODES = { vault: codeOf('GuardVault'), memory: codeOf('GuardMemory') };
+/** Zero the bytes the constructor fills in (owner, callback proxy), so any deployment of a contract compares equal. */
+function masked(code: string, refsOf: any): string {
   const hex = code.toLowerCase().replace(/^0x/, '').split('');
-  for (const refs of Object.values(CODE.immutableReferences ?? {}) as { start: number; length: number }[][]) {
+  for (const refs of Object.values(refsOf ?? {}) as { start: number; length: number }[][]) {
     for (const { start, length } of refs) for (let i = start * 2; i < (start + length) * 2; i++) hex[i] = '0';
   }
   return hex.join('');
 }
-const VAULT_CODE = masked(CODE.deployedBytecode);
+const GENUINE = { vault: masked(CODES.vault.deployedBytecode, CODES.vault.immutableReferences), memory: masked(CODES.memory.deployedBytecode, CODES.memory.immutableReferences) };
+/** 'vault' or 'memory' when the runtime code is one of this repository's contracts, otherwise null. */
+function genuineKind(code: string | undefined): 'vault' | 'memory' | null {
+  if (!code) return null;
+  if (masked(code, CODES.vault.immutableReferences) === GENUINE.vault) return 'vault';
+  if (masked(code, CODES.memory.immutableReferences) === GENUINE.memory) return 'memory';
+  return null;
+}
 
 async function watchVault(req: IncomingMessage, res: ServerResponse) {
   const body = await readJson(req);
@@ -65,8 +73,9 @@ async function watchVault(req: IncomingMessage, res: ServerResponse) {
   const d = indexer.d;
   const pub = clients(chain, ('0x' + '11'.repeat(32)) as Hex).pub;
   const code = await pub.getCode({ address: vault });
-  if (!code || masked(code) !== VAULT_CODE) return send(res, 400, { error: 'that address is not a GuardVault built from this repository' });
-  const guardian = (await pub.readContract({ address: vault, abi: abiOf('GuardVault'), functionName: 'guardian' })) as string;
+  const kind = genuineKind(code);
+  if (!kind) return send(res, 400, { error: 'that address is not a GuardVault or GuardMemory built from this repository' });
+  const guardian = (await pub.readContract({ address: vault, abi: abiOf(kind === 'vault' ? 'GuardVault' : 'GuardMemory'), functionName: 'guardian' })) as string;
   if (guardian.toLowerCase() !== d.guard.toLowerCase()) return send(res, 400, { error: `set the vault's guardian to GuardReactive (${d.guard}) first; only its owner can` });
   const reg = clients('lasna', testnetKey('registrar'));
   const rxAbi = abiOf('GuardReactive');

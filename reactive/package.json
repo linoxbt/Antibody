@@ -21,6 +21,7 @@
     "bridge": "tsx scripts/bridge.ts",
     "phase3-cross": "tsx scripts/phase3-cross.ts",
     "phase4": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx scripts/phase4.ts",
+    "memory": "tsx scripts/memory.ts",
     "typecheck": "tsc --noEmit --module nodenext --moduleResolution nodenext --target es2023 --allowImportingTsExtensions --types node --skipLibCheck --strict agent/*.ts scripts/*.ts service/*.ts cli/*.ts networks.ts",
     "abi": "tsx scripts/abi.ts",
     "service": "NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1 tsx service/server.ts",

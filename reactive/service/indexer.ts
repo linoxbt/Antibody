@@ -28,11 +28,12 @@ export function deployment() {
   return {
     vaults: { baseSepolia: base.vault as Hex, sepolia: sep.vault as Hex } as Record<'baseSepolia' | 'sepolia', Hex>,
     oracle: base.oracle as Hex, guard: lasna.guard as Hex, scorer: base.scorer as Hex, agent: base.agent as Hex, registrar: lasna.registrar as Hex,
+    memory: ((): Hex | null => { try { return loadRecord('baseSepolia', 'baseSepolia-memory').memory as Hex; } catch { return null; } })(),
     recordedLoops: ['lasna-v2', 'lasna-v3', 'lasna-v4', 'lasna-v5'].flatMap((f) => (loadRecord('lasna', f).loops ?? []).map((l: any) => ({ ...l, file: f }))),
   };
 }
 
-const ABIS: Abi[] = [abiOf('GuardVault'), abiOf('GuardReactive'), abiOf('RiskOracle')];
+const ABIS: Abi[] = [abiOf('GuardVault'), abiOf('GuardMemory'), abiOf('GuardReactive'), abiOf('RiskOracle')];
 function decode(log: Log): { name: string; args: Record<string, string> } | null {
   for (const abi of ABIS) {
     try {
@@ -55,6 +56,18 @@ export class Indexer {
   private txTo = new Map<string, string>();
   private pending: Loop[] = [];
   private key = ('0x' + '11'.repeat(32)) as Hex; // read-only clients still need an account object
+  private kinds = new Map<string, 'vault' | 'memory'>(); // what each watched target is (it never changes)
+
+  /** A watched target is a GuardVault or a GuardMemory: only a memory answers entryCount(). */
+  private async kindOf(net: NetworkName, address: Hex): Promise<'vault' | 'memory'> {
+    const k = `${net}:${address.toLowerCase()}`;
+    if (!this.kinds.has(k)) {
+      const pub = clients(net, this.key).pub;
+      const isMemory = await pub.readContract({ address, abi: abiOf('GuardMemory'), functionName: 'entryCount' }).then(() => true, () => false);
+      this.kinds.set(k, isMemory ? 'memory' : 'vault');
+    }
+    return this.kinds.get(k)!;
+  }
 
   /** Every vault GuardReactive watches (read from Lasna), the demo vaults first. */
   watchedVaults: { chain: NetworkName; address: Hex }[] = [];
@@ -183,13 +196,28 @@ export class Indexer {
       if (byId[String(t[0])]) listed.push({ chain: byId[String(t[0])]!, address: t[1] });
     }
     this.watchedVaults = listed;
-    const demo = new Set(Object.values(this.d.vaults).map((a) => a.toLowerCase()));
-    const vaults = await Promise.all(listed.map(async ({ chain: net, address }) => {
-      const c = clients(net, this.key).pub;
-      const r = (fn: string, args: unknown[] = []) => c.readContract({ address, abi: vaultAbi, functionName: fn, args });
-      const [frozen, guardian, balance, proposals, owner, agent] = await Promise.all([r('frozen'), r('guardian'), c.getBalance({ address }), r('proposalCount'), r('owner'), r('agent')]);
-      return { chain: net, chainId: NETWORKS[net].chainId, address, kind: demo.has(address.toLowerCase()) ? 'demo' : 'community', owner, agent, frozen, guardian, balance: formatEther(balance), proposals: String(proposals), explorer: NETWORKS[net].explorer };
+    const demo = new Set([...Object.values(this.d.vaults), this.d.memory].filter(Boolean).map((a) => a!.toLowerCase()));
+    const memAbi = abiOf('GuardMemory');
+    // one target that cannot be read (an RPC hiccup, an unknown contract) must not hold up the others
+    const read = await Promise.all(listed.map(async ({ chain: net, address }) => {
+      try {
+        const c = clients(net, this.key).pub;
+        const kind = demo.has(address.toLowerCase()) ? 'demo' : 'community';
+        if ((await this.kindOf(net, address)) === 'memory') {
+          const r = (fn: string, args: unknown[] = []) => c.readContract({ address, abi: memAbi, functionName: fn, args });
+          const [frozen, guardian, balance, entries, owner, writer] = await Promise.all([r('frozen'), r('guardian'), c.getBalance({ address }), r('entryCount'), r('owner'), r('writer')]);
+          return { type: 'memory' as const, chain: net, chainId: NETWORKS[net].chainId, address, kind, owner, writer, frozen, guardian, balance: formatEther(balance), entries: String(entries), explorer: NETWORKS[net].explorer };
+        }
+        const r = (fn: string, args: unknown[] = []) => c.readContract({ address, abi: vaultAbi, functionName: fn, args });
+        const [frozen, guardian, balance, proposals, owner, agent] = await Promise.all([r('frozen'), r('guardian'), c.getBalance({ address }), r('proposalCount'), r('owner'), r('agent')]);
+        return { type: 'vault' as const, chain: net, chainId: NETWORKS[net].chainId, address, kind, owner, agent, frozen, guardian, balance: formatEther(balance), proposals: String(proposals), explorer: NETWORKS[net].explorer };
+      } catch (e) {
+        console.error('state target', net, address, (e as Error).message.split('\n')[0]);
+        return null;
+      }
     }));
+    const vaults = read.filter((x) => x?.type === 'vault').map(({ type, ...v }: any) => v);
+    const memories = read.filter((x) => x?.type === 'memory').map(({ type, ...v }: any) => v);
     const [lessons, chains, cron, threshold, balance, debt, reserves] = await Promise.all([
       rr('lessonCount'), rr('vaultCount'), rr('cronOn'), rr('riskThreshold'), pub.getBalance({ address: g }),
       pub.readContract({ address: REACTIVE_SYSTEM, abi: sys, functionName: 'debt', args: [g] }),
@@ -200,6 +228,7 @@ export class Indexer {
     this.state = {
       updatedAt: new Date().toISOString(),
       vaults,
+      memories,
       guard: { address: g, registrar: this.d.registrar, maxVaults: 12, lessons: known, chains: String(chains), cronOn: cron, riskThreshold: Number(threshold), balance: formatEther(balance), reserves: formatEther(reserves as bigint), debt: formatEther(debt as bigint), explorer: NETWORKS.lasna.explorer },
       oracle: { address: this.d.oracle, scorer: this.d.scorer, explorer: NETWORKS.baseSepolia.explorer },
     };

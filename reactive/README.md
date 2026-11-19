@@ -1,5 +1,11 @@
 # Antibody Guard (Reactive Network)
 
+> **Antibody Guard now lives in its own repository: [linoxbt/Antibody-gaurd](https://github.com/linoxbt/Antibody-gaurd).**
+> It is an immune system for AI agents, for their money and their memory. It adds `GuardMemory` (agent memory
+> with provenance, guarded by the same GuardReactive), the public API (`/api/v1`, OpenAPI), the
+> TypeScript SDK (`sdk/`) and the MCP server (`mcp/`, and hosted at `/mcp`). This folder is kept in step
+> with it for the Railway service.
+
 A guarded vault for an AI agent's funds, and a reactive contract that watches it from
 Reactive Network and acts on its own. Built for the Reactive Omni Buildathon; see
 [`docs/guard/PLAN.md`](../docs/guard/PLAN.md) for the phases.

@@ -10,6 +10,8 @@ import overview from './views/overview.js';
 import loops from './views/loops.js';
 import vaults from './views/vaults.js';
 import attackers from './views/attackers.js';
+import memory from './views/memory.js';
+import developers from './views/developers.js';
 import events from './views/events.js';
 import scorer from './views/scorer.js';
 import contracts from './views/contracts.js';
@@ -18,11 +20,12 @@ import actions, { topUp, retry, activatePayee } from './views/actions.js';
 import attacker, { isAttackerPath } from './views/attacker.js';
 import { loadWallet, walletIfLoaded, onWalletChange, hadWallet } from '../walletapi.js';
 
-const VIEWS = [overview, loops, vaults, attackers, events, scorer, contracts, myvault, actions];
+const VIEWS = [overview, loops, vaults, memory, attackers, events, scorer, contracts, myvault, actions, developers];
 const SECTIONS = [
-  ['Guard', ['overview', 'loops', 'vaults', 'attackers']],
+  ['Guard', ['overview', 'loops', 'vaults', 'memory', 'attackers']],
   ['Reactive', ['events', 'scorer', 'contracts']],
   ['Wallet', ['myvault', 'actions']],
+  ['Build', ['developers']],
 ];
 // pages reached from a view (not in the sidebar): an attacker's detail page, each public action
 const PAGES = [topUp, retry, activatePayee];

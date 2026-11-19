@@ -1,0 +1,23 @@
+{
+  "name": "antibody-guard",
+  "version": "0.1.0",
+  "description": "SDK for Antibody Guard: an immune system for AI agents' money and memory, enforced on-chain and by Reactive Network.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "https://github.com/linoxbt/Antibody-gaurd", "directory": "sdk" },
+  "keywords": ["ai-agents", "agent-wallet", "agent-memory", "reactive-network", "security", "viem"],
+  "scripts": {
+    "gen": "node scripts/gen.mjs",
+    "build": "node scripts/gen.mjs && tsc -p tsconfig.json",
+    "test": "node scripts/gen.mjs && node --import tsx --test test/*.test.ts",
+    "typecheck": "node scripts/gen.mjs && tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": { "viem": "^2.30.0" },
+  "devDependencies": { "@types/node": "22.20.5", "tsx": "4.23.15", "typescript": "5.9.3", "viem": "^2.58.1" }
+}

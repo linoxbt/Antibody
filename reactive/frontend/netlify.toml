@@ -37,6 +37,13 @@
   status = 200
   force = true
 
+# the hosted MCP endpoint (Streamable HTTP)
+[[redirects]]
+  from = "/mcp"
+  to = "https://antibody-guard-production.up.railway.app/mcp"
+  status = 200
+  force = true
+
 # the console is a single-page app
 [[redirects]]
   from = "/app/*"

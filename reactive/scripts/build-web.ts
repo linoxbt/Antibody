@@ -13,7 +13,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&
 
 // ---- evidence.json ---------------------------------------------------------------------------
 const base1 = rec('baseSepolia'), lasna1 = rec('lasna'), base2 = rec('baseSepolia-v2'), sep2 = rec('sepolia-v2');
-const lasna2 = rec('lasna-v2'), lasna3 = rec('lasna-v3'), lasna4 = rec('lasna-v4'), lasna5 = rec('lasna-v5');
+const lasna2 = rec('lasna-v2'), lasna3 = rec('lasna-v3'), lasna4 = rec('lasna-v4'), lasna5 = rec('lasna-v5'), mem = rec('baseSepolia-memory');
 const recorded = [['v1', lasna1], ['v2', lasna2], ['v3', lasna3], ['v4', lasna4], ['v5', lasna5]].flatMap(([v, r]: any) =>
   (r?.loops ?? []).map((l: any) => ({
     name: l.name, rule: l.rule, subject: l.subject ?? null, destChain: l.callback?.chain, source: 'recorded', deployment: v,
@@ -37,6 +37,7 @@ const contracts = {
     { name: 'GuardVault v2', chain: 'baseSepolia', address: base2.vault, verified: v(base2, 'GuardVault'), role: 'the agent’s funds; proposals paid or refused by on-chain rules' },
     { name: 'GuardVault v2', chain: 'sepolia', address: sep2.vault, verified: v(sep2, 'GuardVault'), role: 'the same vault on a second chain' },
     { name: 'RiskOracle', chain: 'baseSepolia', address: base2.oracle, verified: v(base2, 'RiskOracle'), role: 'the AI scorer’s reports; changes nothing by itself' },
+    ...(mem ? [{ name: 'GuardMemory', chain: 'baseSepolia', address: mem.memory, verified: v(mem, 'GuardMemory'), role: 'the agent’s memory with provenance; entries from a quarantined source are unusable' }] : []),
   ],
   history: [
     { name: 'GuardReactive v4', chain: 'lasna', address: lasna4?.guard, verified: v(lasna4, 'GuardReactive'), status: 'retired: replaced by v5 (many vaults, registrar); its lessons imported' },

@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Antibody Guard — An immune system for agent wallets</title>
-  <meta name="description" content="Antibody Guard protects AI agents that hold money: the agent can only propose payments, a vault decides by on-chain rules, and a Reactive Network contract watches every chain and freezes or quarantines on its own. Built on Reactive Network, Base and Ethereum." />
+  <title>Antibody Guard — An immune system for AI agents</title>
+  <meta name="description" content="Antibody Guard protects an AI agent's money and memory: the agent can only propose payments, every memory carries its source, and a Reactive Network contract watches every chain: an attacker caught once is quarantined on every vault and in every memory. Built on Reactive Network, Base and Ethereum." />
   <meta name="theme-color" content="#030407" />
-  <meta property="og:title" content="Antibody Guard — An immune system for agent wallets" />
-  <meta property="og:description" content="Payments proposed, not signed. Rules on-chain. Reactive on watch. Built on Reactive Network." />
+  <meta property="og:title" content="Antibody Guard — An immune system for AI agents" />
+  <meta property="og:description" content="Payments proposed, not signed. Memories traced to their source. Every attack remembered, on every chain. Built on Reactive Network." />
   <script src="/assets/js/theme-init.js"></script>
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
@@ -30,8 +30,8 @@
         <span class="sat s1"></span><span class="sat s2"></span><span class="sat s3"></span><span class="sat s4"></span>
       </div>
       <div class="wrap hero-inner">
-        <h1 id="hero-title" class="words glow">An immune system for <span class="tail ul">agent wallets.</span></h1>
-        <p class="lede reveal d2">Payments proposed, not signed. Rules on-chain. Reactive on watch.</p>
+        <h1 id="hero-title" class="words glow">An immune system for <span class="tail ul">AI agents.</span></h1>
+        <p class="lede reveal d2">Payments proposed, not signed. Memories traced to their source. Every attack remembered, on every chain.</p>
         <div class="ctas reveal d3">
           <a class="btn btn-primary btn-lg" href="/walkthrough">Watch the story <span class="arrow" aria-hidden="true">→</span></a>
           <a class="btn btn-ghost btn-lg" href="/app">Open console</a>
@@ -252,6 +252,23 @@
 <span class="m">eth</span>     vault            <span class="r">QUARANTINE</span>  10 s
 
 <span class="c"># the model can only restrict</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Memory: provenance makes an attack reversible -->
+    <section class="section x402" aria-labelledby="memory-title">
+      <div class="wrap x402-grid">
+        <h2 id="memory-title" class="words">Poisoned memory.<br /><span class="tail">Reversed on-chain.</span></h2>
+        <div class="term reveal d1" aria-label="A poisoned memory, quarantined by Reactive">
+          <div class="term-top"><i></i><i></i><i></i><span>memory · reactive</span></div>
+          <pre><span class="m">agent</span>   remembers        <span class="y">#2</span>   "new bank details" from 0x…e301
+<span class="m">agent</span>   pays 0x…e301     <span class="r">REFUSED</span>  unknown payee
+<span class="m">lasna</span>   GuardReactive    <span class="g">REACT</span>    UnknownRecipient
+<span class="m">memory</span>  #2               <span class="r">UNUSABLE</span>  8 s, retroactively
+<span class="m">memory</span>  0x…e302 flagged  <span class="g">LESSON</span>   both vaults, 4 s / 46 s
+
+<span class="c"># every memory carries its source</span></pre>
         </div>
       </div>
     </section>

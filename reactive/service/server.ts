@@ -20,6 +20,9 @@ import { NETWORKS } from '../networks.ts';
 import { abiOf, clients, lasnaFees, testnetKey, type NetworkName } from '../scripts/lib.ts';
 import { Indexer } from './indexer.ts';
 import { scoreAndReport } from '../agent/scorer.ts';
+import { GuardData } from './api.ts';
+import { handleV1 } from './v1.ts';
+import { handleMcp } from './mcp.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const indexer = new Indexer();
@@ -64,7 +67,9 @@ function genuineKind(code: string | undefined): 'vault' | 'memory' | null {
 }
 
 async function watchVault(req: IncomingMessage, res: ServerResponse) {
-  const body = await readJson(req);
+  return watchWith(await readJson(req), req, res);
+}
+async function watchWith(body: any, req: IncomingMessage, res: ServerResponse) {
   const chain = String(body.chain ?? '') as NetworkName;
   if (chain !== 'baseSepolia' && chain !== 'sepolia') return send(res, 400, { error: 'chain must be baseSepolia or sepolia' });
   if (!isAddress(String(body.vault ?? ''))) return send(res, 400, { error: 'vault must be an address' });
@@ -114,7 +119,9 @@ async function readJson(req: IncomingMessage, limit = 8_000): Promise<any> {
 
 let busy = 0;
 async function score(req: IncomingMessage, res: ServerResponse) {
-  const body = await readJson(req);
+  return scoreWith(await readJson(req), req, res);
+}
+async function scoreWith(body: any, req: IncomingMessage, res: ServerResponse) {
   const text = { from: String(body.from ?? 'unknown sender').slice(0, 200), subject: String(body.subject ?? '').slice(0, 200), body: String(body.body ?? '') };
   if (!text.body.trim() || text.body.length > 2000) return send(res, 400, { error: 'the message body must be 1 to 2,000 characters' });
   if (!process.env.LLM_API_KEY && !process.env.HTTPS_PROXY) return send(res, 503, { error: 'the AI scorer is not configured on this server' });
@@ -132,9 +139,18 @@ async function score(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+const data = new GuardData(indexer);
+const reads = new Window(120, 60_000);
+const v1 = { data, allowRead: (req: IncomingMessage) => reads.take(client(req)), score: scoreWith, watch: watchWith, readJson };
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? '/', 'http://x');
+    if (await handleV1(req, res, url, v1)) return;
+    if (url.pathname === '/mcp' || url.pathname === '/api/mcp') {
+      if (req.method === 'POST' && !reads.take(client(req))) return send(res, 429, { error: 'at most 120 requests a minute from one client' });
+      return await handleMcp(req, res, req.method === 'POST' ? await readJson(req, 64_000) : undefined, client(req), PORT);
+    }
     if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true, uptimeSeconds: Math.round((Date.now() - started) / 1000), stateAt: indexer.state.updatedAt ?? null });
     if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, indexer.snapshot());
     if (req.method === 'POST' && url.pathname === '/api/score') return await score(req, res);

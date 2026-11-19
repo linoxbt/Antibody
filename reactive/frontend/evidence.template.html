@@ -45,7 +45,7 @@
 <p>The scorer can only report an address that appears in the message, never a registered payee, and a report can only quarantine. Every model run is saved in <a href="https://github.com/linoxbt/Antibody/tree/reactive-guard/docs/guard/agent-runs" target="_blank" rel="noopener">docs/guard/agent-runs</a>.</p>
 <h2 id="reproduce">Reproduce it</h2>
 <pre><code>git clone -b reactive-guard https://github.com/linoxbt/Antibody && cd Antibody/reactive
-npm ci && npm run deps && npm run build && npm test     # 62 Solidity tests
+npm ci && npm run deps && npm run build && npm test     # 65 Solidity tests
 npm run evidence -- lasna-v4                            # re-read the loops from the chains
 npm run rmcp -- get_rc_health '{"rc":"&lt;GuardReactive&gt;"}'   # Reactive MCP diagnosis</code></pre>
       </article>

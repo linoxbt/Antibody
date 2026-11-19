@@ -13,8 +13,8 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&
 
 // ---- evidence.json ---------------------------------------------------------------------------
 const base1 = rec('baseSepolia'), lasna1 = rec('lasna'), base2 = rec('baseSepolia-v2'), sep2 = rec('sepolia-v2');
-const lasna2 = rec('lasna-v2'), lasna3 = rec('lasna-v3'), lasna4 = rec('lasna-v4');
-const recorded = [['v1', lasna1], ['v2', lasna2], ['v3', lasna3], ['v4', lasna4]].flatMap(([v, r]: any) =>
+const lasna2 = rec('lasna-v2'), lasna3 = rec('lasna-v3'), lasna4 = rec('lasna-v4'), lasna5 = rec('lasna-v5');
+const recorded = [['v1', lasna1], ['v2', lasna2], ['v3', lasna3], ['v4', lasna4], ['v5', lasna5]].flatMap(([v, r]: any) =>
   (r?.loops ?? []).map((l: any) => ({
     name: l.name, rule: l.rule, subject: l.subject ?? null, destChain: l.callback?.chain, source: 'recorded', deployment: v,
     origin: { chain: l.origin?.chain ?? null, tx: l.origin?.tx ?? null }, reactive: { tx: l.reactive?.tx ?? null }, callback: { tx: l.callback?.tx ?? null },
@@ -30,15 +30,16 @@ const contracts = {
     { chain: 'baseSepolia', chainId: NETWORKS.baseSepolia.chainId, address: base2.vault },
     { chain: 'sepolia', chainId: NETWORKS.sepolia.chainId, address: sep2.vault },
   ],
-  guard: { address: lasna4.guard },
+  guard: { address: lasna5.guard },
   oracle: { address: base2.oracle, scorer: base2.scorer },
   current: [
-    { name: 'GuardReactive v4', chain: 'lasna', address: lasna4.guard, verified: v(lasna4, 'GuardReactive'), role: 'watches both vaults and the RiskOracle; freezes, quarantines, vetoes, pays on CRON' },
+    { name: 'GuardReactive v5', chain: 'lasna', address: lasna5.guard, verified: v(lasna5, 'GuardReactive'), role: 'watches up to 12 vaults across chains and the RiskOracle; freezes, quarantines, vetoes, pays on CRON' },
     { name: 'GuardVault v2', chain: 'baseSepolia', address: base2.vault, verified: v(base2, 'GuardVault'), role: 'the agent’s funds; proposals paid or refused by on-chain rules' },
     { name: 'GuardVault v2', chain: 'sepolia', address: sep2.vault, verified: v(sep2, 'GuardVault'), role: 'the same vault on a second chain' },
     { name: 'RiskOracle', chain: 'baseSepolia', address: base2.oracle, verified: v(base2, 'RiskOracle'), role: 'the AI scorer’s reports; changes nothing by itself' },
   ],
   history: [
+    { name: 'GuardReactive v4', chain: 'lasna', address: lasna4?.guard, verified: v(lasna4, 'GuardReactive'), status: 'retired: replaced by v5 (many vaults, registrar); its lessons imported' },
     { name: 'GuardReactive v3', chain: 'lasna', address: lasna3?.guard, verified: v(lasna3, 'GuardReactive'), status: 'retired: replaced by v4 (AI risk oracle)' },
     { name: 'GuardReactive v2', chain: 'lasna', address: lasna2?.guard, verified: v(lasna2, 'GuardReactive'), status: 'retired: replaced by v3 (per-chain gas limits)' },
     { name: 'GuardReactive v1', chain: 'lasna', address: lasna1?.guard, verified: v(lasna1, 'GuardReactive'), status: 'Phase 2 record' },

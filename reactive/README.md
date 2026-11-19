@@ -27,11 +27,12 @@ npm run deposit -- 0.2   # add fee reserves for GuardReactive (depositTo)
 npm run web       # builds the status site into web-dist/, with every deployment in deployments/
 ```
 
-The current deployment is GuardVault v2 (Base Sepolia and Ethereum Sepolia) guarded by GuardReactive v4, with an AI risk scorer reporting to a RiskOracle; earlier versions stay deployed as the record of the earlier phases.
+The current deployment is GuardVault v2 (Base Sepolia and Ethereum Sepolia) guarded by GuardReactive v5, which can watch up to 12 vaults (including visitors' own), with an AI risk scorer reporting to a RiskOracle; earlier versions stay deployed as the record of the earlier phases.
 
 | Contract | Chain | Role |
 | --- | --- | --- |
-| `GuardReactive` v4 (current) | Reactive Lasna [`0xc0f9…8814`](https://lasna.reactscan.net/address/0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814) | v3 plus AI risk: it trusts a RiskOracle, and a report at or above 80 makes the address a known attacker, quarantined on every watched vault (the model can only restrict). Imported v3's lessons. |
+| `GuardReactive` v5 (current) | Reactive Lasna [`0x4d15…8440`](https://lasna.reactscan.net/address/0x4d15b3af1a723d158f63f61002577e9a8b998440) | v4 for many vaults: watches up to 12 GuardVaults across chains, keyed by (chain, vault), with a registrar role that may only watch, unwatch and immunize; imported v4's lessons ([Sourcify](https://repo.sourcify.dev/5318007/0x4d15b3af1a723d158f63f61002577e9a8b998440)) |
+| `GuardReactive` v4 (retired) | Reactive Lasna [`0xc0f9…8814`](https://lasna.reactscan.net/address/0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814) | v3 plus AI risk: it trusts a RiskOracle, and a report at or above 80 makes the address a known attacker, quarantined on every watched vault (the model can only restrict). Imported v3's lessons. |
 | `RiskOracle` | Base Sepolia [`0xe067…322e`](https://sepolia.basescan.org/address/0xe067e2b0a06d6019442ec8371ee2ad407b2d322e) | where the AI scorer's reports go on-chain (score, evidence hash, reason); changes nothing by itself |
 | `GuardReactive` v3 (retired) | Reactive Lasna [`0x5208…37c0`](https://lasna.reactscan.net/address/0x5208c022571739fbef6198959bd7af89effd37c0) | v2 with the callback gas limit set per destination chain (Ethereum Sepolia's proxy keeps 200k of the limit, Base Sepolia's 130k) and an owner withdraw. Retired after Phase 4 (its lREACT withdrawn). |
 | `GuardVault` v2 | Ethereum Sepolia [`0xb30c…5d4b`](https://sepolia.etherscan.io/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | the same vault on a second chain |

@@ -40,7 +40,8 @@ export default {
     const address = location.pathname.replace(/\/+$/, '').split('/').pop();
     const known = (s.guard?.lessons ?? []).some((a) => a.toLowerCase() === address.toLowerCase());
     const x = attackerSummary(s, address);
-    const vaults = s.vaults ?? [];
+    // every contract GuardReactive guards: the vaults and the memories (both answer quarantined(address))
+    const vaults = [...(s.vaults ?? []), ...(s.memories ?? []).map((m) => ({ ...m, memory: true }))];
     const status = await Promise.all(vaults.map((v) => quarantinedOn(v.chain, v.address, address)));
     const blocked = status.filter((b) => b === true).length;
     const back = el('a', { class: 'btn btn-ghost btn-sm', href: '/app/attackers', 'data-nav': '' }, icon('back'), 'All attackers');
@@ -54,7 +55,7 @@ export default {
         'section',
         { class: 'stat-row' },
         stat('Caught by', x.caught ? ruleName(x.caught.rule) : 'Learned elsewhere', x.caught ? `on ${chainName(x.caught.destChain)}` : 'before the indexing window'),
-        stat('Blocked on', `${blocked} of ${vaults.length}`, 'vaults, read from each chain just now'),
+        stat('Blocked on', `${blocked} of ${vaults.length}`, 'vaults and memories, read from each chain just now'),
         stat('Spread', x.median !== null ? secs(x.median) : '—', 'median, origin to callback'),
       ),
       x.caught ? card('How it was caught', null, el('p', { class: 'muted', style: 'margin:0' }, ruleText(x.caught.rule))) : null,
@@ -75,7 +76,7 @@ export default {
               'div',
               { class: 'row-i' },
               el('span', { class: `dot ${status[i] === true ? 'g' : status[i] === false ? 'r' : 'y'}` }),
-              el('span', { class: 'grow' }, `${chainName(v.chain)} · `, ext(addrLink(s.explorers, v.chain, v.address), shortAddr(v.address)), v.kind === 'demo' ? el('span', { class: 'muted' }, ' (demo)') : null),
+              el('span', { class: 'grow' }, `${chainName(v.chain)} · `, ext(addrLink(s.explorers, v.chain, v.address), shortAddr(v.address)), v.memory ? el('span', { class: 'muted' }, ' (memory)') : null, v.kind === 'demo' ? el('span', { class: 'muted' }, ' (demo)') : null),
               el('span', { class: 'meta' }, status[i] === true ? 'quarantined' : status[i] === false ? 'not quarantined' : 'could not read'),
             ),
           ),

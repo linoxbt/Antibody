@@ -1,7 +1,8 @@
 // Build the Antibody Guard site into web-dist/: Antibody's frontend (frontend/), plus two files generated
 // from the deployment records: evidence.json (contracts, every recorded loop, the AI runs) and the
 // Evidence page. Netlify serves it; /api/* goes to the Guard service on Railway.
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { NETWORKS } from '../networks.ts';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -66,5 +67,15 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(`${root}frontend`, out, { recursive: true, filter: (src) => !src.endsWith('evidence.template.html') });
 writeFileSync(`${out}/evidence.json`, JSON.stringify(evidence, null, 1));
+// the contract ABIs (and the vault's bytecode, for deploying one from a wallet)
+mkdirSync(`${out}/assets/abi`, { recursive: true });
+for (const f of readdirSync(`${root}abi`)) cpSync(`${root}abi/${f}`, `${out}/assets/abi/${f}`);
+// the wallet connection (Reown AppKit), bundled by esbuild from wallet/ (its own package)
+if (!existsSync(`${root}wallet/node_modules`)) throw new Error('run "npm ci" in reactive/wallet first (the wallet bundle has its own dependencies)');
+execSync('npm run build --silent', { cwd: `${root}wallet`, stdio: 'inherit' });
+mkdirSync(`${out}/assets/js/wallet`, { recursive: true });
+for (const f of readdirSync(`${root}wallet/dist`)) if (f.endsWith('.js')) cpSync(`${root}wallet/dist/${f}`, `${out}/assets/js/wallet/${f}`);
+// the guard command's installer
+cpSync(`${root}install.sh`, `${out}/install.sh`);
 writeFileSync(`${out}/evidence.html`, page);
 console.log(`built web-dist: ${recorded.length} loops, ${contracts.current.length} current contracts, ${phase1.length} phase 1 proposals`);

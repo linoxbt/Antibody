@@ -35,6 +35,8 @@ for (let i = 0; i < argv.length; i++) {
   } else pos.push(a);
 }
 const json = Boolean(flags.json);
+/** An address in any letter case, normalized; null when it is not one. */
+const A = (x?: string): Hex | null => (x && isAddress(x.toLowerCase()) ? (getAddress(x.toLowerCase()) as Hex) : null);
 const chain = String(flags.chain ?? 'baseSepolia') as NetworkName;
 if (!['baseSepolia', 'sepolia'].includes(chain)) fail('--chain must be baseSepolia or sepolia');
 
@@ -57,9 +59,9 @@ function demoVault(net: NetworkName): Hex | undefined {
   try { return loadRecord(net, `${net}-v2`).vault; } catch { return undefined; }
 }
 function vaultAddr(): Hex {
-  const v = (flags.vault as string) ?? config().vaults?.[chain] ?? demoVault(chain);
-  if (!v || !isAddress(v)) fail(`no vault on ${chain}: deploy one with "guard vault deploy", or pass --vault`);
-  return getAddress(v) as Hex;
+  const v = A((flags.vault as string) ?? config().vaults?.[chain] ?? demoVault(chain));
+  if (!v) fail(`no vault on ${chain}: deploy one with "guard vault deploy", or pass --vault`);
+  return v;
 }
 function guardAddr(): Hex {
   return (process.env.GUARD_REACTIVE ?? loadRecord('lasna', 'lasna-v5').guard) as Hex;
@@ -150,8 +152,7 @@ switch (cmd) {
 
   case 'vault': {
     if (sub === 'use') {
-      const a = rest[0];
-      if (!a || !isAddress(a)) fail('guard vault use <address>');
+      const a = A(rest[0]) ?? fail('guard vault use <address>');
       const c = config();
       c.vaults = { ...(c.vaults ?? {}), [chain]: getAddress(a) };
       saveConfig(c);
@@ -160,7 +161,7 @@ switch (cmd) {
       const owner = as('owner');
       let agent = flags.agent as string | undefined;
       if (!agent) { try { agent = privateKeyToAccount(testnetKey('agent')).address; } catch { agent = owner.account.address; } }
-      if (!isAddress(agent)) fail('--agent must be an address');
+      agent = A(agent) ?? fail('--agent must be an address');
       const code = JSON.parse(readFileSync(new URL('../abi/GuardVault.code.json', import.meta.url), 'utf8'));
       const hash = await owner.wallet.deployContract({ abi: vaultAbi, bytecode: code.bytecode, args: [NETWORKS[chain].callbackProxy, agent, BigInt(String(flags.delay ?? 120))], value: parseEther(String(flags.fund ?? '0.005')), chain: owner.chain, account: owner.account });
       const r = await owner.pub.waitForTransactionReceipt({ hash });
@@ -183,8 +184,9 @@ switch (cmd) {
 
   case 'payee': {
     if (sub === 'add') {
-      const [lbl, to] = rest;
-      if (!lbl || !to || !isAddress(to) || !flags.cap) fail('guard payee add <label> <address> --cap <eth>');
+      const lbl = rest[0];
+      const to = A(rest[1]);
+      if (!lbl || !to || !flags.cap) fail('guard payee add <label> <address> --cap <eth>');
       await send('owner', 'requestPayee', [label32(lbl), to, parseEther(String(flags.cap))], `request payee ${lbl} -> ${to}`);
       const p = (await read('payees', [label32(lbl)])) as any[];
       out(`  active from ${new Date(Number(p[4]) * 1000).toISOString()}: then run "guard payee activate ${lbl}"`);
@@ -219,15 +221,15 @@ switch (cmd) {
   }
 
   case 'check': {
-    const [to, eth, lbl] = [sub, ...rest];
-    if (!to || !isAddress(to) || !eth || !lbl) fail('guard check <to> <eth> <label>');
+    const [to, eth, lbl] = [A(sub), ...rest];
+    if (!to || !eth || !lbl) fail('guard check <to> <eth> <label>');
     const code = Number(await read('check', [to, ETH, parseEther(eth), label32(lbl)]));
     out(code === 0 ? 'would be paid' : `would be refused: ${CODES[code]}`, { result: CODES[code] });
     break;
   }
   case 'propose': {
-    const [to, eth, lbl] = [sub, ...rest];
-    if (!to || !isAddress(to) || !eth || !lbl) fail('guard propose <to> <eth> <label>');
+    const [to, eth, lbl] = [A(sub), ...rest];
+    if (!to || !eth || !lbl) fail('guard propose <to> <eth> <label>');
     await send('agent', 'proposePayment', [to, ETH, parseEther(eth), label32(lbl)], `propose ${eth} to ${to} as "${lbl}"`);
     break;
   }
@@ -238,13 +240,13 @@ switch (cmd) {
     await send('owner', 'unfreeze', [], 'unfreeze');
     break;
   case 'release': {
-    if (!sub || !isAddress(sub)) fail('guard release <address>');
-    await send('owner', 'release', [sub], `release ${sub}`);
+    const who = A(sub) ?? fail('guard release <address>');
+    await send('owner', 'release', [who], `release ${who}`);
     break;
   }
   case 'withdraw': {
-    const [to, eth] = [sub, ...rest];
-    if (!to || !isAddress(to) || !eth) fail('guard withdraw <to> <eth>');
+    const [to, eth] = [A(sub), ...rest];
+    if (!to || !eth) fail('guard withdraw <to> <eth>');
     await send('owner', 'withdraw', [to, ETH, parseEther(eth)], `withdraw ${eth} to ${to}`);
     break;
   }

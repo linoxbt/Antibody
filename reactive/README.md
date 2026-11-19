@@ -68,10 +68,29 @@ first contract, on two different chains (Base Sepolia and Lasna).
   blocks. It looks back `LOOKBACK_SECONDS` (default two hours) at start-up.
 - `service/server.ts`: `GET /api/health`, `GET /api/state`, and `POST /api/score`, where anyone can hand
   the AI scorer a message (2,000 characters; 3 per client per 10 minutes; 30 model calls and 12 on-chain
-  reports per hour overall; reports only at 80 or more, and only restrict).
+  reports per hour overall; reports only at 80 or more, and only restrict). `POST /api/watch {chain, vault}`
+  asks GuardReactive to watch a vault: the service checks that its runtime code is GuardVault's, that its
+  guardian is GuardReactive, and the cap (12 vaults), then sends `watch` from the registrar key, a role
+  that may only watch, unwatch and immunize (2 per client per hour, 6 per hour overall).
 - Deployed as the Railway service `antibody-guard` (root directory `reactive/`, `reactive/Dockerfile`)
   from the `reactive-guard` branch, at https://antibody-guard-production.up.railway.app. Variables:
   `PORT=8787`, `LOOKBACK_SECONDS`, `GUARD_SCORER_KEY` (the testnet key allowed on the RiskOracle) and
-  `LLM_API_KEY` (the model key; without it `/api/score` answers 503).
+  `GUARD_REGISTRAR_KEY` and `LLM_API_KEY` (the model key; without it `/api/score` answers 503).
 - The site is Antibody's frontend, ported in `frontend/` (landing, walkthrough, security, evidence, and the console at `/app`) on https://antibody-guard.netlify.app; Netlify sends `/api/*`
   to the service, so the page's CSP stays `'self'`. Run both locally with `npm run service` and `npm run web`.
+
+## Your own vault: the `guard` CLI and the wallet console
+
+Anyone can deploy their own GuardVault and have the shared GuardReactive watch it, from a terminal or
+from a browser wallet.
+
+- **CLI.** `curl -fsSL https://antibody-guard.netlify.app/install.sh | bash` installs `guard` (it clones
+  this branch into `~/.antibody-guard/app`). Then `guard keys new`, `guard vault deploy`, `guard guardian`,
+  `guard watch`, `guard payee add|activate`, `guard limit`, `guard schedule add`, `guard propose`,
+  `guard freeze|unfreeze|release|withdraw`, `guard status`, `guard loops`. Every command takes `--chain`,
+  `--vault` and `--json`.
+- **Browser.** The console's Wallet section uses Reown AppKit (`wallet/`, bundled separately with
+  esbuild). *My vault* deploys a GuardVault from the connected wallet, sets GuardReactive as guardian,
+  asks Reactive to watch it, and manages payees, limits, schedules and payments; it also manages the
+  demo vaults for their owner. *Public actions* holds what anyone may do: top up GuardReactive's
+  lREACT reserves, retry a failed freeze or quarantine, and activate a payee whose delay has passed.

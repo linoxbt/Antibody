@@ -13,11 +13,15 @@ import attackers from './views/attackers.js';
 import events from './views/events.js';
 import scorer from './views/scorer.js';
 import contracts from './views/contracts.js';
+import myvault from './views/myvault.js';
+import actions from './views/actions.js';
+import { loadWallet, walletIfLoaded, onWalletChange, hadWallet } from '../walletapi.js';
 
-const VIEWS = [overview, loops, vaults, attackers, events, scorer, contracts];
+const VIEWS = [overview, loops, vaults, attackers, events, scorer, contracts, myvault, actions];
 const SECTIONS = [
   ['Guard', ['overview', 'loops', 'vaults', 'attackers']],
   ['Reactive', ['events', 'scorer', 'contracts']],
+  ['Wallet', ['myvault', 'actions']],
 ];
 const byPath = (path) => VIEWS.find((v) => v.path === path.replace(/\/+$/, '')) ?? (path.replace(/\/+$/, '') === '/app' ? overview : null);
 
@@ -153,6 +157,10 @@ function renderTop() {
   crumbs.replaceChildren(el('span', { class: 'root' }, 'Console'), el('span', { class: 'sep', 'aria-hidden': 'true' }, '/'), el('b', {}, current.title));
   const s = src.state;
   const parts = [];
+  const acct = walletIfLoaded()?.account();
+  const wb = el('button', { class: `btn ${acct?.connected ? 'btn-ghost' : 'btn-primary'} btn-sm`, type: 'button', 'aria-label': acct?.connected ? 'Wallet' : 'Connect wallet' }, acct?.connected ? `${short(acct.address, 6)}…${acct.address.slice(-4)}` : 'Connect wallet');
+  wb.addEventListener('click', () => ctx.act(async () => (await loadWallet()).open()));
+  parts.push(wb);
   if (src.mode === 'live') parts.push(el('span', { class: 'pill live' }, el('span', { class: 'pl' }, 'Live · 3 testnets'), el('span', { class: 'ps', 'aria-hidden': 'true' }, 'Live')));
   else parts.push(el('span', { class: 'pill rec' }, el('span', { class: 'pl' }, 'Recorded evidence'), el('span', { class: 'ps', 'aria-hidden': 'true' }, 'Rec')));
   const r = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Refresh', title: 'Refresh' }, icon('refresh'));
@@ -271,6 +279,9 @@ function bootError(title, text) {
     el('div', { class: 'app-root' }, side, scrim, el('div', { class: 'main' }, el('header', { class: 'topbar' }, burger, crumbs, tbRight), demoBar, view)),
   );
   await route();
+  // A wallet connected on an earlier visit is restored in the background; any change re-renders.
+  onWalletChange(() => route({ keepScroll: true, preserve: true }));
+  if (hadWallet()) loadWallet().then(() => route({ keepScroll: true, preserve: true })).catch(() => {});
   // Keep the view current without stomping on in-progress input.
   setInterval(() => {
     if (document.hidden || document.activeElement?.matches('input, select, textarea')) return;

@@ -7,7 +7,7 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.reown.com; font-src 'self' https://fonts.reown.com; img-src 'self' data: blob: https://*.walletconnect.com https://*.walletconnect.org https://*.reown.com https://api.web3modal.org https://imagedelivery.net; connect-src 'self' https://sepolia.base.org https://ethereum-sepolia-rpc.publicnode.com https://lasna-rpc.rnk.dev wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://*.walletconnect.com https://*.walletconnect.org https://*.reown.com https://api.web3modal.org https://pulse.walletconnect.org; frame-src https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.com https://secure.walletconnect.org; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     X-Frame-Options = "DENY"
@@ -19,6 +19,12 @@
   for = "/assets/fonts/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/install.sh"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/evidence.json"

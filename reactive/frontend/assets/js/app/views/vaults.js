@@ -12,13 +12,13 @@ export default {
     return el(
       'div',
       { style: 'display:grid;gap:16px' },
-      head('The', 'vaults.', 'GuardVault holds the agent’s funds. The agent can only propose a payment; the rules pay or refuse it, and a refusal is an event, not a revert, so Reactive sees it.'),
+      head('The', 'vaults.', 'Every vault GuardReactive watches: the two demo vaults and any visitor’s own (deploy yours under My vault). GuardVault holds the agent’s funds. The agent can only propose a payment; the rules pay or refuse it, and a refusal is an event, not a revert, so Reactive sees it.'),
       el(
         'div',
         { class: 'grid-2' },
         ...(s.vaults ?? []).map((v) =>
           card(
-            chainName(v.chain),
+            `${chainName(v.chain)}${v.kind === 'community' ? ' · visitor’s vault' : ' · demo'}`,
             el('span', { class: `pill ${v.frozen ? 'bad' : v.frozen === false ? 'ok' : 'rec'}` }, v.frozen ? 'frozen' : v.frozen === false ? 'active' : 'recorded'),
             el(
               'dl',
@@ -28,6 +28,7 @@ export default {
               el('dt', {}, 'balance'), el('dd', {}, v.balance !== null ? `${Number(v.balance).toFixed(5)} ETH` : '—'),
               el('dt', {}, 'proposals'), el('dd', {}, v.proposals ?? '—'),
               el('dt', {}, 'guardian'), el('dd', {}, addr(s, 'lasna', v.guardian)),
+              v.owner ? el('dt', {}, 'owner') : null, v.owner ? el('dd', {}, addr(s, v.chain, v.owner)) : null,
             ),
           ),
         ),

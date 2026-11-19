@@ -11,7 +11,8 @@ const cache = new Map(); // url -> { at, value }
 async function getJson(url) {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < 30_000) return hit.value;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  // the console's own reads are not agent activity
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'x-guard-client': 'console' } });
   const value = res.ok ? await res.json() : null;
   cache.set(url, { at: Date.now(), value });
   return value;

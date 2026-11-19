@@ -23,6 +23,8 @@ import { scoreAndReport } from '../agent/scorer.ts';
 import { GuardData } from './api.ts';
 import { handleV1 } from './v1.ts';
 import { handleMcp } from './mcp.ts';
+import { activity, clientOf, viaOf } from './activity.ts';
+import { toolName } from './v1.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const indexer = new Indexer();
@@ -70,30 +72,42 @@ async function watchVault(req: IncomingMessage, res: ServerResponse) {
   return watchWith(await readJson(req), req, res);
 }
 async function watchWith(body: any, req: IncomingMessage, res: ServerResponse) {
+  // every answer is also an entry in the public activity feed
+  const via = viaOf(req, req.url?.startsWith('/api/v1') ? 'api' : 'site');
+  const reply = (status: number, out: any) => {
+    const ok = status === 200;
+    activity.record({
+      via, client: clientOf(req), tool: toolName('watch', via),
+      subject: isAddress(String(body.vault ?? '')) ? { kind: 'contract', chain: String(body.chain ?? ''), address: String(body.vault) } : undefined,
+      result: ok ? 'GuardReactive now watches it' : `refused (${status})`, tone: ok ? 'ok' : 'warn',
+      ...(out?.tx ? { tx: { chain: 'lasna', hash: out.tx } } : {}), ...(ok ? {} : { error: String(out?.error ?? '').slice(0, 120) }),
+    });
+    send(res, status, out);
+  };
   const chain = String(body.chain ?? '') as NetworkName;
-  if (chain !== 'baseSepolia' && chain !== 'sepolia') return send(res, 400, { error: 'chain must be baseSepolia or sepolia' });
-  if (!isAddress(String(body.vault ?? ''))) return send(res, 400, { error: 'vault must be an address' });
+  if (chain !== 'baseSepolia' && chain !== 'sepolia') return reply(400, { error: 'chain must be baseSepolia or sepolia' });
+  if (!isAddress(String(body.vault ?? ''))) return reply(400, { error: 'vault must be an address' });
   const vault = getAddress(String(body.vault)) as Hex;
-  if (!process.env.GUARD_REGISTRAR_KEY && !process.env.HTTPS_PROXY) return send(res, 503, { error: 'watch requests are not configured on this server' });
+  if (!process.env.GUARD_REGISTRAR_KEY && !process.env.HTTPS_PROXY) return reply(503, { error: 'watch requests are not configured on this server' });
   const d = indexer.d;
   const pub = clients(chain, ('0x' + '11'.repeat(32)) as Hex).pub;
   const code = await pub.getCode({ address: vault });
   const kind = genuineKind(code);
-  if (!kind) return send(res, 400, { error: 'that address is not a GuardVault or GuardMemory built from this repository' });
+  if (!kind) return reply(400, { error: 'that address is not a GuardVault or GuardMemory built from this repository' });
   const guardian = (await pub.readContract({ address: vault, abi: abiOf(kind === 'vault' ? 'GuardVault' : 'GuardMemory'), functionName: 'guardian' })) as string;
-  if (guardian.toLowerCase() !== d.guard.toLowerCase()) return send(res, 400, { error: `set the vault's guardian to GuardReactive (${d.guard}) first; only its owner can` });
+  if (guardian.toLowerCase() !== d.guard.toLowerCase()) return reply(400, { error: `set the vault's guardian to GuardReactive (${d.guard}) first; only its owner can` });
   const reg = clients('lasna', testnetKey('registrar'));
   const rxAbi = abiOf('GuardReactive');
   const w = (await reg.pub.readContract({ address: d.guard, abi: rxAbi, functionName: 'watched', args: [BigInt(NETWORKS[chain].chainId), vault] })) as unknown as [boolean];
-  if (w[0]) return send(res, 409, { error: 'GuardReactive already watches this vault' });
-  if (Number(await reg.pub.readContract({ address: d.guard, abi: rxAbi, functionName: 'vaultCount' })) >= 12) return send(res, 409, { error: 'GuardReactive watches the most vaults it can (12) right now' });
-  if (!watchPerClient.take(client(req))) return send(res, 429, { error: 'at most 2 watch requests per hour from one client' });
-  if (!watches.take('all')) return send(res, 429, { error: 'the hourly budget for watch requests is spent; try again later' });
+  if (w[0]) return reply(409, { error: 'GuardReactive already watches this vault' });
+  if (Number(await reg.pub.readContract({ address: d.guard, abi: rxAbi, functionName: 'vaultCount' })) >= 12) return reply(409, { error: 'GuardReactive watches the most vaults it can (12) right now' });
+  if (!watchPerClient.take(client(req))) return reply(429, { error: 'at most 2 watch requests per hour from one client' });
+  if (!watches.take('all')) return reply(429, { error: 'the hourly budget for watch requests is spent; try again later' });
   const hash = await reg.wallet.writeContract({ address: d.guard, abi: rxAbi, functionName: 'watch', args: [BigInt(NETWORKS[chain].chainId), vault], chain: reg.chain, account: reg.account, ...(await lasnaFees(reg.pub)) });
   const r = await reg.pub.waitForTransactionReceipt({ hash });
-  if (r.status !== 'success') return send(res, 502, { error: 'the watch transaction failed on Lasna', tx: hash });
+  if (r.status !== 'success') return reply(502, { error: 'the watch transaction failed on Lasna', tx: hash });
   void indexer.refreshState().catch(() => {});
-  send(res, 200, { ok: true, chain, vault, tx: hash, explorer: NETWORKS.lasna.explorer });
+  reply(200, { ok: true, chain, vault, tx: hash, explorer: NETWORKS.lasna.explorer });
 }
 
 function client(req: IncomingMessage): string {
@@ -122,18 +136,32 @@ async function score(req: IncomingMessage, res: ServerResponse) {
   return scoreWith(await readJson(req), req, res);
 }
 async function scoreWith(body: any, req: IncomingMessage, res: ServerResponse) {
+  // the feed shows the verdict, never the message: no sender, subject or body
+  const via = viaOf(req, req.url?.startsWith('/api/v1') ? 'api' : 'site');
+  const reply = (status: number, out: any) => {
+    const v = out?.verdict;
+    const rep = out?.reported?.[0];
+    activity.record({
+      via, client: clientOf(req), tool: toolName('score', via),
+      ...(rep ? { subject: { kind: 'address' as const, address: rep.address } } : v?.addresses?.[0] ? { subject: { kind: 'address' as const, address: v.addresses[0] } } : {}),
+      result: status !== 200 ? `refused (${status})` : `score ${v?.score ?? '?'}${v?.suspicious ? ' · suspicious' : ''}${rep ? ' · reported on-chain' : ''}${v?.reason ? ` · ${String(v.reason).slice(0, 110)}` : ''}`,
+      tone: status !== 200 ? 'warn' : v?.suspicious ? 'bad' : 'ok',
+      ...(rep?.tx ? { tx: { chain: 'baseSepolia', hash: rep.tx } } : {}), ...(status === 200 ? {} : { error: String(out?.error ?? '').slice(0, 120) }),
+    });
+    send(res, status, out);
+  };
   const text = { from: String(body.from ?? 'unknown sender').slice(0, 200), subject: String(body.subject ?? '').slice(0, 200), body: String(body.body ?? '') };
-  if (!text.body.trim() || text.body.length > 2000) return send(res, 400, { error: 'the message body must be 1 to 2,000 characters' });
-  if (!process.env.LLM_API_KEY && !process.env.HTTPS_PROXY) return send(res, 503, { error: 'the AI scorer is not configured on this server' });
-  if (!perClient.take(client(req))) return send(res, 429, { error: 'at most 3 messages per 10 minutes from one client' });
-  if (!modelCalls.take('all')) return send(res, 429, { error: 'the hourly budget for model calls is spent; try again later' });
-  if (busy >= 2) return send(res, 429, { error: 'the scorer is busy; try again in a minute' });
+  if (!text.body.trim() || text.body.length > 2000) return reply(400, { error: 'the message body must be 1 to 2,000 characters' });
+  if (!process.env.LLM_API_KEY && !process.env.HTTPS_PROXY) return reply(503, { error: 'the AI scorer is not configured on this server' });
+  if (!perClient.take(client(req))) return reply(429, { error: 'at most 3 messages per 10 minutes from one client' });
+  if (!modelCalls.take('all')) return reply(429, { error: 'the hourly budget for model calls is spent; try again later' });
+  if (busy >= 2) return reply(429, { error: 'the scorer is busy; try again in a minute' });
   busy++;
   try {
     const d = indexer.d;
     const canReport = reports.take('all');
     const run = await scoreAndReport({ id: `web-${Date.now().toString(36)}`, ...text }, { network: 'baseSepolia', oracle: d.oracle, vault: d.vaults.baseSepolia, minScore: canReport ? 80 : 101 });
-    send(res, 200, { ...run, reportingPaused: !canReport, explorer: 'https://sepolia.basescan.org' });
+    reply(200, { ...run, reportingPaused: !canReport, explorer: 'https://sepolia.basescan.org' });
   } finally {
     busy--;
   }
@@ -152,7 +180,7 @@ const server = createServer(async (req, res) => {
       return await handleMcp(req, res, req.method === 'POST' ? await readJson(req, 64_000) : undefined, client(req), PORT);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true, uptimeSeconds: Math.round((Date.now() - started) / 1000), stateAt: indexer.state.updatedAt ?? null });
-    if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, indexer.snapshot());
+    if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, { ...indexer.snapshot(), activity: activity.recent(60) });
     if (req.method === 'POST' && url.pathname === '/api/score') return await score(req, res);
     if (req.method === 'POST' && url.pathname === '/api/watch') return await watchVault(req, res);
     send(res, 404, { error: 'not found' });

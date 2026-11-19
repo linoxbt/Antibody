@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { registerGuardTools } from '../mcp/src/tools.ts';
 import { GuardApi } from '../sdk/src/api.ts';
+import { clientOf } from './activity.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -28,9 +29,10 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, body:
   // each request gets its own server and transport (stateless): nothing is shared between clients
   const api = new GuardApi({
     baseUrl: `http://127.0.0.1:${port}`,
-    fetch: (url, init) => fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), 'x-forwarded-for': clientId } }),
+    // the calls are recorded in the activity feed as this MCP client's, by tool
+    fetch: (url, init) => fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), 'x-forwarded-for': clientId, 'x-guard-via': 'mcp', 'x-guard-client': clientOf(req) } }),
   });
-  const server = new McpServer({ name: 'antibody-guard', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'antibody-guard', version: '0.1.1' }, { instructions: INSTRUCTIONS });
   registerGuardTools(server, api);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on('close', () => { void transport.close(); void server.close(); });

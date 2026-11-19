@@ -1,6 +1,6 @@
 {
   "name": "antibody-guard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SDK for Antibody Guard: an immune system for AI agents' money and memory, enforced on-chain and by Reactive Network.",
   "license": "MIT",
   "type": "module",

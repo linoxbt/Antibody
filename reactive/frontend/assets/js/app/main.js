@@ -11,6 +11,7 @@ import loops from './views/loops.js';
 import vaults from './views/vaults.js';
 import attackers from './views/attackers.js';
 import memory from './views/memory.js';
+import activityView from './views/activity.js';
 import developers from './views/developers.js';
 import events from './views/events.js';
 import scorer from './views/scorer.js';
@@ -20,9 +21,9 @@ import actions, { topUp, retry, activatePayee } from './views/actions.js';
 import attacker, { isAttackerPath } from './views/attacker.js';
 import { loadWallet, walletIfLoaded, onWalletChange, hadWallet } from '../walletapi.js';
 
-const VIEWS = [overview, loops, vaults, memory, attackers, events, scorer, contracts, myvault, actions, developers];
+const VIEWS = [overview, activityView, loops, vaults, memory, attackers, events, scorer, contracts, myvault, actions, developers];
 const SECTIONS = [
-  ['Guard', ['overview', 'loops', 'vaults', 'memory', 'attackers']],
+  ['Guard', ['overview', 'activity', 'loops', 'vaults', 'memory', 'attackers']],
   ['Reactive', ['events', 'scorer', 'contracts']],
   ['Wallet', ['myvault', 'actions']],
   ['Build', ['developers']],

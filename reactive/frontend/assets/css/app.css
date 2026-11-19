@@ -247,3 +247,13 @@ body.auth[data-mode='sandbox'] .sandbox-only { margin-top: -8px; }
 .action-link .chev { color: var(--muted); display: grid; }
 .action-link .chev svg { width: 18px; height: 18px; }
 .btn > svg { width: 16px; height: 16px; flex: none; }
+
+/* activity feed */
+.act-row { align-items: flex-start; }
+.act-time { font: 400 12px var(--mono); min-width: 58px; padding-top: 2px; }
+.act-via { flex: none; }
+.act-bad { color: #ff7a8a; }
+.act-ok { color: #6fdc9a; }
+.act-warn { color: #f2b84b; }
+@media (max-width: 560px) { .act-time { min-width: 44px; } }
+.chip.on, .chip[aria-pressed="true"] { border-color: var(--line-accent); color: var(--text); background: var(--accent-wash); }

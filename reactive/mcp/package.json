@@ -1,6 +1,6 @@
 {
   "name": "antibody-guard-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for Antibody Guard: let Claude, Cursor or any MCP client check addresses, recall guarded memory, score messages and act through a guarded vault.",
   "license": "MIT",
   "type": "module",

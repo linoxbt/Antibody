@@ -38,6 +38,10 @@ export interface GuardApiOptions {
   fetch?: typeof fetch;
   /** Per-request timeout in ms (default 20 s; scoring can take longer). */
   timeoutMs?: number;
+  /** How your calls are labelled in the public activity feed (default "SDK"). Never your IP or message text. */
+  client?: string;
+  /** @internal how the call arrives: 'sdk' (default) or 'mcp-local' (the npm MCP server). */
+  via?: 'sdk' | 'mcp-local';
 }
 
 /** A typed client for the public API (`/api/v1`). Reads need no key. */
@@ -45,17 +49,19 @@ export class GuardApi {
   readonly baseUrl: string;
   private f: typeof fetch;
   private timeoutMs: number;
+  private tags: Record<string, string>;
 
   constructor(o: GuardApiOptions = {}) {
     this.baseUrl = (o.baseUrl ?? DEFAULT_API).replace(/\/+$/, '');
     this.f = o.fetch ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = o.timeoutMs ?? 20_000;
+    this.tags = { 'x-guard-client': (o.client ?? 'SDK').slice(0, 40), 'x-guard-via': o.via ?? 'sdk' };
   }
 
   private async req<T>(path: string, init?: { method?: string; body?: unknown; timeoutMs?: number }): Promise<T> {
     const res = await this.f(`${this.baseUrl}/api/v1${path}`, {
       method: init?.method ?? 'GET',
-      headers: init?.body ? { 'content-type': 'application/json' } : undefined,
+      headers: { ...this.tags, ...(init?.body ? { 'content-type': 'application/json' } : {}) },
       body: init?.body ? JSON.stringify(init.body) : undefined,
       signal: AbortSignal.timeout(init?.timeoutMs ?? this.timeoutMs),
     });

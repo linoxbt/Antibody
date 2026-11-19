@@ -40,6 +40,21 @@ const A = (x?: string): Hex | null => (x && isAddress(x.toLowerCase()) ? (getAdd
 const chain = String(flags.chain ?? 'baseSepolia') as NetworkName;
 if (!['baseSepolia', 'sepolia'].includes(chain)) fail('--chain must be baseSepolia or sepolia');
 
+/** One readable line for a failed command, with the contract's own error when it refused. */
+function errorLine(e: any): string {
+  for (let x = e, i = 0; x && i < 8; x = x.cause, i++) {
+    if (x.data?.errorName) return `refused by the contract: ${x.data.errorName}${x.data.args?.length ? ` (${x.data.args.map(String).join(', ')})` : ''}`;
+  }
+  return String(e?.shortMessage ?? e?.message ?? e).split('\n')[0];
+}
+for (const ev of ['uncaughtException', 'unhandledRejection'] as const) {
+  process.on(ev, (e: any) => {
+    if (process.env.GUARD_DEBUG) console.error(e);
+    console.error(`guard: ${errorLine(e)}${process.env.GUARD_DEBUG ? '' : ' (GUARD_DEBUG=1 for details)'}`);
+    process.exit(1);
+  });
+}
+
 function fail(msg: string): never {
   console.error(`guard: ${msg}`);
   process.exit(1);
@@ -213,7 +228,9 @@ switch (cmd) {
     if (sub === 'add') {
       const [lbl, eth, secs] = rest;
       if (!lbl || !eth || !secs) fail('guard schedule add <label> <eth> <seconds>');
-      await send('owner', 'setSchedule', [label32(lbl), ETH, parseEther(eth), BigInt(secs), 0n], `schedule ${eth} to ${lbl} every ${secs}s`);
+      const { events } = await send('owner', 'setSchedule', [label32(lbl), ETH, parseEther(eth), BigInt(secs), 0n], `schedule ${eth} to ${lbl} every ${secs}s`);
+      const set: any = events.find((e: any) => e.eventName === 'ScheduleSet');
+      if (set && !json) console.log(`  schedule id ${set.args.id} (stop it with "guard schedule cancel ${set.args.id}")`);
     } else if (sub === 'cancel') {
       await send('owner', 'cancelSchedule', [BigInt(rest[0] ?? fail('guard schedule cancel <id>'))], `cancel schedule ${rest[0]}`);
     } else fail('guard schedule add | cancel');

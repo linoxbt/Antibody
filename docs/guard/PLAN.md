@@ -19,7 +19,7 @@ payments when they fall due, even while the agent is offline.
 - Testnet deployer key generated locally (never committed); funding instructions.
 - A separate Netlify site for the new version, deployed from this branch.
 
-## Phase 1: the guarded vault (Base Sepolia)
+## Phase 1: the guarded vault (Base Sepolia) (done)
 - Payee registry with labels and per-payment caps; daily spending limit.
 - `proposePayment(to, amount, label)` for the agent; the six Antibody rules in Solidity.
 - Timelocked payee changes (owner adds, takes effect after a delay; can be cancelled).
@@ -57,3 +57,15 @@ payments when they fall due, even while the agent is offline.
 - Testnet deployer `0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B`; key at `~/.antibody-guard/deployer.key`
   on the build machine only (`npm run deployer -- show` prints balances on all four networks).
 - Status site: https://antibody-guard.netlify.app (Netlify site `antibody-guard`), built by `npm run web`.
+
+## Phase 1 result
+- `GuardVault` deployed on Base Sepolia at `0xb30ccddd31c4e14186801d74ea45a905b7305d4b`,
+  verified on Sourcify (exact match). Payee timelock 120 s on testnet; daily limit 0.01 ETH.
+- Rules, checked in order: frozen, quarantined, unknown payee, label mismatch, over cap,
+  over daily limit, duplicate (10 min), and a failed transfer is rolled back and refused.
+  A refusal is an event (`PaymentRefused` with its code), not a revert, so Reactive can see it.
+- The guardian (GuardReactive) is set by the owner after it is deployed in Phase 2; until then no
+  callback is accepted.
+- On-chain run: 2 payments paid, 4 refused (LabelMismatch, UnknownPayee, OverCap, Duplicate);
+  see [evidence-baseSepolia.md](evidence-baseSepolia.md).
+- 30 Solidity tests including a fuzz test of the agent against the rules.

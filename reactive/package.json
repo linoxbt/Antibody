@@ -8,7 +8,10 @@
     "build": "hardhat build",
     "test": "hardhat test",
     "deployer": "tsx scripts/deployer.ts",
-    "web": "bash scripts/build-web.sh"
+    "web": "tsx scripts/build-web.ts",
+    "phase1": "tsx scripts/phase1-base.ts",
+    "evidence": "tsx scripts/evidence.ts",
+    "verify": "tsx scripts/verify.ts"
   },
   "devDependencies": {
     "forge-std": "github:foundry-rs/forge-std#v1.9.7",

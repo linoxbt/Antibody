@@ -39,3 +39,12 @@ h2 { font-weight: 400; font-size: 26px; margin: 56px 0 16px; }
 .note { color: var(--muted); font-size: 14.5px; }
 footer { color: var(--muted); font-size: 14px; padding-top: 48px; padding-bottom: 48px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.deploy { margin-top: 12px; }
+.deploy dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0 0 18px; }
+.deploy dt { color: var(--muted); font-size: 14px; }
+.deploy dd { margin: 0; font: 13.5px var(--mono); overflow-wrap: anywhere; }
+.deploy a { color: var(--accent-hi); }
+.phases.txs td:first-child { font-family: var(--sans); color: var(--text); width: auto; }
+.txs td:nth-child(2) { font-size: 14px; width: 110px; }
+.txs td:last-child { font: 13px var(--mono); white-space: nowrap; }
+.ok { color: var(--ok); } .no { color: #ff5c7a; }

@@ -1,0 +1,62 @@
+// Shared helpers for the Guard deploy and demo scripts (viem, compiled Hardhat artifacts, deployment records).
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { createPublicClient, createWalletClient, defineChain, http, type Abi, type Hex } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { NETWORKS } from '../networks.ts';
+
+export type NetworkName = keyof typeof NETWORKS;
+export const KEY_DIR = process.env.GUARD_KEY_DIR ?? join(homedir(), '.antibody-guard');
+const ROOT = new URL('..', import.meta.url).pathname;
+
+/** A testnet key kept outside the repository (created on first use, mode 0600). */
+export function testnetKey(name: string, create = false): Hex {
+  const file = join(KEY_DIR, `${name}.key`);
+  if (!existsSync(file)) {
+    if (!create) throw new Error(`no ${name} key at ${file}`);
+    mkdirSync(KEY_DIR, { recursive: true, mode: 0o700 });
+    writeFileSync(file, generatePrivateKey() + '\n', { mode: 0o600, flag: 'wx' });
+  }
+  const key = readFileSync(file, 'utf8').trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error(`${file} does not hold a private key`);
+  return key as Hex;
+}
+
+export function chainOf(name: NetworkName) {
+  const n = NETWORKS[name];
+  return defineChain({
+    id: n.chainId, name, nativeCurrency: { name: n.currency, symbol: n.currency, decimals: 18 },
+    rpcUrls: { default: { http: [n.rpc] } }, blockExplorers: { default: { name: 'explorer', url: n.explorer } },
+  });
+}
+
+export function clients(name: NetworkName, key: Hex) {
+  const chain = chainOf(name);
+  const transport = http(NETWORKS[name].rpc, { timeout: 30_000, retryCount: 4 });
+  const account = privateKeyToAccount(key);
+  return {
+    chain, account,
+    pub: createPublicClient({ chain, transport }),
+    wallet: createWalletClient({ chain, transport, account }),
+  };
+}
+
+export function artifact(contract: string): { abi: Abi; bytecode: Hex } {
+  const a = JSON.parse(readFileSync(join(ROOT, `artifacts/contracts/${contract}.sol/${contract}.json`), 'utf8'));
+  return { abi: a.abi, bytecode: a.bytecode };
+}
+
+/** Deployment records are committed (deployments/<network>.json): addresses and transaction hashes only. */
+export function loadRecord(name: NetworkName): Record<string, any> {
+  const f = join(ROOT, `deployments/${name}.json`);
+  return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : { network: name, chainId: NETWORKS[name].chainId, txs: [] };
+}
+
+export function saveRecord(name: NetworkName, rec: Record<string, any>): void {
+  writeFileSync(join(ROOT, `deployments/${name}.json`), JSON.stringify(rec, null, 2) + '\n');
+}
+
+export const txUrl = (name: NetworkName, hash: string) => `${NETWORKS[name].explorer}/tx/${hash}`;
+export const addrUrl = (name: NetworkName, a: string) => `${NETWORKS[name].explorer}/address/${a}`;
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

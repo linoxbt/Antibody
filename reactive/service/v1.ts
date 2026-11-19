@@ -134,7 +134,7 @@ function recordRead(req: IncomingMessage, route: string, p: string[], body: any,
   else if (route === 'attacker') { const n = (body.blockedOn ?? []).filter((b: any) => b.quarantined).length; result = body.knownAttacker ? `blocked on ${n} of ${(body.blockedOn ?? []).length}` : 'not a known attacker'; tone = body.knownAttacker ? 'bad' : 'ok'; }
   else if (route === 'recall') { result = body.usable ? 'usable' : `not usable: ${body.status}`; tone = body.usable ? 'ok' : 'bad'; }
   else if (route === 'source') { result = `${body.quarantined ? 'quarantined' : 'not quarantined'} · ${body.entries?.length ?? 0} entries`; tone = body.quarantined ? 'bad' : 'ok'; }
-  else if (route === 'status') result = `${body.counts?.lessons ?? 0} lessons · ${body.counts?.vaults ?? 0} vaults · ${body.counts?.memories ?? 0} memories`;
+  else if (route === 'status') { const n = (k: string, one: string, many: string) => { const c = body.counts?.[k] ?? 0; return `${c} ${c === 1 ? one : many}`; }; result = `${n('lessons', 'lesson', 'lessons')} · ${n('vaults', 'vault', 'vaults')} · ${n('memories', 'memory', 'memories')}`; }
   else if (Array.isArray(body)) result = `${body.length} listed`;
   activity.record({ ...base, result, tone, subject: subjectOf(route, p) });
 }

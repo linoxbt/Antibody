@@ -47,6 +47,7 @@ jobs:
       - run: npm run deps
       - run: npm run build
       - run: npm test
+      - run: npm run typecheck
 
   demos:
     runs-on: ubuntu-latest

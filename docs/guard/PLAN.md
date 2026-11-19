@@ -38,7 +38,7 @@ payments when they fall due, even while the agent is offline.
 - Recurring payments driven by Reactive CRON (rent settles itself while the agent is off).
 - Lessons: a quarantined sender's next token is blocked without any off-chain help.
 
-## Phase 4: the agent and the optional AI scorer
+## Phase 4: the agent and the optional AI scorer (done)
 - Steward (Qwen on Fortytwo) proposes payments through the vault instead of signing them.
 - Optional: an AI scorer reads token names and memos, writes a score on-chain, and the
   Reactive contract quarantines above a threshold (the model can restrict, never approve).
@@ -110,3 +110,22 @@ payments when they fall due, even while the agent is offline.
   blocks included). See [evidence-lasna-v3.md](evidence-lasna-v3.md).
 - Base Sepolia now produces several blocks per second, so some callbacks land within the same second
   as the agent's transaction (4 blocks later).
+
+## Phase 4 result (done)
+- `RiskOracle` on Base Sepolia (`0xe067e2b0a06d6019442ec8371ee2ad407b2d322e`): an AI scorer's reports
+  (score, evidence hash, reason). `GuardReactive` v4 (`0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814`) trusts
+  it: a report at or above 80 makes the address a known attacker, quarantined on every watched vault. The
+  model can only restrict. v4 imported v3's lessons; v3 unwatched both vaults and its lREACT was withdrawn.
+- Live, with Qwen (qwen3.8-27b) on Fortytwo:
+  - the scorer read a phishing email ("new wallet", "pre-approved", a look-alike domain), scored it 95
+    and reported the redirect address; Reactive quarantined it on Base Sepolia (2 s) and Ethereum
+    Sepolia (10 s) before any payment was attempted;
+  - the genuine invoice scored 10 and a lunch note 0: nothing reported;
+  - Steward, asked to pay Alice's invoice with the same inbox, looked up Alice's registered address,
+    dry-ran the payment, paid 0.001 ETH, and said it ignored the phishing message.
+- Live Qwen resisted the phishing email on its own. The cases where the agent is fooled (Phases 2 and 3)
+  were driven by script; there, and whenever a model is fooled, the vault and GuardReactive hold.
+- Node's `fetch` does not use the session proxy by default, so a proxy-injected key needs
+  `NODE_USE_ENV_PROXY=1`; Lasna's RPC refuses a transaction whose worst-case fee exceeds 1 lREACT, so
+  the fee ceiling is 1.25 times the base fee.
+- 62 Solidity tests (AI risk rule, untrusted oracles ignored, threshold, lesson import, oracle access).

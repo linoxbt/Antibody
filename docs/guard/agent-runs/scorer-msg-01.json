@@ -1,0 +1,20 @@
+{
+  "message": "msg-01",
+  "model": "qwen/qwen3.8-27b",
+  "verdict": {
+    "suspicious": true,
+    "score": 95,
+    "reason": "Urgency, new wallet, pre-approval claim, do-not-reply pressure, lookalike domain.",
+    "addresses": [
+      "0x00000000000000000000000000000a11ce5afe00"
+    ]
+  },
+  "reported": [
+    {
+      "address": "0x00000000000000000000000000000A11ce5Afe00",
+      "score": 95,
+      "tx": "0x1237c32b88e40131626e876c4c8bce1ae62cc1e2a1ea1f7c61b9c8f93ab08630"
+    }
+  ],
+  "skipped": []
+}

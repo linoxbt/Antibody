@@ -1,0 +1,12 @@
+{
+  "message": "msg-03",
+  "model": "qwen/qwen3.8-27b",
+  "verdict": {
+    "suspicious": false,
+    "score": 0,
+    "reason": "Benign lunch invitation, no payment redirection indicators.",
+    "addresses": []
+  },
+  "reported": [],
+  "skipped": []
+}

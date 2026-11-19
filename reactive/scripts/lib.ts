@@ -67,5 +67,6 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function lasnaFees(pub: { getBlock: () => Promise<{ baseFeePerGas: bigint | null }> }) {
   const tip = 1_000_000_000n;
   const base = (await pub.getBlock()).baseFeePerGas ?? 100_000_000_000n;
-  return { maxFeePerGas: base * 2n + tip, maxPriorityFeePerGas: tip };
+  // the RPC refuses a transaction whose worst-case fee exceeds 1 lREACT, so keep the ceiling close to the base fee
+  return { maxFeePerGas: base + base / 4n + tip, maxPriorityFeePerGas: tip };
 }

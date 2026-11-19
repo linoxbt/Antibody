@@ -17,6 +17,8 @@ npm run phase2    # deploy GuardReactive on Lasna, make it the vault's guardian,
 npm run phase3    # v2 on Lasna and Base Sepolia (+ Ethereum Sepolia when funded): quarantine, veto, CRON payments, cross-chain lessons
 npm run bridge -- 0.0042   # test ETH from Base Sepolia to Ethereum Sepolia through Across (about 10 s)
 npm run phase3-cross   # GuardReactive v3 replaces v2 and guards both vaults: lessons across chains
+npm run phase4    # GuardReactive v4 + RiskOracle; the AI scorer and Steward run live (needs a model key, see below)
+npm run typecheck # the scripts and the agent
 npm run link-callbacks   # find each loop's callback transaction on the destination chain
 npm run evidence -- baseSepolia   # (or lasna) re-read every recorded tx from the chain into docs/guard/
 npm run verify -- baseSepolia GuardVault <address> [creationTx]   # Sourcify
@@ -25,11 +27,13 @@ npm run deposit -- 0.2   # add fee reserves for GuardReactive (depositTo)
 npm run web       # builds the status site into web-dist/, with every deployment in deployments/
 ```
 
-The current deployment is GuardVault v2 (Base Sepolia and Ethereum Sepolia) guarded by GuardReactive v3; earlier versions stay deployed as the record of the earlier phases.
+The current deployment is GuardVault v2 (Base Sepolia and Ethereum Sepolia) guarded by GuardReactive v4, with an AI risk scorer reporting to a RiskOracle; earlier versions stay deployed as the record of the earlier phases.
 
 | Contract | Chain | Role |
 | --- | --- | --- |
-| `GuardReactive` v3 (current) | Reactive Lasna [`0x5208…37c0`](https://lasna.reactscan.net/address/0x5208c022571739fbef6198959bd7af89effd37c0) | v2 with the callback gas limit set per destination chain (Ethereum Sepolia's proxy keeps 200k of the limit, Base Sepolia's 130k) and an owner withdraw. Watches both vaults below. |
+| `GuardReactive` v4 (current) | Reactive Lasna [`0xc0f9…8814`](https://lasna.reactscan.net/address/0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814) | v3 plus AI risk: it trusts a RiskOracle, and a report at or above 80 makes the address a known attacker, quarantined on every watched vault (the model can only restrict). Imported v3's lessons. |
+| `RiskOracle` | Base Sepolia [`0xe067…322e`](https://sepolia.basescan.org/address/0xe067e2b0a06d6019442ec8371ee2ad407b2d322e) | where the AI scorer's reports go on-chain (score, evidence hash, reason); changes nothing by itself |
+| `GuardReactive` v3 (retired) | Reactive Lasna [`0x5208…37c0`](https://lasna.reactscan.net/address/0x5208c022571739fbef6198959bd7af89effd37c0) | v2 with the callback gas limit set per destination chain (Ethereum Sepolia's proxy keeps 200k of the limit, Base Sepolia's 130k) and an owner withdraw. Retired after Phase 4 (its lREACT withdrawn). |
 | `GuardVault` v2 | Ethereum Sepolia [`0xb30c…5d4b`](https://sepolia.etherscan.io/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | the same vault on a second chain |
 | `GuardVault` v2 | Base Sepolia [`0x114e…c7d2`](https://sepolia.basescan.org/address/0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2) | v1 plus recurring payments (paid on Reactive's CRON under the same rules), guardian veto of a pending payee change, and a quarantined address can never be activated as a payee. Every callback is idempotent. |
 | `GuardReactive` v2 (retired) | Reactive Lasna [`0x7900…a282`](https://lasna.reactscan.net/address/0x7900d7765473eba75a816ccf58a481399036a282) | v1 plus lessons: an address quarantined on any watched vault is quarantined on all of them, a vault watched later is immunized with every lesson, a payee change towards a known attacker is vetoed, CRON (subscribed only while a schedule is active) pays due schedules, and lost callbacks can be retried by anyone after 10 minutes. |
@@ -41,3 +45,18 @@ never in the repository. `deployments/*.json` holds only addresses and transacti
 
 Both contracts happen to share the address `0xb30c…5d4b`: the same deployer created each as its
 first contract, on two different chains (Base Sepolia and Lasna).
+
+## The AI side (`agent/`)
+
+- `steward.ts`: Steward, an AI agent (Qwen via Fortytwo, any OpenAI-compatible endpoint) that pays bills.
+  Its tools are `lookup_payee`, `check_payment` (a dry run against the vault's rules) and
+  `propose_payment`. It treats its inbox as untrusted, and it never holds a key that can move funds by
+  itself: the vault decides and GuardReactive watches.
+- `scorer.ts`: the AI risk scorer. It reads an incoming message, and if it is trying to redirect money it
+  reports the address to the RiskOracle with a score. Guards around the model: only addresses that appear
+  verbatim in the message can be reported, a registered payee is never reported, and a report can only
+  restrict.
+- Model access: `LLM_BASE_URL` (default Fortytwo), `LLM_MODEL` (default `qwen/qwen3.8-27b`) and
+  `LLM_API_KEY`. In this repository's cloud sessions the key is injected by the network proxy, so
+  `npm run phase4` sets `NODE_USE_ENV_PROXY=1` to route Node's `fetch` through it.
+- Every run is saved in `docs/guard/agent-runs/` (the model's tool calls and results, never a key).

@@ -19,6 +19,9 @@ import { IGuardVault } from "./IGuardVault.sol";
  *         - Veto: a payee change towards a known attacker is cancelled before its timelock ends.
  *         - Recurring payments: vault schedules are mirrored, and a CRON subscription (held only
  *           while some schedule is active, since every tick is billed) triggers each due payment.
+ *         - AI risk: reports from a trusted RiskOracle (an AI scorer's judgements) at or above
+ *           `riskThreshold` make the address a known attacker, quarantined on every watched vault.
+ *           The model can only restrict: nothing it reports can approve, unfreeze or release.
  *
  *         It mirrors each vault's frozen flag, quarantines and schedules from the vault's own events,
  *         so it never asks twice for the same action, and every callback is idempotent on the vault
@@ -37,7 +40,7 @@ contract GuardReactive is AbstractReactive {
     error NothingToRetry();
     error WithdrawFailed();
 
-    enum Rule { None, Burst, RepeatedRefusals, UnknownRecipient, CrossChainQuarantine, PayeeVeto, ScheduledPayment, Retry }
+    enum Rule { None, Burst, RepeatedRefusals, UnknownRecipient, CrossChainQuarantine, PayeeVeto, ScheduledPayment, Retry, AiRisk }
 
     struct Window {
         uint64 start;
@@ -71,6 +74,9 @@ contract GuardReactive is AbstractReactive {
     event CronSubscribed(uint256 topic);
     event CronUnsubscribed(uint256 topic);
     event GasLimitSet(uint256 indexed chainId, uint64 gasLimit);
+    event OracleTrusted(uint256 indexed chainId, address indexed oracle);
+    event RiskThresholdSet(uint8 threshold);
+    event LessonsImported(address indexed from, uint256 count);
     event Withdrawn(address indexed to, uint256 amount);
 
     /// @notice Callback gas limit used for a chain with no setting of its own.
@@ -99,6 +105,7 @@ contract GuardReactive is AbstractReactive {
     uint256 private constant T_SCHEDULE_CANCELLED = uint256(keccak256("ScheduleCancelled(uint256)"));
     uint256 private constant T_SCHEDULE_ADVANCED = uint256(keccak256("ScheduleAdvanced(uint256,uint256,uint256)"));
     uint256 private constant TOPICS = 10;
+    uint256 private constant T_RISK = uint256(keccak256("RiskReported(address,uint8,address,bytes32,string)"));
 
     address public immutable owner;
     uint64 public burstLimit = 5;
@@ -109,6 +116,9 @@ contract GuardReactive is AbstractReactive {
     bool public cronOn;
 
     mapping(uint256 chainId => uint64) public gasLimitOf;
+    /// @notice chain id => the RiskOracle trusted on that chain (one per chain).
+    mapping(uint256 chainId => address) public oracleOf;
+    uint8 public riskThreshold = 80;
     mapping(uint256 chainId => Watched) public watched;
     uint256[] public chains;
 
@@ -183,6 +193,41 @@ contract GuardReactive is AbstractReactive {
         emit SettingsChanged(burstLimit_, burstWindow_, refusalLimit_, refusalWindow_);
     }
 
+    /// @notice Trust the RiskOracle at `oracle` on `chainId`: its reports at or above the threshold quarantine.
+    function trustOracle(uint256 chainId, address oracle) external onlyOwner {
+        address old = oracleOf[chainId];
+        if (old != address(0)) SYSTEM.unsubscribe(chainId, old, T_RISK, REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
+        oracleOf[chainId] = oracle;
+        if (oracle != address(0)) SYSTEM.subscribe(chainId, oracle, T_RISK, REACTIVE_IGNORE, REACTIVE_IGNORE, REACTIVE_IGNORE);
+        emit OracleTrusted(chainId, oracle);
+    }
+
+    function setRiskThreshold(uint8 threshold) external onlyOwner {
+        if (threshold == 0 || threshold > 100) revert BadSettings();
+        riskThreshold = threshold;
+        emit RiskThresholdSet(threshold);
+    }
+
+    /// @notice Copy lessons [start, start + count) from an earlier GuardReactive on this chain, so a
+    ///         replacement keeps what its predecessor learned. Watched vaults are immunized on `watch`.
+    function importLessons(address from, uint256 start, uint256 count) external onlyOwner {
+        GuardReactive old = GuardReactive(payable(from));
+        uint256 end = start + count;
+        uint256 n = old.lessonCount();
+        if (end > n) end = n;
+        uint256 added;
+        for (uint256 i = start; i < end; ++i) {
+            address a = old.lessons(i);
+            if (!knownBad[a]) {
+                knownBad[a] = true;
+                lessons.push(a);
+                ++added;
+                emit Lesson(a, block.chainid, lessons.length);
+            }
+        }
+        emit LessonsImported(from, added);
+    }
+
     /// @notice Set the callback gas limit for `chainId` (the whole destination transaction's gas).
     function setGasLimit(uint256 chainId, uint64 gasLimit) external onlyOwner {
         if (gasLimit < MIN_GAS_LIMIT || gasLimit > MAX_GAS_LIMIT) revert BadSettings();
@@ -252,6 +297,10 @@ contract GuardReactive is AbstractReactive {
     function react(LogRecord calldata log) external onlySystem {
         if (log.contractAddress == CRON_EMITTER && log.topic0 == cronTopic) {
             _onCron();
+            return;
+        }
+        if (log.topic0 == T_RISK && log.contractAddress == oracleOf[log.chainId] && log.contractAddress != address(0)) {
+            _onRisk(log);
             return;
         }
         Watched storage w = watched[log.chainId];
@@ -347,6 +396,21 @@ contract GuardReactive is AbstractReactive {
         }
         for (uint256 i; i < chains.length; ++i) {
             if (chains[i] != fromChain) _quarantine(chains[i], account, Rule.CrossChainQuarantine, "learned on another chain", originTx);
+        }
+    }
+
+    /// @dev An AI risk report: at or above the threshold, a known attacker everywhere (the model can only restrict).
+    function _onRisk(LogRecord calldata log) internal {
+        address subject = address(uint160(log.topic1));
+        uint256 score = log.topic2;
+        if (score < riskThreshold || subject == address(0)) return;
+        if (!knownBad[subject]) {
+            knownBad[subject] = true;
+            lessons.push(subject);
+            emit Lesson(subject, log.chainId, lessons.length);
+        }
+        for (uint256 i; i < chains.length; ++i) {
+            _quarantine(chains[i], subject, Rule.AiRisk, "AI risk score", log.txHash);
         }
     }
 

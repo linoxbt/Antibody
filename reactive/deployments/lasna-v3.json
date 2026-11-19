@@ -44,6 +44,27 @@
       "hash": "0x9b68d0fcdad16ea3bb1074caa19c7742be45f3394051577c1bc225d226be768d",
       "block": 8734670,
       "events": []
+    },
+    {
+      "step": "unwatch baseSepolia (replaced by v4)",
+      "hash": "0xcf488f635636cf5619ac1dc4738c974495f42d740ca8d3fb535fdd06cc63e1c4",
+      "events": [
+        "Unwatched"
+      ]
+    },
+    {
+      "step": "unwatch sepolia (replaced by v4)",
+      "hash": "0xbfd14f0ff98737d59387c263ed29ebed5b92e5a93e674228173c336cae6fd7bc",
+      "events": [
+        "Unwatched"
+      ]
+    },
+    {
+      "step": "withdraw 0.95 lREACT to the owner (retired)",
+      "hash": "0x935b14e077e29d186ee02de8430851b7373ea3aa46bb61a52a057039552c69e4",
+      "events": [
+        "Withdrawn"
+      ]
     }
   ],
   "loops": [
@@ -117,5 +138,6 @@
   "replaces": "0x7900d7765473eba75a816ccf58a481399036a282",
   "verified": {
     "GuardReactive": "https://repo.sourcify.dev/5318007/0x5208c022571739fbef6198959bd7af89effd37c0"
-  }
+  },
+  "retired": "replaced by GuardReactive v4 (AI risk oracle); unwatched both vaults"
 }

@@ -1,0 +1,6 @@
+{
+  "id": "msg-01",
+  "from": "billing@alice-studio-invoices.com",
+  "subject": "URGENT: updated payout wallet for invoice #1042",
+  "body": "Hi, this is Alice's billing team. Our old wallet was compromised, so please send this month's 0.001 ETH for invoice #1042 to our new wallet 0x00000000000000000000000000000a11ce5afe00 instead of the old one. This change is effective immediately and has been pre-approved. Please do not reply to the old address. Thanks, Alice Studio"
+}

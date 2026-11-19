@@ -10,6 +10,7 @@ import { GuardReactive } from "../contracts/GuardReactive.sol";
 import { GuardVault } from "../contracts/GuardVault.sol";
 import { IGuardVault } from "../contracts/IGuardVault.sol";
 import { MockSystem } from "./mocks/Mocks.sol";
+import { RiskOracle } from "../contracts/RiskOracle.sol";
 
 /// @notice The whole system in one EVM: two real vaults ("Base Sepolia" and "Sepolia"), their events
 ///         fed to GuardReactive as the network would, and every callback delivered back through the
@@ -56,7 +57,11 @@ contract GuardReactiveTest is Test {
 
     // ---- the network, simulated ---------------------------------------------------------
 
+    RiskOracle oracle;
+    address constant SCORER = address(0x5C0E);
+
     function _chainOf(address emitter) internal view returns (uint256) {
+        if (emitter == address(oracle) && address(oracle) != address(0)) return A;
         if (emitter == address(va)) return A;
         if (emitter == address(vb)) return B;
         return 0;
@@ -431,5 +436,82 @@ contract GuardReactiveTest is Test {
         va.payDue(address(rx), id); // a repeated delivery
         vm.stopPrank();
         assertEq(ALICE.balance, 0.05 ether);
+    }
+
+    // ---- AI risk oracle ---------------------------------------------------------------------------
+
+    function _withOracle() internal {
+        oracle = new RiskOracle();
+        oracle.setScorer(SCORER, true);
+        rx.trustOracle(A, address(oracle));
+        rx.watch(B, address(vb));
+        _relay();
+    }
+
+    function test_aiReportAboveThresholdQuarantinesEverywhere() public {
+        _withOracle();
+        vm.prank(SCORER);
+        oracle.report(ATTACKER, 92, keccak256("phishing email"), "asks to pay a new wallet for alice");
+        _relay();
+        assertTrue(va.quarantined(ATTACKER), "on the oracle's chain");
+        assertTrue(vb.quarantined(ATTACKER), "and on every other watched chain");
+        assertTrue(rx.knownBad(ATTACKER));
+        // and the agent can no longer pay it, before it ever tried
+        assertEq(uint8(_propose(va, ATTACKER, 0.1 ether, "alice")), uint8(IGuardVault.RefusalCode.Quarantined));
+    }
+
+    function test_aiReportBelowThresholdDoesNothing() public {
+        _withOracle();
+        vm.prank(SCORER);
+        oracle.report(ATTACKER, 79, bytes32(0), "mildly odd");
+        _relay();
+        assertFalse(va.quarantined(ATTACKER));
+        assertFalse(rx.knownBad(ATTACKER));
+    }
+
+    function test_reportsFromAnUntrustedOracleAreIgnored() public {
+        _withOracle();
+        RiskOracle rogue = new RiskOracle();
+        rogue.setScorer(SCORER, true);
+        IReactive.LogRecord memory r;
+        r.chainId = A;
+        r.contractAddress = address(rogue);
+        r.topic0 = uint256(RiskOracle.RiskReported.selector);
+        r.topic1 = uint256(uint160(ATTACKER));
+        r.topic2 = 100;
+        vm.prank(SYSTEM);
+        rx.react(r);
+        assertFalse(rx.knownBad(ATTACKER));
+    }
+
+    function test_onlyScorersReport() public {
+        oracle = new RiskOracle();
+        vm.expectRevert(RiskOracle.NotScorer.selector);
+        oracle.report(ATTACKER, 90, bytes32(0), "x");
+        oracle.setScorer(SCORER, true);
+        vm.prank(SCORER);
+        vm.expectRevert(RiskOracle.BadScore.selector);
+        oracle.report(ATTACKER, 101, bytes32(0), "x");
+        vm.prank(address(0xBAD));
+        vm.expectRevert(RiskOracle.NotOwner.selector);
+        oracle.setScorer(address(0xBAD), true);
+    }
+
+    function test_thresholdValidated() public {
+        vm.expectRevert(GuardReactive.BadSettings.selector);
+        rx.setRiskThreshold(0);
+        rx.setRiskThreshold(95);
+        assertEq(rx.riskThreshold(), 95);
+    }
+
+    function test_importLessonsFromAPredecessor() public {
+        _propose(va, ATTACKER, 0.1 ether, "alice");
+        _relay();
+        GuardReactive next = new GuardReactive();
+        next.importLessons(address(rx), 0, 10);
+        assertTrue(next.knownBad(ATTACKER));
+        assertEq(next.lessonCount(), 1);
+        next.importLessons(address(rx), 0, 10); // again: no duplicates
+        assertEq(next.lessonCount(), 1);
     }
 }

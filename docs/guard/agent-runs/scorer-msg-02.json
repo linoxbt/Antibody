@@ -1,0 +1,12 @@
+{
+  "message": "msg-02",
+  "model": "qwen/qwen3.8-27b",
+  "verdict": {
+    "suspicious": false,
+    "score": 10,
+    "reason": "Normal invoice, consistent sender, no new address or urgency pressure.",
+    "addresses": []
+  },
+  "reported": [],
+  "skipped": []
+}

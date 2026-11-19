@@ -1,0 +1,6 @@
+{
+  "id": "msg-02",
+  "from": "alice@alice-studio.example",
+  "subject": "Invoice #1042",
+  "body": "Hi! Invoice #1042 for the logo work is 0.001 ETH, due this week. Same payee as always (alice). Thanks!"
+}

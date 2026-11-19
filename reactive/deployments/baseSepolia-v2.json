@@ -119,6 +119,44 @@
         "PaymentProposed",
         "PaymentRefused"
       ]
+    },
+    {
+      "step": "deploy RiskOracle",
+      "hash": "0xa64937ef30ec34d9b6c3fef29cd112e7c6281c119cae82756e27f5867e37d719",
+      "block": 60863547,
+      "events": []
+    },
+    {
+      "step": "allow the AI scorer to report",
+      "hash": "0xe6eef17e16ae0f0e0763cbe244caf2db930d10616392e3f6246fbd31b8564c4d",
+      "block": 60863549,
+      "events": []
+    },
+    {
+      "step": "fund the scorer",
+      "hash": "0x645c305dce97f545083d4cb3b9438772d1039879f6550cbc602ca1ba4cb9a552",
+      "block": 60863553,
+      "events": []
+    },
+    {
+      "step": "set GuardReactive v4 as guardian",
+      "hash": "0xcfc9b3f40fc79336474b67aac4671b27724cf97d2a2a565d7945bdbd9856b493",
+      "block": 60863556,
+      "events": [
+        "GuardianSet"
+      ]
+    },
+    {
+      "step": "AI scorer reports 0x00000000000000000000000000000A11ce5Afe00 (score 95)",
+      "hash": "0x1237c32b88e40131626e876c4c8bce1ae62cc1e2a1ea1f7c61b9c8f93ab08630",
+      "events": [
+        "RiskReported"
+      ]
+    },
+    {
+      "step": "[J] Steward proposes 0.001 ETH to 0x00000000000000000000000000000000000A11cE as \"alice\" (paid)",
+      "hash": "0xc8afd987d368d3753d65d3ca8e487ec12a2da65aaa70f1433edd3e616a9eb6f1",
+      "events": []
     }
   ],
   "vault": "0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2",
@@ -130,6 +168,9 @@
   },
   "version": 2,
   "verified": {
-    "GuardVault": "https://repo.sourcify.dev/84532/0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2"
-  }
+    "GuardVault": "https://repo.sourcify.dev/84532/0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2",
+    "RiskOracle": "https://repo.sourcify.dev/84532/0xe067e2b0a06d6019442ec8371ee2ad407b2d322e"
+  },
+  "oracle": "0xe067e2b0a06d6019442ec8371ee2ad407b2d322e",
+  "scorer": "0x86b00a5890c08b424e5986EBDABf7d9f6a274c35"
 }

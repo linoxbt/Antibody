@@ -81,6 +81,14 @@
         "PaymentProposed",
         "PaymentRefused"
       ]
+    },
+    {
+      "step": "set GuardReactive v4 as guardian",
+      "hash": "0x01361e2ed38d7d1a933bf4618491e382e21e4d655bdc5b541fc88dc8afbefb15",
+      "block": 12168674,
+      "events": [
+        "GuardianSet"
+      ]
     }
   ],
   "vault": "0xb30ccddd31c4e14186801d74ea45a905b7305d4b",

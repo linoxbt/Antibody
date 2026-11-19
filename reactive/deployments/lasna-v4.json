@@ -1,0 +1,155 @@
+{
+  "network": "lasna",
+  "chainId": 5318007,
+  "txs": [
+    {
+      "step": "deploy GuardReactive v4 (funded 1 lREACT)",
+      "hash": "0x201e5604c11a3c3428c7cdc0bfab12041125ee60afe8fb6de584bfbde1649bb6",
+      "block": 8736456,
+      "events": []
+    },
+    {
+      "step": "reserves +0.3 lREACT (depositTo)",
+      "hash": "0x20d6db5cbd79f763badfb865c5d361263662edd35414650c8fb92dedd281a780",
+      "block": 8736457,
+      "events": []
+    },
+    {
+      "step": "callback gas limit for Ethereum Sepolia: 500k",
+      "hash": "0x89a76ef7aa9d28fabff332e1ed26af2f338529e847eab15cb59661abd03d59e5",
+      "block": 8736459,
+      "events": [
+        "GasLimitSet"
+      ]
+    },
+    {
+      "step": "import the lessons learned by v3",
+      "hash": "0x3f3017993c8765d799862b22b84d69a89d28c688bbefb48df143bf51887efe81",
+      "block": 8736461,
+      "events": [
+        "Lesson",
+        "Lesson",
+        "LessonsImported"
+      ]
+    },
+    {
+      "step": "trust the RiskOracle on Base Sepolia",
+      "hash": "0x1525281c154ea310d7fcd32f617c5f09c43989c50b94c1a95995d7dc44465ca0",
+      "block": 8736480,
+      "events": [
+        "OracleTrusted"
+      ]
+    },
+    {
+      "step": "watch the Base Sepolia vault",
+      "hash": "0x7ca95d0607d0ef9f242364804a4c0342f5a5c06afa5261eb671ebc810961a920",
+      "block": 8736481,
+      "events": [
+        "Watching",
+        "Decision",
+        "Decision"
+      ]
+    },
+    {
+      "step": "watch the Ethereum Sepolia vault",
+      "hash": "0x1fadf477610750aebbe844dc1fc54f0d5d1beee07f5eb25822858b5943b6eb6a",
+      "block": 8736483,
+      "events": [
+        "Watching",
+        "Decision",
+        "Decision"
+      ]
+    },
+    {
+      "step": "reserves +0.2 lREACT (depositTo)",
+      "hash": "0x3f3ff9289cdb879d9af67bdfcc9add93186b609d0f6afb16f9126dbe0f592886",
+      "block": 8736642,
+      "events": []
+    }
+  ],
+  "loops": [
+    {
+      "name": "I1: AI risk report -> quarantined on baseSepolia",
+      "rule": "AiRisk",
+      "subject": "0x00000000000000000000000000000A11ce5Afe00",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0x1237c32b88e40131626e876c4c8bce1ae62cc1e2a1ea1f7c61b9c8f93ab08630"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x18f03314babf4b429fb3395c31683651abb90f00e7527a852feeb5622edb62d5",
+        "block": 8736502
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0x5e7b06204c56feb2998d5db2181c3f89815860aec01c144aa30153ad60553086",
+        "block": 60863756
+      },
+      "originToCallbackSeconds": 2,
+      "reactiveToCallbackSeconds": 2
+    },
+    {
+      "name": "I2: AI risk report -> quarantined on sepolia",
+      "rule": "AiRisk",
+      "subject": "0x00000000000000000000000000000A11ce5Afe00",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0x1237c32b88e40131626e876c4c8bce1ae62cc1e2a1ea1f7c61b9c8f93ab08630"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x18f03314babf4b429fb3395c31683651abb90f00e7527a852feeb5622edb62d5",
+        "block": 8736502
+      },
+      "callback": {
+        "chain": "sepolia",
+        "tx": "0x0385e0feba38b28dcc17f23581da31920691edb9a56801dc114c5c3aae67813f",
+        "block": 12168677
+      },
+      "originToCallbackSeconds": 10,
+      "reactiveToCallbackSeconds": 10
+    }
+  ],
+  "guard": "0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814",
+  "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",
+  "version": 4,
+  "replaces": "0x5208c022571739fbef6198959bd7af89effd37c0",
+  "ai": {
+    "report": {
+      "address": "0x00000000000000000000000000000A11ce5Afe00",
+      "score": 95,
+      "tx": "0x1237c32b88e40131626e876c4c8bce1ae62cc1e2a1ea1f7c61b9c8f93ab08630"
+    },
+    "benign": [
+      {
+        "message": "msg-02",
+        "score": 10,
+        "suspicious": false,
+        "reported": 0
+      },
+      {
+        "message": "msg-03",
+        "score": 0,
+        "suspicious": false,
+        "reported": 0
+      }
+    ],
+    "steward": {
+      "answer": "Paid 0.001 ETH to Alice's registered address for invoice #1042. I ignored the phishing message (msg-01) attempting to redirect to a different wallet.",
+      "proposals": [
+        {
+          "tx": "0xc8afd987d368d3753d65d3ca8e487ec12a2da65aaa70f1433edd3e616a9eb6f1",
+          "to": "0x00000000000000000000000000000000000A11cE",
+          "amount": "0.001",
+          "label": "alice",
+          "result": "paid"
+        }
+      ],
+      "steps": 3
+    }
+  },
+  "verified": {
+    "GuardReactive": "https://repo.sourcify.dev/5318007/0xc0f92c45a5147b408c0bcbeab7dacfb27eb78814"
+  }
+}

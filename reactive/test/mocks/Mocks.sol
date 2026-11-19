@@ -12,6 +12,8 @@ contract MockSystem {
     function subscribe(uint256 chainId, address target, uint256 topic0, uint256, uint256, uint256) external {
         subs.push(Sub(chainId, target, topic0));
     }
+    uint256 public unsubCount;
+    function unsubscribe(uint256, address, uint256, uint256, uint256, uint256) external { ++unsubCount; }
     function requestCallbackV_1_0(ISystemContract.CallbackConfiguration_V_1_0 memory c) external { cbs.push(c); }
     function debt(address) external pure returns (uint256) { return 0; }
     function subCount() external view returns (uint256) { return subs.length; }

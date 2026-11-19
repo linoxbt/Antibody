@@ -26,7 +26,7 @@ payments when they fall due, even while the agent is offline.
 - Freeze / unfreeze, sender quarantine, and the callback entry points (proxy + sender checked).
 - Full unit tests, deployed and verified on Base Sepolia.
 
-## Phase 2: the Reactive contract (Lasna)
+## Phase 2 (done): the Reactive contract (Lasna)
 - Subscribes to the vault's events: incoming tokens, payment proposals, payee changes, outflows.
 - Rules in `react()`: payment burst → freeze; token from a quarantined sender → quarantine;
   payee change → alert and delay; outflow above the daily limit → freeze.
@@ -69,3 +69,16 @@ payments when they fall due, even while the agent is offline.
 - On-chain run: 2 payments paid, 4 refused (LabelMismatch, UnknownPayee, OverCap, Duplicate);
   see [evidence-baseSepolia.md](evidence-baseSepolia.md).
 - 30 Solidity tests including a fuzz test of the agent against the rules.
+
+## Phase 2 result
+- `GuardReactive` on Lasna at `0xb30ccddd31c4e14186801d74ea45a905b7305d4b` (Sourcify exact match),
+  guardian of the Base Sepolia vault. Rules: burst (more than 5 proposals in 120 s) and repeated
+  refusals (3 in 600 s) freeze the vault; an unknown recipient is quarantined. Counters reset when
+  the owner unfreezes; frozen state and quarantines are mirrored from the vault's own events.
+- Three live loops, each origin -> reactive -> callback, recorded in
+  [evidence-lasna.md](evidence-lasna.md): the vault changed 1 to 2 s (block timestamps) after the
+  agent's transaction.
+- The system contract's `getCallbacks()` returned an empty record on Lasna, so callbacks are linked
+  by the vault event they produced in a transaction to the callback proxy (`npm run link-callbacks`).
+- 39 Solidity tests, including the full loop simulated in one EVM (real vault events fed to
+  GuardReactive, its callbacks delivered back through a stand-in proxy).

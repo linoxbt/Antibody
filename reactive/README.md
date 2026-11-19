@@ -12,7 +12,10 @@ npm run build     # hardhat build
 npm test          # Solidity tests
 npm run deployer -- show   # testnet deployer address and balances
 npm run phase1    # deploy GuardVault on Base Sepolia and run the payment demo (re-runnable)
-npm run evidence -- baseSepolia   # re-read every recorded tx from the chain into docs/guard/
+npm run faucet -- baseSepolia 0.05   # turn test ETH into lREACT on Lasna
+npm run phase2    # deploy GuardReactive on Lasna, make it the vault's guardian, run three live loops
+npm run link-callbacks   # find each loop's callback transaction on the destination chain
+npm run evidence -- baseSepolia   # (or lasna) re-read every recorded tx from the chain into docs/guard/
 npm run verify -- baseSepolia GuardVault <address> [creationTx]   # Sourcify
 npm run web       # builds the status site into web-dist/, with every deployment in deployments/
 ```
@@ -20,7 +23,10 @@ npm run web       # builds the status site into web-dist/, with every deployment
 | Contract | Chain | Role |
 | --- | --- | --- |
 | `GuardVault` | Base Sepolia [`0xb30c…5d4b`](https://sepolia.basescan.org/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | Holds the agent's funds; the agent may only propose payments, which the rules pay or refuse (refusals are events, not reverts). Payee changes are timelocked. Accepts freeze and quarantine callbacks from its guardian only, through the chain's callback proxy. |
-| `GuardReactive` | Reactive Lasna | Subscribes to vault events on every watched chain and requests callbacks. |
+| `GuardReactive` | Reactive Lasna [`0xb30c…5d4b`](https://lasna.reactscan.net/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | Subscribes to six events of each watched vault. Freezes the vault on a burst of proposals (more than 5 in 2 minutes) or on 3 refusals in 10 minutes; quarantines any address the agent tried to pay that is not a payee. Mirrors each vault's frozen flag and quarantine list from its events, so it never asks twice. |
 
 Testnet keys (deployer, agent) live in `~/.antibody-guard/` on the machine that runs the scripts,
 never in the repository. `deployments/*.json` holds only addresses and transaction hashes.
+
+Both contracts happen to share the address `0xb30c…5d4b`: the same deployer created each as its
+first contract, on two different chains (Base Sepolia and Lasna).

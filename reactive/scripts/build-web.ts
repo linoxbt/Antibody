@@ -17,6 +17,11 @@ cpSync(`${brand}/fonts/LICENSE.md`, `${out}/assets/fonts/LICENSE.md`);
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const sections: string[] = [];
+const link = (net: string, hash: string, text: string) => {
+  const n = NETWORKS[net as keyof typeof NETWORKS];
+  return hash ? `<a href="${n.explorer}/tx/${hash}">${text}</a>` : 'pending';
+};
+const loops: string[] = [];
 const dir = `${root}deployments`;
 for (const file of existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).sort() : []) {
   const rec = JSON.parse(readFileSync(`${dir}/${file}`, 'utf8'));
@@ -30,14 +35,24 @@ for (const file of existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('
     const mark = paid ? '<span class="ok">paid</span>' : refused ? '<span class="no">refused</span>' : '';
     return `<tr><td>${esc(t.step)}</td><td>${mark}</td><td><a href="${n.explorer}/tx/${t.hash}">${t.hash.slice(0, 10)}…</a></td></tr>`;
   }).join('\n');
+  for (const l of rec.loops ?? []) {
+    loops.push(`<tr><td>${esc(l.name)}</td><td>${esc(l.rule)}</td><td>${link(l.origin.chain, l.origin.tx, 'origin')}</td><td>${link(l.reactive.chain, l.reactive.tx, 'reactive')}</td><td>${link(l.callback.chain, l.callback.tx ?? '', 'callback')}</td><td>${l.originToCallbackSeconds ?? "?"}s</td></tr>`);
+  }
   sections.push(`<section class="deploy">
     <h2>On ${esc(rec.network)} <small class="note">(chain ${n.chainId})</small></h2>
-    <dl>${contracts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${addr(v as string)}</dd>`).join('')}<dt>agent</dt><dd>${addr(rec.agent)}</dd>${Object.entries(rec.verified ?? {}).map(([k, u]) => `<dt>source</dt><dd><a href="${esc(String(u))}">${esc(k)} verified on Sourcify</a></dd>`).join('')}</dl>
+    <dl>${contracts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${addr(v as string)}</dd>`).join('')}${rec.agent ? `<dt>agent</dt><dd>${addr(rec.agent)}</dd>` : ''}${Object.entries(rec.verified ?? {}).map(([k, u]) => `<dt>source</dt><dd><a href="${esc(String(u))}">${esc(k)} verified on Sourcify</a></dd>`).join('')}</dl>
     <table class="phases txs"><thead><tr><th scope="col">Step</th><th scope="col">Result</th><th scope="col">Transaction</th></tr></thead><tbody>
 ${rows}
     </tbody></table>
   </section>`);
 }
-const html = readFileSync(`${root}web/index.html`, 'utf8').replace('<!--DEPLOYMENTS-->', sections.join('\n'));
+const loopSection = loops.length ? `<section class="deploy">
+    <h2>The loop, on-chain</h2>
+    <p class="note">Each row is one decision: the agent's transaction on Base Sepolia, GuardReactive's reaction on Lasna, and the callback that changed the vault, with the time between the agent's block and the callback's block (Base Sepolia block timestamps).</p>
+    <table class="phases txs loops"><thead><tr><th scope="col">Scenario</th><th scope="col">Rule</th><th scope="col">Origin</th><th scope="col">Reactive</th><th scope="col">Callback</th><th scope="col">Time</th></tr></thead><tbody>
+${loops.join('\n')}
+    </tbody></table>
+  </section>` : '';
+const html = readFileSync(`${root}web/index.html`, 'utf8').replace('<!--DEPLOYMENTS-->', loopSection + sections.join('\n'));
 writeFileSync(`${out}/index.html`, html);
 console.log(`built web-dist with ${sections.length} deployment section(s)`);

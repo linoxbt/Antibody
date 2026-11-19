@@ -110,6 +110,151 @@
         "PaymentProposed",
         "PaymentExecuted"
       ]
+    },
+    {
+      "step": "faucet: 0.05 ETH for lREACT",
+      "hash": "0x68abd10a0f52cf0bbec9a90cec50c50c5c76ede99c9fe3c929b0cec1ddde6d9b",
+      "block": 60759456,
+      "events": []
+    },
+    {
+      "step": "set GuardReactive as guardian",
+      "hash": "0x518288e5cf330a3d4d2a94905cfe457004729bac0418a127a9dac333146ca081",
+      "block": 60761031,
+      "events": [
+        "GuardianSet"
+      ]
+    },
+    {
+      "step": "top up vault 0.02 ETH (payments + callback fees)",
+      "hash": "0xc902219f7b5d413d12ca2a712e085db71c87dd9f4c43fd80ce6b586c79efd3bf",
+      "block": 60761033,
+      "events": [
+        "Deposited"
+      ]
+    },
+    {
+      "step": "daily limit 0.03 ETH",
+      "hash": "0x23095db38c2c40667cd709be911c657d2a1e1fda68c2cdd1a01179207bc7e15d",
+      "block": 60761035,
+      "events": [
+        "DailyLimitSet"
+      ]
+    },
+    {
+      "step": "[loop A mwn8rda4] agent pays look-alike 0x00000000000000000000000000000000bada11ce (UnknownPayee)",
+      "hash": "0x7468e05973bd9a2c8e19dca88f22303edc61124b7931d4988006c9f8c2e7987a",
+      "block": 60761063,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    },
+    {
+      "step": "[loop B mwn8rda4] agent pays alice 0.004 (OverCap)",
+      "hash": "0xd2d286a6aea0d590583fb991c63ac9fd1353cb4b25980589a3384888b593d88d",
+      "block": 60761717,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    },
+    {
+      "step": "[loop B mwn8rda4] agent pays bob labelled alice (LabelMismatch)",
+      "hash": "0x9d11269cf8a36f33fb48b725169c1aced9ffa49c53d874d09f5917b3c868e5b4",
+      "block": 60761719,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    },
+    {
+      "step": "[loop B mwn8rda4] agent pays alice 0.0035 (OverCap, or Frozen if the freeze landed)",
+      "hash": "0x1c3f4e7bcfd30ca422fea421769db5bceaa405c949d219bbc03a1c39c3ad301a",
+      "block": 60761721,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    },
+    {
+      "step": "[loop B mwn8rda4] agent pays alice 0.001 while frozen (Frozen)",
+      "hash": "0x3d14a9daa482b3ac1b92e532c2a93f8c66d6dc8f023516d14f15950440736f54",
+      "block": 60762385,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    },
+    {
+      "step": "[loop B mwn8rda4] owner unfreezes",
+      "hash": "0xf95084e91aaac59d8090e2b78ae7447f0dd28f48f9ee241c0ace4fdc95f69a64",
+      "block": 60762387,
+      "events": [
+        "Unfrozen"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 1 to alice",
+      "hash": "0x8df54ba39268794b82b2329efd5c2a3dfd1b67eb49baef2038b2d9c2c36e049e",
+      "block": 60762491,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 2 to alice",
+      "hash": "0xc813fe9c48f6e0da61b361b531acc4b7321984c724f7138af719dd459ee79e13",
+      "block": 60762494,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 3 to alice",
+      "hash": "0x5687a5dde6e6510114cd0d734cad41868f5aab08721c102076609de42e65a850",
+      "block": 60762497,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 4 to alice",
+      "hash": "0x4ed867ec2159472beaf4c6e958a4323f4803da6742fd0e4eb509a15e44d5edd3",
+      "block": 60762499,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 5 to alice",
+      "hash": "0x0b07b2c8477f267bfae977027266ae15b4675eab75eac581f7c52513efee1c03",
+      "block": 60762502,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] burst payment 6 to alice",
+      "hash": "0x4d5fd02b18dddbe0715916a991896e126310045f5c2203fa60f0cec581fc9a4c",
+      "block": 60762504,
+      "events": [
+        "PaymentProposed",
+        "PaymentExecuted"
+      ]
+    },
+    {
+      "step": "[loop C mwn8rda4] owner unfreezes",
+      "hash": "0x70ab3dba3f862160a21133280a5ea92dc3aac37564feea1d147f914ebd85f47e",
+      "block": 60763161,
+      "events": [
+        "Unfrozen"
+      ]
     }
   ],
   "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",

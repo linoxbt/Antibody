@@ -48,3 +48,6 @@ footer { color: var(--muted); font-size: 14px; padding-top: 48px; padding-bottom
 .txs td:nth-child(2) { font-size: 14px; width: 110px; }
 .txs td:last-child { font: 13px var(--mono); white-space: nowrap; }
 .ok { color: var(--ok); } .no { color: #ff5c7a; }
+.loops td { white-space: nowrap; }
+.loops td:first-child { white-space: normal; }
+.loops a { font: 13px var(--mono); }

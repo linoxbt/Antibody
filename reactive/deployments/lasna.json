@@ -1,0 +1,93 @@
+{
+  "network": "lasna",
+  "chainId": 5318007,
+  "txs": [
+    {
+      "step": "deploy GuardReactive (funded 1.5 lREACT)",
+      "hash": "0x00ccb3be30d1021ded149cd0ceda609240a5f3166669bc565a06dfc63d665c2d",
+      "block": 8717187,
+      "events": []
+    },
+    {
+      "step": "watch the Base Sepolia vault",
+      "hash": "0xb1d84addc3c5a1ee696c1f2ce76994273c1a7039117d3b038a23c9fd61199ed1",
+      "block": 8717189,
+      "events": [
+        "Watching"
+      ]
+    }
+  ],
+  "loops": [
+    {
+      "name": "A: unknown recipient is quarantined",
+      "rule": "UnknownRecipient",
+      "subject": "0x00000000000000000000000000000000BADA11ce",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0x7468e05973bd9a2c8e19dca88f22303edc61124b7931d4988006c9f8c2e7987a"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x34981590d5f242bde873065b3acc0fadddb13966e137579744f342f500536c4e",
+        "block": 8717196
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0x67221a60a1eea4d301383be40830f4f452f26c799cd370c1650299a42a953b3c",
+        "block": 60761068,
+        "via": "vault event in a callback-proxy transaction"
+      },
+      "observedSeconds": 3,
+      "originToCallbackSeconds": 1
+    },
+    {
+      "name": "B: repeated refusals freeze the vault",
+      "rule": "RepeatedRefusals",
+      "subject": "0x0000000000000000000000000000000000000000",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0x9d11269cf8a36f33fb48b725169c1aced9ffa49c53d874d09f5917b3c868e5b4"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x950339dd16da3bfce6e6da52eba18b1c0154342f83a29519b421e8b51273a656",
+        "block": 8717321
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0x0f483355839ae92a3d21e3cc16e70bb1021d9fa50e964436a6e04857a4ab4634",
+        "block": 60761728,
+        "via": "vault event in a callback-proxy transaction"
+      },
+      "observedSeconds": 3,
+      "originToCallbackSeconds": 2
+    },
+    {
+      "name": "C: a burst of payments freezes the vault",
+      "rule": "Burst",
+      "subject": "0x0000000000000000000000000000000000000000",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0x4d5fd02b18dddbe0715916a991896e126310045f5c2203fa60f0cec581fc9a4c"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x79cb3dc3279035934c034ba2608ceb5c4994461ea3aee7846b88ebd86a33f3ef",
+        "block": 8717470
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0xfc60aff0cc8859000c7b9dc663d36fca1e867b6f0e5668af340343ef83469c6c",
+        "block": 60762512,
+        "via": "vault event in a callback-proxy transaction"
+      },
+      "observedSeconds": 3,
+      "originToCallbackSeconds": 2
+    }
+  ],
+  "guard": "0xb30ccddd31c4e14186801d74ea45a905b7305d4b",
+  "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",
+  "verified": {
+    "GuardReactive": "https://repo.sourcify.dev/5318007/0xb30ccddd31c4e14186801d74ea45a905b7305d4b"
+  }
+}

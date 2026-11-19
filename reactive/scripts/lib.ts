@@ -28,6 +28,7 @@ export function chainOf(name: NetworkName) {
   return defineChain({
     id: n.chainId, name, nativeCurrency: { name: n.currency, symbol: n.currency, decimals: 18 },
     rpcUrls: { default: { http: [n.rpc] } }, blockExplorers: { default: { name: 'explorer', url: n.explorer } },
+    // Lasna refuses a zero priority tip, and its RPC estimates zero
   });
 }
 
@@ -60,3 +61,10 @@ export function saveRecord(name: NetworkName, rec: Record<string, any>): void {
 export const txUrl = (name: NetworkName, hash: string) => `${NETWORKS[name].explorer}/tx/${hash}`;
 export const addrUrl = (name: NetworkName, a: string) => `${NETWORKS[name].explorer}/address/${a}`;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Lasna refuses a zero priority tip, and viem's wallet path estimates zero there: pass these on Lasna writes. */
+export async function lasnaFees(pub: { getBlock: () => Promise<{ baseFeePerGas: bigint | null }> }) {
+  const tip = 1_000_000_000n;
+  const base = (await pub.getBlock()).baseFeePerGas ?? 100_000_000_000n;
+  return { maxFeePerGas: base * 2n + tip, maxPriorityFeePerGas: tip };
+}

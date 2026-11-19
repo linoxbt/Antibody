@@ -1,0 +1,121 @@
+{
+  "network": "lasna",
+  "chainId": 5318007,
+  "txs": [
+    {
+      "step": "deploy GuardReactive v3 (funded 1 lREACT)",
+      "hash": "0x6135b6ba41563834ad3a5da4091459583e7a2d925a5ecc5e86fc1472456bc3ed",
+      "block": 8734567,
+      "events": []
+    },
+    {
+      "step": "reserves +0.3 lREACT (depositTo)",
+      "hash": "0x166803cd585b5b504259297fb8fa17445fcf88eaf1f83791e6bd6a865d1b0d3f",
+      "block": 8734569,
+      "events": []
+    },
+    {
+      "step": "callback gas limit for Ethereum Sepolia: 500k (its proxy keeps 200k)",
+      "hash": "0xcc0f8c4120e94333e8ec1a97c9365c3c94de4bfcad58e962b751a1e38b8f5844",
+      "block": 8734570,
+      "events": [
+        "GasLimitSet"
+      ]
+    },
+    {
+      "step": "watch the Base Sepolia vault",
+      "hash": "0x73da9a31efb381849c9e04f2ba1dc57fa811dad5fe0880fd8ad1f7586a0ec963",
+      "block": 8734581,
+      "events": [
+        "Watching"
+      ]
+    },
+    {
+      "step": "watch the Sepolia vault (immunized with the lessons)",
+      "hash": "0x7b48e6ceca89b1e514d0a7df5d5b4ef61129043e50d1d8d278d9feb45394da0b",
+      "block": 8734594,
+      "events": [
+        "Watching",
+        "Decision"
+      ]
+    },
+    {
+      "step": "reserves +0.2 lREACT (depositTo)",
+      "hash": "0x9b68d0fcdad16ea3bb1074caa19c7742be45f3394051577c1bc225d226be768d",
+      "block": 8734670,
+      "events": []
+    }
+  ],
+  "loops": [
+    {
+      "name": "H: attacker seen on Base Sepolia quarantined and learned",
+      "rule": "UnknownRecipient",
+      "subject": "0x0000000000000000000000000000000A11CEBad0",
+      "origin": {
+        "chain": "baseSepolia",
+        "tx": "0xc37b05afc813f76e3d67b9714b394afb1b51490a7a1af4fcdd94db172fa5953e"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0xeae9de33b6ea11d6a84cec0fc72dbc08a469105cb7278c0edbc9a368dc7230db",
+        "block": 8734588
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0x010c9a66b9e90643a8ac71f2fdd9c1d387a43464df939c10521999b710140349",
+        "block": 60853613
+      },
+      "originToCallbackSeconds": 2,
+      "reactiveToCallbackSeconds": 2
+    },
+    {
+      "name": "G1: Sepolia vault immunized at once with the lesson from Base Sepolia",
+      "rule": "CrossChainQuarantine",
+      "subject": "0x0000000000000000000000000000000A11CEBad0",
+      "origin": {
+        "chain": "lasna",
+        "tx": "0x7b48e6ceca89b1e514d0a7df5d5b4ef61129043e50d1d8d278d9feb45394da0b"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x7b48e6ceca89b1e514d0a7df5d5b4ef61129043e50d1d8d278d9feb45394da0b",
+        "block": 8734594
+      },
+      "callback": {
+        "chain": "sepolia",
+        "tx": "0x2a4b1107e0c7c0770bf934dfd846a75612b6b706101e7a547e84f87202ebbe4b",
+        "block": 12168516
+      },
+      "originToCallbackSeconds": 5,
+      "reactiveToCallbackSeconds": 5
+    },
+    {
+      "name": "G2: attacker seen on Sepolia quarantined on Base Sepolia too",
+      "rule": "CrossChainQuarantine",
+      "subject": "0x0000000000000000000000000000000000B0BBAD",
+      "origin": {
+        "chain": "sepolia",
+        "tx": "0x27592d5db865b030e4ac3efe20c29155df02743f10a36b48ac26dbfd43b14922"
+      },
+      "reactive": {
+        "chain": "lasna",
+        "tx": "0x0b0bba00c3e1f7f075dc990e6f209d7b57540d8e1b84a81b18efe4b67e4396d8",
+        "block": 8734621
+      },
+      "callback": {
+        "chain": "baseSepolia",
+        "tx": "0xc501f152d714db87085faffde0b56cc2a685f07cf0ab52627bc9ad1ecc465227",
+        "block": 60853788
+      },
+      "originToCallbackSeconds": 14,
+      "reactiveToCallbackSeconds": 2
+    }
+  ],
+  "guard": "0x5208c022571739fbef6198959bd7af89effd37c0",
+  "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",
+  "version": 3,
+  "replaces": "0x7900d7765473eba75a816ccf58a481399036a282",
+  "verified": {
+    "GuardReactive": "https://repo.sourcify.dev/5318007/0x5208c022571739fbef6198959bd7af89effd37c0"
+  }
+}

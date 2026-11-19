@@ -83,7 +83,7 @@ payments when they fall due, even while the agent is offline.
 - 39 Solidity tests, including the full loop simulated in one EVM (real vault events fed to
   GuardReactive, its callbacks delivered back through a stand-in proxy).
 
-## Phase 3 result (Base Sepolia done; Ethereum Sepolia waits for funds)
+## Phase 3 result (done)
 - v2 contracts, Sourcify exact matches: `GuardReactive` v2 on Lasna
   `0x7900d7765473eba75a816ccf58a481399036a282`, `GuardVault` v2 on Base Sepolia
   `0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2`. Version 1 stays deployed as the Phase 1 and 2 record.
@@ -96,9 +96,17 @@ payments when they fall due, even while the agent is offline.
   cancellation.
 - Following Reactive MCP's pitfalls: every callback is idempotent (logs can be delivered twice), and a
   freeze or quarantine not confirmed within 10 minutes can be re-requested by anyone (no network retries).
-- 53 Solidity tests, including two vaults on two simulated chains and CRON ticks.
-- Live: D (quarantine and lesson), E (veto), F (two CRON payments, then CRON off) on Base Sepolia;
-  G (Sepolia vault immunized at once, and an attacker seen on Sepolia quarantined on Base Sepolia)
-  runs with `npm run phase3 -- G` once the deployer has about 0.03 ETH on Ethereum Sepolia.
+- 56 Solidity tests, including two vaults on two simulated chains, CRON ticks, per-chain gas limits, and a gas report for each callback.
+- Live with v2: D (quarantine and lesson), E (veto), F (two CRON payments, then CRON off) on Base Sepolia.
+- Cross-chain needed a v3. v2's fixed 300k callback gas limit is the whole destination transaction, and
+  Ethereum Sepolia's callback proxy keeps 200k of it, so the first quarantine there failed
+  (`CallbackFailure`; the quarantine itself needs about 33k, see `test/Gas.t.sol`). v3 sets the limit per
+  chain (500k for Ethereum Sepolia) and adds an owner withdraw; v2 unwatched both vaults before v3 took
+  over as guardian. Test ETH reached Ethereum Sepolia through Across from Base Sepolia (`npm run bridge`).
+- Live with v3 (`0x5208c022571739fbef6198959bd7af89effd37c0`, Sourcify exact match): H, an attacker seen on
+  Base Sepolia is quarantined and learned (2 s); G1, the Ethereum Sepolia vault
+  (`0xb30ccddd31c4e14186801d74ea45a905b7305d4b`) is immunized with that lesson as soon as it is watched
+  (5 s); G2, an attacker seen on Ethereum Sepolia is quarantined on Base Sepolia too (14 s, Sepolia's 12 s
+  blocks included). See [evidence-lasna-v3.md](evidence-lasna-v3.md).
 - Base Sepolia now produces several blocks per second, so some callbacks land within the same second
   as the agent's transaction (4 blocks later).

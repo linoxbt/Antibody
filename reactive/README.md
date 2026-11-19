@@ -15,6 +15,8 @@ npm run phase1    # deploy GuardVault on Base Sepolia and run the payment demo (
 npm run faucet -- baseSepolia 0.05   # turn test ETH into lREACT on Lasna
 npm run phase2    # deploy GuardReactive on Lasna, make it the vault's guardian, run three live loops
 npm run phase3    # v2 on Lasna and Base Sepolia (+ Ethereum Sepolia when funded): quarantine, veto, CRON payments, cross-chain lessons
+npm run bridge -- 0.0042   # test ETH from Base Sepolia to Ethereum Sepolia through Across (about 10 s)
+npm run phase3-cross   # GuardReactive v3 replaces v2 and guards both vaults: lessons across chains
 npm run link-callbacks   # find each loop's callback transaction on the destination chain
 npm run evidence -- baseSepolia   # (or lasna) re-read every recorded tx from the chain into docs/guard/
 npm run verify -- baseSepolia GuardVault <address> [creationTx]   # Sourcify
@@ -23,12 +25,14 @@ npm run deposit -- 0.2   # add fee reserves for GuardReactive (depositTo)
 npm run web       # builds the status site into web-dist/, with every deployment in deployments/
 ```
 
-Version 2 (Phase 3) is the current one; version 1 stays deployed as the record of Phases 1 and 2.
+The current deployment is GuardVault v2 (Base Sepolia and Ethereum Sepolia) guarded by GuardReactive v3; earlier versions stay deployed as the record of the earlier phases.
 
 | Contract | Chain | Role |
 | --- | --- | --- |
+| `GuardReactive` v3 (current) | Reactive Lasna [`0x5208…37c0`](https://lasna.reactscan.net/address/0x5208c022571739fbef6198959bd7af89effd37c0) | v2 with the callback gas limit set per destination chain (Ethereum Sepolia's proxy keeps 200k of the limit, Base Sepolia's 130k) and an owner withdraw. Watches both vaults below. |
+| `GuardVault` v2 | Ethereum Sepolia [`0xb30c…5d4b`](https://sepolia.etherscan.io/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | the same vault on a second chain |
 | `GuardVault` v2 | Base Sepolia [`0x114e…c7d2`](https://sepolia.basescan.org/address/0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2) | v1 plus recurring payments (paid on Reactive's CRON under the same rules), guardian veto of a pending payee change, and a quarantined address can never be activated as a payee. Every callback is idempotent. |
-| `GuardReactive` v2 | Reactive Lasna [`0x7900…a282`](https://lasna.reactscan.net/address/0x7900d7765473eba75a816ccf58a481399036a282) | v1 plus lessons: an address quarantined on any watched vault is quarantined on all of them, a vault watched later is immunized with every lesson, a payee change towards a known attacker is vetoed, CRON (subscribed only while a schedule is active) pays due schedules, and lost callbacks can be retried by anyone after 10 minutes. |
+| `GuardReactive` v2 (retired) | Reactive Lasna [`0x7900…a282`](https://lasna.reactscan.net/address/0x7900d7765473eba75a816ccf58a481399036a282) | v1 plus lessons: an address quarantined on any watched vault is quarantined on all of them, a vault watched later is immunized with every lesson, a payee change towards a known attacker is vetoed, CRON (subscribed only while a schedule is active) pays due schedules, and lost callbacks can be retried by anyone after 10 minutes. |
 | `GuardVault` v1 | Base Sepolia [`0xb30c…5d4b`](https://sepolia.basescan.org/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | Holds the agent's funds; the agent may only propose payments, which the rules pay or refuse (refusals are events, not reverts). Payee changes are timelocked. Accepts freeze and quarantine callbacks from its guardian only, through the chain's callback proxy. |
 | `GuardReactive` v1 | Reactive Lasna [`0xb30c…5d4b`](https://lasna.reactscan.net/address/0xb30ccddd31c4e14186801d74ea45a905b7305d4b) | Subscribes to six events of each watched vault. Freezes the vault on a burst of proposals (more than 5 in 2 minutes) or on 3 refusals in 10 minutes; quarantines any address the agent tried to pay that is not a payee. Mirrors each vault's frozen flag and quarantine list from its events, so it never asks twice. |
 

@@ -33,3 +33,12 @@ Robinhood need a mainnet deployment.
 There is no official TypeScript SDK. The Solidity library is
 [reactive-lib-omni](https://github.com/Reactive-Network/reactive-lib-omni), pinned by
 `reactive/scripts/fetch-deps.sh`; the scripts use viem against the public RPCs.
+
+## Ethereum Sepolia callbacks (Phase 3)
+
+`decode_callback` showed that of a 300k callback gas limit only about 75.8k reaches the target on
+Ethereum Sepolia (proxy overhead 200k), against about 146k on Base Sepolia (overhead 130k). The first
+cross-chain quarantine to Sepolia failed with `CallbackFailure` at the proxy, and the vault was still
+billed. GuardReactive v3 sets the limit per chain; with 500k for Sepolia, the immunization and the
+cross-chain quarantine both landed. `trace_reactive_tx` reports a callback requested from an owner call
+(such as `watch()`) as a user transaction rather than a reaction, so those are traced by their logs.

@@ -253,6 +253,33 @@ contract GuardReactiveTest is Test {
         assertTrue(rx.knownBad(ATTACKER));
     }
 
+    function test_gasLimitPerChain() public {
+        assertEq(rx.gasLimitFor(A), rx.DEFAULT_GAS_LIMIT());
+        rx.setGasLimit(B, 500_000);
+        assertEq(rx.gasLimitFor(B), 500_000);
+        vm.expectRevert(GuardReactive.BadSettings.selector);
+        rx.setGasLimit(B, 99_999);
+        rx.watch(B, address(vb));
+        _propose(va, ATTACKER, 0.1 ether, "alice");
+        _relay();
+        uint256 n = sys.cbCount();
+        ISystemContract.CallbackConfiguration_V_1_0 memory toA = sys.cb(0);
+        ISystemContract.CallbackConfiguration_V_1_0 memory toB = sys.cb(n - 1);
+        assertEq(toA.chainId, A);
+        assertEq(toA.gasLimit, rx.DEFAULT_GAS_LIMIT());
+        assertEq(toB.chainId, B);
+        assertEq(toB.gasLimit, 500_000, "the Sepolia callback uses Sepolia's limit");
+    }
+
+    function test_ownerWithdraws() public {
+        vm.deal(address(rx), 1 ether);
+        vm.prank(address(0xBAD));
+        vm.expectRevert(GuardReactive.NotOwner.selector);
+        rx.withdraw(payable(address(0xBAD)), 1);
+        rx.withdraw(payable(address(0xF00D)), 0.4 ether);
+        assertEq(address(0xF00D).balance, 0.4 ether);
+    }
+
     function test_settingsValidated() public {
         vm.expectRevert(GuardReactive.BadSettings.selector);
         rx.setSettings(0, 1, 1, 1);

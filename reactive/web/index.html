@@ -18,7 +18,7 @@
   <section class="hero">
     <p class="eyebrow">Reactive Omni Buildathon · in development</p>
     <h1>An AI agent can ask to pay. <span>Reactive decides if it may.</span></h1>
-    <p class="lede">The agent's funds sit in a vault that only takes payment <em>proposals</em>. A reactive contract on Reactive Network watches every vault event across chains and, when something looks wrong, calls back to freeze the vault or quarantine an attacker. No server, no keeper, no human on call.</p>
+    <p class="lede">The agent's funds sit in a vault that only takes payment <em>proposals</em>. A reactive contract on Reactive Network watches every vault event across chains and, when something looks wrong, calls back to freeze the vault or quarantine an attacker. An attacker caught on one chain is blocked on every chain. No server, no keeper, no human on call.</p>
   </section>
 
   <section class="loop" aria-label="How it works">
@@ -38,8 +38,8 @@
         <tr><td>0</td><td>Foundations: toolchain, interface, contract skeletons, tests, deployer, this page</td><td><span class="s done">done</span></td></tr>
         <tr><td>1</td><td>GuardVault on Base Sepolia: payees, caps, limits, timelocked changes</td><td><span class="s done">done</span></td></tr>
         <tr><td>2</td><td>GuardReactive on Lasna: the full origin → react → callback loop on-chain</td><td><span class="s done">done</span></td></tr>
-        <tr><td>3</td><td>Lessons across chains, payee veto, CRON recurring payments (Ethereum Sepolia part waiting for test ETH)</td><td><span class="s next">in progress</span></td></tr>
-        <tr><td>4</td><td>The agent (Steward) and an optional AI risk scorer</td><td><span class="s todo">planned</span></td></tr>
+        <tr><td>3</td><td>Lessons across chains (Base Sepolia and Ethereum Sepolia), payee veto, CRON recurring payments</td><td><span class="s done">done</span></td></tr>
+        <tr><td>4</td><td>The agent (Steward) and an optional AI risk scorer</td><td><span class="s next">next</span></td></tr>
         <tr><td>5</td><td>Live dashboard with transaction evidence and latency</td><td><span class="s todo">planned</span></td></tr>
         <tr><td>6</td><td>README, demo video, submission</td><td><span class="s todo">planned</span></td></tr>
       </tbody>

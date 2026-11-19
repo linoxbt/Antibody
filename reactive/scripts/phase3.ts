@@ -80,15 +80,17 @@ async function setUpVault(net: VaultNet) {
   const agent = clients(net, agentKey);
   const rec = R[net];
   if (!rec.vault) {
-    const hash = await c.wallet.deployContract({ abi: vaultArt.abi, bytecode: vaultArt.bytecode, args: [NETWORKS[net].callbackProxy, agent.account.address, 60n], value: parseEther('0.02'), chain: c.chain, account: c.account });
+    const hash = await c.wallet.deployContract({ abi: vaultArt.abi, bytecode: vaultArt.bytecode, args: [NETWORKS[net].callbackProxy, agent.account.address, 60n], value: parseEther(net === 'sepolia' ? '0.0015' : '0.02'), chain: c.chain, account: c.account });
     const r = await c.pub.waitForTransactionReceipt({ hash });
     Object.assign(rec, { vault: r.contractAddress, owner: c.account.address, agent: agent.account.address, payees: PAYEES, version: 2 });
     rec.txs.push({ step: 'deploy GuardVault v2 (payee delay 60 s)', hash, block: Number(r.blockNumber), events: names(r.logs) });
     save(net);
     console.log(`done  deploy GuardVault v2 on ${net} at ${rec.vault}  ${txUrl(net, hash)}`);
   }
-  if ((await c.pub.getBalance({ address: agent.account.address })) < parseEther('0.001')) {
-    await step(net, 'fund agent', () => c.wallet.sendTransaction({ to: agent.account.address, value: parseEther('0.003'), chain: c.chain, account: c.account }));
+  // Ethereum Sepolia gas is a few wei right now, so the Sepolia vault and agent need far less
+  const agentGas = parseEther(net === 'sepolia' ? '0.0005' : '0.003');
+  if ((await c.pub.getBalance({ address: agent.account.address })) < agentGas / 3n) {
+    await step(net, 'fund agent', () => c.wallet.sendTransaction({ to: agent.account.address, value: agentGas, chain: c.chain, account: c.account }));
   }
   await step(net, 'set GuardReactive v2 as guardian', vWrite(net, 'setGuardian', [L.guard]));
   await step(net, 'daily limit 0.03 ETH', vWrite(net, 'setDailyLimit', [ETH, parseEther('0.03')]));
@@ -182,8 +184,8 @@ if ((!only || only === 'F') && !has('F:')) {
 
 if (!only || only === 'G') {
   const sep = clients('sepolia', key);
-  if ((await sep.pub.getBalance({ address: sep.account.address })) < parseEther('0.03')) {
-    console.log('G skipped: the deployer needs about 0.03 ETH on Ethereum Sepolia');
+  if (!R.sepolia.vault && (await sep.pub.getBalance({ address: sep.account.address })) < parseEther('0.0025')) {
+    console.log('G skipped: the deployer needs about 0.003 ETH on Ethereum Sepolia');
   } else if (!has('G')) {
     await setUpVault('sepolia');
     const w = await step('lasna', 'watch the Sepolia vault v2 (immunized with the lessons)', rxWrite('watch', [BigInt(NETWORKS.sepolia.chainId), R.sepolia.vault]));

@@ -1,0 +1,97 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "txs": [
+    {
+      "step": "deploy GuardVault v2 (payee delay 60 s)",
+      "hash": "0x8432dbb4c17a70bb2518aa5acb8ceafb938e39176d454076ba5f90b93504254e",
+      "block": 12168411,
+      "events": [
+        "AgentSet",
+        "PayeeDelaySet"
+      ]
+    },
+    {
+      "step": "fund agent",
+      "hash": "0x29fa39082e4f5de50704e1d78c357af992e01784eabbd761c3c880b57b623ef0",
+      "block": 12168412,
+      "events": []
+    },
+    {
+      "step": "set GuardReactive v2 as guardian",
+      "hash": "0x1169bd40034f605a027fa5505a6e4d26ea3caaaa799a6bf63bb20344132e6c80",
+      "block": 12168413,
+      "events": [
+        "GuardianSet"
+      ]
+    },
+    {
+      "step": "daily limit 0.03 ETH",
+      "hash": "0x2852c99100a628a371c7f334f04a3db6564b69b05f006517ec009f79995423cb",
+      "block": 12168414,
+      "events": [
+        "DailyLimitSet"
+      ]
+    },
+    {
+      "step": "request payee alice (cap 0.003)",
+      "hash": "0x3740169c1ee18774f2333be251a0aa5b7aa625e2f0586b7bff930fa5fea1ba3b",
+      "block": 12168415,
+      "events": [
+        "PayeeChangeRequested"
+      ]
+    },
+    {
+      "step": "request payee bob (cap 0.005)",
+      "hash": "0x1335811d788a0014ea0c9786eebe231fcfe1e41db567174ad4462fb65d003666",
+      "block": 12168416,
+      "events": [
+        "PayeeChangeRequested"
+      ]
+    },
+    {
+      "step": "activate payee alice",
+      "hash": "0x44f3b8f7474125279f69366c6a87be3a9d7246c829522def20352d1df8984bcd",
+      "block": 12168421,
+      "events": [
+        "PayeeActivated"
+      ]
+    },
+    {
+      "step": "activate payee bob",
+      "hash": "0xd2886e8f71081bebc78fb5afc881d806107b2b50ac53f2f5ba60891e5d010eb2",
+      "block": 12168423,
+      "events": [
+        "PayeeActivated"
+      ]
+    },
+    {
+      "step": "set GuardReactive v3 as guardian",
+      "hash": "0x27d014975d9378e4d616fc882eed960e0f77bcfa415c6a3886dfa80a555f5307",
+      "block": 12168514,
+      "events": [
+        "GuardianSet"
+      ]
+    },
+    {
+      "step": "[G2 mwnjs2cm] agent on Sepolia pays look-alike 0x0000000000000000000000000000000000b0bbad (UnknownPayee)",
+      "hash": "0x27592d5db865b030e4ac3efe20c29155df02743f10a36b48ac26dbfd43b14922",
+      "block": 12168517,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
+    }
+  ],
+  "vault": "0xb30ccddd31c4e14186801d74ea45a905b7305d4b",
+  "owner": "0x7fE926e147D40cD4a92241a50F2B91EF7Cf5903B",
+  "agent": "0x6D44b13eB1fC039b8C08154Bdf5F3E8E5cFbe4Ac",
+  "payees": {
+    "alice": "0x00000000000000000000000000000000000a11ce",
+    "bob": "0x0000000000000000000000000000000000000b0b"
+  },
+  "version": 2,
+  "verified": {
+    "GuardVault": "https://repo.sourcify.dev/11155111/0xb30ccddd31c4e14186801d74ea45a905b7305d4b"
+  }
+}

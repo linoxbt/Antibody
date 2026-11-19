@@ -26,6 +26,29 @@
       "hash": "0x382ec8a4a806cfbc2aa12e4bf8203542384f035fb5e58566d1644eb6093c99c5",
       "block": 8732830,
       "events": []
+    },
+    {
+      "step": "watch the Sepolia vault v2 (immunized with the lessons)",
+      "hash": "0x1d32c93c051478d3f5b5f8f6ca836a96961bb2eb04d94727b272afabb1efd06f",
+      "block": 8733510,
+      "events": [
+        "Watching",
+        "Decision"
+      ]
+    },
+    {
+      "step": "unwatch baseSepolia (replaced by v3)",
+      "hash": "0x565c2bc3d0209da593c87d6018a27d2b342dafae41f0cb80b2578c912bb6d260",
+      "events": [
+        "Unwatched"
+      ]
+    },
+    {
+      "step": "unwatch sepolia (replaced by v3)",
+      "hash": "0x9ccecb2fb6f623f5db9d19ae5ddf833af9ff7908368a3080d0be66534813ca10",
+      "events": [
+        "Unwatched"
+      ]
     }
   ],
   "loops": [
@@ -119,5 +142,6 @@
   "version": 2,
   "verified": {
     "GuardReactive": "https://repo.sourcify.dev/5318007/0x7900d7765473eba75a816ccf58a481399036a282"
-  }
+  },
+  "retired": "replaced by GuardReactive v3 0x5208c022571739fbef6198959bd7af89effd37c0 (per-chain callback gas limits); unwatched both vaults"
 }

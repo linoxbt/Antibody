@@ -91,6 +91,34 @@
       "events": [
         "ScheduleCancelled"
       ]
+    },
+    {
+      "step": "bridge 0.0042 ETH to Ethereum Sepolia (Across)",
+      "hash": "0x843f7898b2ecdd56172d7585885d40524b4d5808ad7197ce2c1222f7cc67a442",
+      "block": 60846885,
+      "events": []
+    },
+    {
+      "step": "faucet: 0.03 ETH for lREACT",
+      "hash": "0xff55817400d27e4e2d378e97a726b3418828818e55c7ec0d78f14a0fd3abeb10",
+      "events": []
+    },
+    {
+      "step": "set GuardReactive v3 as guardian",
+      "hash": "0xb8ec8e0fbbdec5f11dafd615fa5d7f94187ab4b67e79a55b2b15223f21930b84",
+      "block": 60853519,
+      "events": [
+        "GuardianSet"
+      ]
+    },
+    {
+      "step": "[H mwnjs2cm] agent pays look-alike 0x0000000000000000000000000000000a11cebad0 (UnknownPayee)",
+      "hash": "0xc37b05afc813f76e3d67b9714b394afb1b51490a7a1af4fcdd94db172fa5953e",
+      "block": 60853604,
+      "events": [
+        "PaymentProposed",
+        "PaymentRefused"
+      ]
     }
   ],
   "vault": "0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2",

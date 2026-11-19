@@ -24,6 +24,10 @@ import { IGuardVault } from "./IGuardVault.sol";
  *         so it never asks twice for the same action, and every callback is idempotent on the vault
  *         side (the network may deliver a log twice). Callbacks are not retried by the network, so a
  *         freeze or quarantine that was not confirmed within `RETRY_AFTER` can be re-requested by anyone.
+ *
+ *         The callback gas limit is set per destination chain: it is the whole destination transaction's
+ *         gas, and each chain's callback proxy keeps its own overhead out of it (about 130k on Base
+ *         Sepolia, 200k on Ethereum Sepolia), so one limit does not fit every chain.
  */
 contract GuardReactive is AbstractReactive {
     error NotOwner();
@@ -31,6 +35,7 @@ contract GuardReactive is AbstractReactive {
     error NotWatched();
     error BadSettings();
     error NothingToRetry();
+    error WithdrawFailed();
 
     enum Rule { None, Burst, RepeatedRefusals, UnknownRecipient, CrossChainQuarantine, PayeeVeto, ScheduledPayment, Retry }
 
@@ -65,9 +70,15 @@ contract GuardReactive is AbstractReactive {
     event SettingsChanged(uint64 burstLimit, uint64 burstWindow, uint64 refusalLimit, uint64 refusalWindow);
     event CronSubscribed(uint256 topic);
     event CronUnsubscribed(uint256 topic);
+    event GasLimitSet(uint256 indexed chainId, uint64 gasLimit);
+    event Withdrawn(address indexed to, uint256 amount);
 
-    uint64 public constant CALLBACK_GAS_LIMIT = 300_000;
-    uint64 public constant PAY_GAS_LIMIT = 400_000;
+    /// @notice Callback gas limit used for a chain with no setting of its own.
+    uint64 public constant DEFAULT_GAS_LIMIT = 300_000;
+    /// @notice Added to a chain's gas limit for payDue, which runs a whole payment (about 145k).
+    uint64 public constant PAY_EXTRA_GAS = 200_000;
+    uint64 public constant MIN_GAS_LIMIT = 100_000;
+    uint64 public constant MAX_GAS_LIMIT = 3_000_000;
     uint256 public constant RETRY_AFTER = 10 minutes;
     uint256 public constant MAX_SCHEDULES = 20;
     uint256 public constant MAX_IMMUNIZE = 25;
@@ -97,6 +108,7 @@ contract GuardReactive is AbstractReactive {
     uint256 public cronTopic = CRON100;
     bool public cronOn;
 
+    mapping(uint256 chainId => uint64) public gasLimitOf;
     mapping(uint256 chainId => Watched) public watched;
     uint256[] public chains;
 
@@ -171,6 +183,25 @@ contract GuardReactive is AbstractReactive {
         emit SettingsChanged(burstLimit_, burstWindow_, refusalLimit_, refusalWindow_);
     }
 
+    /// @notice Set the callback gas limit for `chainId` (the whole destination transaction's gas).
+    function setGasLimit(uint256 chainId, uint64 gasLimit) external onlyOwner {
+        if (gasLimit < MIN_GAS_LIMIT || gasLimit > MAX_GAS_LIMIT) revert BadSettings();
+        gasLimitOf[chainId] = gasLimit;
+        emit GasLimitSet(chainId, gasLimit);
+    }
+
+    function gasLimitFor(uint256 chainId) public view returns (uint64) {
+        uint64 g = gasLimitOf[chainId];
+        return g == 0 ? DEFAULT_GAS_LIMIT : g;
+    }
+
+    /// @notice Take funds out of this contract (it pays reaction fees from its balance, so leave enough).
+    function withdraw(address payable to, uint256 amount) external onlyOwner {
+        (bool ok,) = to.call{ value: amount }("");
+        if (!ok) revert WithdrawFailed();
+        emit Withdrawn(to, amount);
+    }
+
     /// @notice Choose the CRON interval (a Cron1..Cron10000 topic from the docs). Applies on the next subscription.
     function setCronTopic(uint256 topic) external onlyOwner {
         if (cronOn) revert BadSettings();
@@ -201,7 +232,7 @@ contract GuardReactive is AbstractReactive {
         Watched storage w = watched[chainId];
         if (!w.frozen || w.frozenConfirmed || block.timestamp < uint256(w.freezeRequestedAt) + RETRY_AFTER) revert NothingToRetry();
         w.freezeRequestedAt = uint64(block.timestamp);
-        _callback(chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), bytes32("retry")), CALLBACK_GAS_LIMIT);
+        _callback(chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), bytes32("retry")), gasLimitFor(chainId));
         emit Decision(chainId, w.vault, Rule.Retry, address(0), "retry freeze", 0);
     }
 
@@ -211,7 +242,7 @@ contract GuardReactive is AbstractReactive {
         if (at == 0 || quarantinedOn[chainId][account] || block.timestamp < at + RETRY_AFTER) revert NothingToRetry();
         quarantineRequestedAt[chainId][account] = block.timestamp;
         address vault = watched[chainId].vault;
-        _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, bytes32("retry")), CALLBACK_GAS_LIMIT);
+        _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, bytes32("retry")), gasLimitFor(chainId));
         emit Decision(chainId, vault, Rule.Retry, account, "retry quarantine", 0);
     }
 
@@ -264,7 +295,7 @@ contract GuardReactive is AbstractReactive {
             address to = address(uint160(log.topic2));
             if (knownBad[to]) {
                 bytes32 label = bytes32(log.topic1);
-                _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.vetoPayee.selector, address(0), label, to), CALLBACK_GAS_LIMIT);
+                _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.vetoPayee.selector, address(0), label, to), gasLimitFor(log.chainId));
                 emit Decision(log.chainId, w.vault, Rule.PayeeVeto, to, label, log.txHash);
             }
         } else if (t == T_SCHEDULE_SET) {
@@ -295,7 +326,7 @@ contract GuardReactive is AbstractReactive {
         w.freezeRequestedAt = uint64(block.timestamp);
         delete w.proposals;
         delete w.refusals;
-        _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), reason), CALLBACK_GAS_LIMIT);
+        _callback(log.chainId, w.vault, abi.encodeWithSelector(IGuardVault.freeze.selector, address(0), reason), gasLimitFor(log.chainId));
         emit Decision(log.chainId, w.vault, rule, address(0), reason, log.txHash);
     }
 
@@ -303,7 +334,7 @@ contract GuardReactive is AbstractReactive {
         if (quarantinedOn[chainId][account] || quarantineRequestedAt[chainId][account] != 0) return;
         quarantineRequestedAt[chainId][account] = block.timestamp;
         address vault = watched[chainId].vault;
-        _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, reason), CALLBACK_GAS_LIMIT);
+        _callback(chainId, vault, abi.encodeWithSelector(IGuardVault.quarantine.selector, address(0), account, reason), gasLimitFor(chainId));
         emit Decision(chainId, vault, rule, account, reason, originTx);
     }
 
@@ -371,7 +402,7 @@ contract GuardReactive is AbstractReactive {
             if (w.vault == address(0) || w.frozen) continue;
             // assume it is paid; the vault's ScheduleAdvanced event sets the real next due time
             s.nextDue = uint64(block.timestamp) + s.interval;
-            _callback(s.chainId, w.vault, abi.encodeWithSelector(IGuardVault.payDue.selector, address(0), s.id), PAY_GAS_LIMIT);
+            _callback(s.chainId, w.vault, abi.encodeWithSelector(IGuardVault.payDue.selector, address(0), s.id), gasLimitFor(s.chainId) + PAY_EXTRA_GAS);
             emit Decision(s.chainId, w.vault, Rule.ScheduledPayment, address(0), bytes32(s.id), 0);
         }
     }

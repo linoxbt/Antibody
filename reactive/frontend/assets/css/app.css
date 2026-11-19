@@ -218,3 +218,32 @@ body.auth[data-node='on'] .demo-btn:hover { color: var(--text); }
 .auth-msg:empty { display: none; }
 body.auth:not([data-mode='sandbox']) .sandbox-only, body.auth[data-mode='sandbox'] .op { display: none; }
 body.auth[data-mode='sandbox'] .sandbox-only { margin-top: -8px; }
+
+/* the semi-hamburger: a view's sections as pages, top right of the view */
+.view-head.has-menu { position: relative; padding-right: 52px; }
+.page-menu { position: absolute; top: 4px; right: 0; z-index: 30; }
+.page-menu-btn { width: 40px; height: 40px; border-color: var(--line-2); background: rgba(var(--fg-rgb), 0.04); }
+.page-menu-btn[aria-expanded='true'] { background: rgba(var(--fg-rgb), 0.09); color: var(--text); }
+.page-menu-pop { position: absolute; right: 0; top: 48px; width: min(300px, calc(100vw - 32px)); display: grid; gap: 2px; padding: 8px; border-radius: 16px; border: 1px solid var(--line-2); background: rgba(var(--panel-rgb), 0.97); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow); }
+.page-menu-pop[hidden] { display: none; }
+.page-menu-title { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
+.page-menu-i { display: grid; gap: 2px; padding: 10px; border-radius: 10px; color: var(--text-2); }
+.page-menu-i b { font-weight: 500; color: var(--text); font-size: 14.5px; }
+.page-menu-i small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.page-menu-i:hover, .page-menu-i:focus-visible { background: rgba(var(--fg-rgb), 0.05); }
+.page-menu-i[aria-current='page'] { background: rgba(var(--fg-rgb), 0.07); }
+.page-menu-i[aria-current='page'] b::after { content: ' ·  here'; color: var(--muted); font-weight: 400; font-size: 12px; }
+
+/* attackers: one line each, opening a detail page */
+.attacker-row { cursor: pointer; }
+.row-i .attacker-main { display: grid; gap: 2px; white-space: normal; overflow: visible; }
+.attacker-how { font-size: 12.5px; color: var(--muted); }
+.attacker-row .chev { color: var(--muted); display: grid; }
+.attacker-row .chev svg { width: 18px; height: 18px; }
+@media (max-width: 560px) { .attacker-reach, .attacker-row .pill { display: none; } }
+.action-index { display: grid; gap: 12px; }
+.action-link { display: flex; align-items: center; gap: 14px; }
+.action-link .grow { flex: 1; min-width: 0; }
+.action-link .chev { color: var(--muted); display: grid; }
+.action-link .chev svg { width: 18px; height: 18px; }
+.btn > svg { width: 16px; height: 16px; flex: none; }

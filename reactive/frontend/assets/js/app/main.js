@@ -14,7 +14,8 @@ import events from './views/events.js';
 import scorer from './views/scorer.js';
 import contracts from './views/contracts.js';
 import myvault from './views/myvault.js';
-import actions from './views/actions.js';
+import actions, { topUp, retry, activatePayee } from './views/actions.js';
+import attacker, { isAttackerPath } from './views/attacker.js';
 import { loadWallet, walletIfLoaded, onWalletChange, hadWallet } from '../walletapi.js';
 
 const VIEWS = [overview, loops, vaults, attackers, events, scorer, contracts, myvault, actions];
@@ -23,7 +24,13 @@ const SECTIONS = [
   ['Reactive', ['events', 'scorer', 'contracts']],
   ['Wallet', ['myvault', 'actions']],
 ];
-const byPath = (path) => VIEWS.find((v) => v.path === path.replace(/\/+$/, '')) ?? (path.replace(/\/+$/, '') === '/app' ? overview : null);
+// pages reached from a view (not in the sidebar): an attacker's detail page, each public action
+const PAGES = [topUp, retry, activatePayee];
+const byPath = (path) => {
+  const p = path.replace(/\/+$/, '');
+  if (isAttackerPath(p)) return attacker;
+  return [...VIEWS, ...PAGES].find((v) => v.path === p) ?? (p === '/app' ? overview : null);
+};
 
 /** The data source: refresh() reloads state from the service (or the recorded evidence). */
 const src = {
@@ -132,7 +139,7 @@ function link(v) {
   if (v.id === 'attackers') count = el('span', { class: 'count calm' }, String(s.guard?.lessons?.length ?? 0));
   if (v.id === 'loops') count = el('span', { class: 'count calm' }, String((s.liveLoops?.length ?? 0) + (s.recorded?.length ?? 0)));
   if (v.id === 'vaults' && s.vaults?.some((x) => x.frozen)) count = el('span', { class: 'count' }, 'frozen');
-  const a = el('a', { class: 'nav-i', href: v.path, ...(current === v ? { 'aria-current': 'page' } : {}) }, icon(v.icon), v.title, count);
+  const a = el('a', { class: 'nav-i', href: v.path, ...(current === v || current?.parent === v.id ? { 'aria-current': 'page' } : {}) }, icon(v.icon), v.title, count);
   a.addEventListener('click', (e) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
@@ -144,7 +151,7 @@ function link(v) {
 function renderSide() {
   const s = src.state;
   side.replaceChildren(
-    el('div', { class: 'side-brand' }, el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody Guard home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 26, height: 26 }), el('span', { class: 'wordmark' }, 'antibody')), el('span', { class: 'chip-v' }, 'guard')),
+    el('div', { class: 'side-brand' }, el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody Guard home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 26, height: 26 }), el('span', { class: 'wordmark' }, 'antibody'))),
     el('div', { class: 'acct' }, avatar(s.guard?.address ?? 'guard'), el('div', {}, el('b', {}, 'GuardReactive'), el('small', {}, s.guard?.address ? `${short(s.guard.address, 10)} · Lasna` : 'Reactive Lasna'))),
     ...SECTIONS.flatMap(([title, ids]) => [el('div', { class: 'side-sec' }, title), ...ids.map((id) => link(VIEWS.find((v) => v.id === id)))]),
     el('div', { class: 'side-spacer' }),

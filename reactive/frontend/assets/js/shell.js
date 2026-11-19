@@ -19,7 +19,7 @@ const PAGES = [
 const NAV_LINKS = ['walkthrough', 'security', 'evidence'];
 
 function brand() {
-  return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody Guard home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'), el('span', { class: 'chip-v' }, 'guard'));
+  return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody Guard home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'));
 }
 
 export function mountShell(current) {

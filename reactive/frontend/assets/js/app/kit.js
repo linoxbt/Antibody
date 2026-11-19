@@ -13,6 +13,9 @@ const PATHS = {
   settings: ['M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0', 'M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1'],
   logout: ['M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3', 'M10 8l-4 4 4 4', 'M6 12h10'],
   menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  semimenu: ['M5 7h14', 'M9 12h10', 'M13 17h6'],
+  chevron: ['M9 6l6 6-6 6'],
+  back: ['M15 6l-6 6 6 6'],
   refresh: ['M20 11a8 8 0 0 0-14.7-4.4L4 8', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 4.4L20 16', 'M20 20v-4h-4'],
   copy: ['M9 9h10v11H9z', 'M5 15V4h10'],
   check: ['M5 12.5l4.5 4.5L19 7.5'],
@@ -130,3 +133,31 @@ export async function quarantine(ctx, { type, value, reason, what, button }) {
 }
 
 export { short };
+
+/**
+ * The semi-hamburger: a small menu button for the top right of a view that lists the view's sections as
+ * pages. items: [[href, title, description?]]; the current page is marked.
+ */
+export function pageMenu(label, items) {
+  const here = location.pathname.replace(/\/+$/, '');
+  const pop = el(
+    'div',
+    { class: 'page-menu-pop', role: 'menu', hidden: true },
+    el('div', { class: 'page-menu-title' }, label),
+    ...items.map(([href, title, sub]) => el('a', { href, 'data-nav': '', role: 'menuitem', class: 'page-menu-i', ...(href === here ? { 'aria-current': 'page' } : {}) }, el('b', {}, title), sub ? el('small', {}, sub) : null)),
+  );
+  const btn = el('button', { class: 'icon-btn page-menu-btn', type: 'button', 'aria-label': `${label}: pages`, 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: label }, icon('semimenu'));
+  const wrap = el('div', { class: 'page-menu' }, btn, pop);
+  const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc); };
+  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+  btn.addEventListener('click', () => {
+    if (!pop.hidden) return close();
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', outside, true);
+    document.addEventListener('keydown', esc);
+  });
+  pop.addEventListener('click', (e) => { if (e.target.closest('a')) close(); });
+  return wrap;
+}

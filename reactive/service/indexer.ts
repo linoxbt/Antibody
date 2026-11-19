@@ -13,7 +13,7 @@ const CALLBACK_EVENT: Record<string, string> = { Burst: 'Frozen', RepeatedRefusa
 
 export interface Event { chain: NetworkName; block: number; ts: number; tx: Hex; logIndex: number; contract: string; name: string; args: Record<string, string> }
 export interface Loop {
-  rule: string; subject: string | null; destChain: NetworkName;
+  rule: string; subject: string | null; destChain: NetworkName; vault?: Hex | null;
   origin: { chain: NetworkName | null; tx: Hex | null; ts: number | null };
   reactive: { tx: Hex; ts: number };
   callback: { tx: Hex | null; ts: number | null };
@@ -126,7 +126,7 @@ export class Indexer {
     const rule = RULES[Number(e.args.rule)] ?? 'None';
     const originTx = BigInt(e.args.originTx) === 0n ? null : (`0x${BigInt(e.args.originTx).toString(16).padStart(64, '0')}` as Hex);
     const subject = e.args.subject && e.args.subject !== ZERO ? e.args.subject : null;
-    const loop: Loop = { rule, subject, destChain: dest, origin: { chain: null, tx: originTx, ts: null }, reactive: { tx: e.tx, ts: e.ts }, callback: { tx: null, ts: null }, seconds: null, source: 'live' };
+    const loop: Loop = { rule, subject, destChain: dest, vault: (e.args.vault as Hex) ?? null, origin: { chain: null, tx: originTx, ts: null }, reactive: { tx: e.tx, ts: e.ts }, callback: { tx: null, ts: null }, seconds: null, source: 'live' };
     this.loops.push(loop);
     this.pending.push(loop);
     if (this.loops.length > 200) this.loops.splice(0, this.loops.length - 200);

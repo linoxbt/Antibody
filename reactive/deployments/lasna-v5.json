@@ -76,6 +76,12 @@
         "Decision",
         "Decision"
       ]
+    },
+    {
+      "step": "reserves +0.8 lREACT (depositTo)",
+      "hash": "0xfb45e28ac8900e019b0f7b2d8ec263fe622a2debc161a0b4e6e6de51addd792f",
+      "block": 8741860,
+      "events": []
     }
   ],
   "loops": [],

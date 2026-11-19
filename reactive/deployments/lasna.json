@@ -15,6 +15,12 @@
       "events": [
         "Watching"
       ]
+    },
+    {
+      "step": "reserves +0.2 lREACT (depositTo)",
+      "hash": "0x9a045d3e607d87102b43b3c374c38262170d5675f2150b9fa1e8f87b7c347320",
+      "block": 8731414,
+      "events": []
     }
   ],
   "loops": [

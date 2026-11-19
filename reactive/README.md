@@ -17,6 +17,8 @@ npm run phase2    # deploy GuardReactive on Lasna, make it the vault's guardian,
 npm run link-callbacks   # find each loop's callback transaction on the destination chain
 npm run evidence -- baseSepolia   # (or lasna) re-read every recorded tx from the chain into docs/guard/
 npm run verify -- baseSepolia GuardVault <address> [creationTx]   # Sourcify
+npm run rmcp -- tools   # Reactive MCP tools (also in the repo .mcp.json); see docs/guard/reactive-mcp.md
+npm run deposit -- 0.2   # add fee reserves for GuardReactive (depositTo)
 npm run web       # builds the status site into web-dist/, with every deployment in deployments/
 ```
 

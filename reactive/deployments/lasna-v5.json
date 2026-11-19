@@ -82,6 +82,12 @@
       "hash": "0xfb45e28ac8900e019b0f7b2d8ec263fe622a2debc161a0b4e6e6de51addd792f",
       "block": 8741860,
       "events": []
+    },
+    {
+      "step": "reserves +1 lREACT (depositTo)",
+      "hash": "0xbd8f19ca5d58fe2e2f865968bbc2463e10e04437a9b6d261ac14f4d1426dd16e",
+      "block": 8745718,
+      "events": []
     }
   ],
   "loops": [],

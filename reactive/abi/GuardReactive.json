@@ -1,0 +1,1251 @@
+[
+ {
+  "inputs": [],
+  "stateMutability": "payable",
+  "type": "constructor"
+ },
+ {
+  "inputs": [],
+  "name": "AlreadyWatched",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "BadSettings",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "required_",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "available_",
+    "type": "uint256"
+   }
+  ],
+  "name": "InsufficientFunds",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "sender_",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "provider_",
+    "type": "address"
+   }
+  ],
+  "name": "NotAuthorized",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NotOwner",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NotWatched",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NothingToRetry",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "TransferFailed",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "WithdrawFailed",
+  "type": "error"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId_",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "contract_",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "uint64",
+    "name": "gasLimit_",
+    "type": "uint64"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes",
+    "name": "payload_",
+    "type": "bytes"
+   }
+  ],
+  "name": "Callback",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "topic",
+    "type": "uint256"
+   }
+  ],
+  "name": "CronSubscribed",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "topic",
+    "type": "uint256"
+   }
+  ],
+  "name": "CronUnsubscribed",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "vault",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "enum GuardReactive.Rule",
+    "name": "rule",
+    "type": "uint8"
+   },
+   {
+    "indexed": false,
+    "internalType": "address",
+    "name": "subject",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "originTx",
+    "type": "uint256"
+   }
+  ],
+  "name": "Decision",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "gasLimit",
+    "type": "uint64"
+   }
+  ],
+  "name": "GasLimitSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "name": "Lesson",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "from",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "LessonsImported",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "oracle",
+    "type": "address"
+   }
+  ],
+  "name": "OracleTrusted",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": false,
+    "internalType": "uint8",
+    "name": "threshold",
+    "type": "uint8"
+   }
+  ],
+  "name": "RiskThresholdSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "burstLimit",
+    "type": "uint64"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "burstWindow",
+    "type": "uint64"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "refusalLimit",
+    "type": "uint64"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "refusalWindow",
+    "type": "uint64"
+   }
+  ],
+  "name": "SettingsChanged",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "vault",
+    "type": "address"
+   }
+  ],
+  "name": "Unwatched",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "vault",
+    "type": "address"
+   }
+  ],
+  "name": "Watching",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "Withdrawn",
+  "type": "event"
+ },
+ {
+  "inputs": [],
+  "name": "CRON100",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "CRON_EMITTER",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "DEFAULT_GAS_LIMIT",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MAX_GAS_LIMIT",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MAX_IMMUNIZE",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MAX_SCHEDULES",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MIN_GAS_LIMIT",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "PAY_EXTRA_GAS",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "RETRY_AFTER",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "_SERVICE_PROVIDER",
+  "outputs": [
+   {
+    "internalType": "contract IPayable",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "activeSchedules",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "burstLimit",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "burstWindow",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "chainCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "name": "chains",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "coverDebt",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "cronOn",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "cronTopic",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "gasLimitFor",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "gasLimitOf",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "immunize",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "from",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "importLessons",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "name": "knownBad",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "lessonCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "name": "lessons",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "oracleOf",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "owner",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "amount_",
+    "type": "uint256"
+   }
+  ],
+  "name": "pay",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "name": "quarantineRequestedAt",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "name": "quarantinedOn",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "uint256",
+      "name": "chainId",
+      "type": "uint256"
+     },
+     {
+      "internalType": "address",
+      "name": "contractAddress",
+      "type": "address"
+     },
+     {
+      "internalType": "uint256",
+      "name": "topic0",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "topic1",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "topic2",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "topic3",
+      "type": "uint256"
+     },
+     {
+      "internalType": "bytes",
+      "name": "data",
+      "type": "bytes"
+     },
+     {
+      "internalType": "uint256",
+      "name": "blockNumber",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "opCode",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "blockHash",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "txHash",
+      "type": "uint256"
+     },
+     {
+      "internalType": "uint256",
+      "name": "logIndex",
+      "type": "uint256"
+     }
+    ],
+    "internalType": "struct IReactive.LogRecord",
+    "name": "log",
+    "type": "tuple"
+   }
+  ],
+  "name": "react",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "refusalLimit",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "refusalWindow",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "retryFreeze",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   }
+  ],
+  "name": "retryQuarantine",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "riskThreshold",
+  "outputs": [
+   {
+    "internalType": "uint8",
+    "name": "",
+    "type": "uint8"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "scheduleCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "name": "scheduleIndex",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "indexPlusOne",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "name": "schedules",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint64",
+    "name": "interval",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nextDue",
+    "type": "uint64"
+   },
+   {
+    "internalType": "bool",
+    "name": "active",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "topic",
+    "type": "uint256"
+   }
+  ],
+  "name": "setCronTopic",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint64",
+    "name": "gasLimit",
+    "type": "uint64"
+   }
+  ],
+  "name": "setGasLimit",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint8",
+    "name": "threshold",
+    "type": "uint8"
+   }
+  ],
+  "name": "setRiskThreshold",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint64",
+    "name": "burstLimit_",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "burstWindow_",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "refusalLimit_",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "refusalWindow_",
+    "type": "uint64"
+   }
+  ],
+  "name": "setSettings",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "oracle",
+    "type": "address"
+   }
+  ],
+  "name": "trustOracle",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "unwatch",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "vault",
+    "type": "address"
+   }
+  ],
+  "name": "watch",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "chainId",
+    "type": "uint256"
+   }
+  ],
+  "name": "watched",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "vault",
+    "type": "address"
+   },
+   {
+    "internalType": "bool",
+    "name": "frozen",
+    "type": "bool"
+   },
+   {
+    "internalType": "bool",
+    "name": "frozenConfirmed",
+    "type": "bool"
+   },
+   {
+    "internalType": "uint64",
+    "name": "freezeRequestedAt",
+    "type": "uint64"
+   },
+   {
+    "components": [
+     {
+      "internalType": "uint64",
+      "name": "start",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "count",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct GuardReactive.Window",
+    "name": "proposals",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "uint64",
+      "name": "start",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "count",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct GuardReactive.Window",
+    "name": "refusals",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address payable",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "withdraw",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "stateMutability": "payable",
+  "type": "receive"
+ }
+]

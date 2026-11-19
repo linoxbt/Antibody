@@ -1,0 +1,1338 @@
+[
+ {
+  "inputs": [
+   {
+    "internalType": "contract IPayable",
+    "name": "callbackProxy_",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "agent_",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "payeeDelay_",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "payable",
+  "type": "constructor"
+ },
+ {
+  "inputs": [],
+  "name": "BadPayee",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "BadSchedule",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "DelayCanOnlyGrow",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "required_",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "available_",
+    "type": "uint256"
+   }
+  ],
+  "name": "InsufficientFunds",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NoPendingChange",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NotAgent",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "sender_",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "provider_",
+    "type": "address"
+   }
+  ],
+  "name": "NotAuthorized",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "sender",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "guardian",
+    "type": "address"
+   }
+  ],
+  "name": "NotGuardian",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "NotOwner",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "QuarantinedPayee",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "Reentrancy",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "effectiveAt",
+    "type": "uint256"
+   }
+  ],
+  "name": "TooEarly",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "TransferFailed",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "WithdrawFailed",
+  "type": "error"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "agent",
+    "type": "address"
+   }
+  ],
+  "name": "AgentSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "limit",
+    "type": "uint256"
+   }
+  ],
+  "name": "DailyLimitSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "from",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "Deposited",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "by",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   }
+  ],
+  "name": "Frozen",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "guardian",
+    "type": "address"
+   }
+  ],
+  "name": "GuardianSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "cap",
+    "type": "uint256"
+   }
+  ],
+  "name": "PayeeActivated",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "PayeeChangeCancelled",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "cap",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "effectiveAt",
+    "type": "uint256"
+   }
+  ],
+  "name": "PayeeChangeRequested",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "PayeeChangeVetoed",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "delay",
+    "type": "uint256"
+   }
+  ],
+  "name": "PayeeDelaySet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "PayeeRemoved",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "proposalId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "PaymentExecuted",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "proposalId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "PaymentProposed",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "proposalId",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "uint8",
+    "name": "code",
+    "type": "uint8"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "PaymentRefused",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   }
+  ],
+  "name": "Quarantined",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   }
+  ],
+  "name": "Released",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "proposalId",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "nextDue",
+    "type": "uint256"
+   }
+  ],
+  "name": "ScheduleAdvanced",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "name": "ScheduleCancelled",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   },
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "interval",
+    "type": "uint256"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "nextDue",
+    "type": "uint256"
+   }
+  ],
+  "name": "ScheduleSet",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "by",
+    "type": "address"
+   }
+  ],
+  "name": "Unfrozen",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "Withdrawn",
+  "type": "event"
+ },
+ {
+  "inputs": [],
+  "name": "DUPLICATE_WINDOW",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MAX_PAYEE_DELAY",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "MAX_SCHEDULES",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "_SERVICE_PROVIDER",
+  "outputs": [
+   {
+    "internalType": "contract IPayable",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "activatePayee",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "agent",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "cancelPayee",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "name": "cancelSchedule",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "check",
+  "outputs": [
+   {
+    "internalType": "enum IGuardVault.RefusalCode",
+    "name": "",
+    "type": "uint8"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "coverDebt",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   }
+  ],
+  "name": "dailyLimit",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "reactive",
+    "type": "address"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   }
+  ],
+  "name": "freeze",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   }
+  ],
+  "name": "freezeNow",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "frozen",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "guardian",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "labelOf",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "",
+    "type": "bytes32"
+   }
+  ],
+  "name": "lastPaidAt",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "owner",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "",
+    "type": "address"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "amount_",
+    "type": "uint256"
+   }
+  ],
+  "name": "pay",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "reactive",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "name": "payDue",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "payeeDelay",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "payees",
+  "outputs": [
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "cap",
+    "type": "uint256"
+   },
+   {
+    "internalType": "address",
+    "name": "pendingTo",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "pendingCap",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "effectiveAt",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "proposalCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "proposePayment",
+  "outputs": [
+   {
+    "internalType": "enum IGuardVault.RefusalCode",
+    "name": "code",
+    "type": "uint8"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "reactive",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "reason",
+    "type": "bytes32"
+   }
+  ],
+  "name": "quarantine",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   }
+  ],
+  "name": "quarantined",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "account",
+    "type": "address"
+   }
+  ],
+  "name": "release",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   }
+  ],
+  "name": "removePayee",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "cap",
+    "type": "uint256"
+   }
+  ],
+  "name": "requestPayee",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "scheduleCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "name": "schedules",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint128",
+    "name": "amount",
+    "type": "uint128"
+   },
+   {
+    "internalType": "uint64",
+    "name": "interval",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nextDue",
+    "type": "uint64"
+   },
+   {
+    "internalType": "bool",
+    "name": "active",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "agent_",
+    "type": "address"
+   }
+  ],
+  "name": "setAgent",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "limit",
+    "type": "uint256"
+   }
+  ],
+  "name": "setDailyLimit",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "guardian_",
+    "type": "address"
+   }
+  ],
+  "name": "setGuardian",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "delay",
+    "type": "uint256"
+   }
+  ],
+  "name": "setPayeeDelay",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint128",
+    "name": "amount",
+    "type": "uint128"
+   },
+   {
+    "internalType": "uint64",
+    "name": "interval",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "firstDue",
+    "type": "uint64"
+   }
+  ],
+  "name": "setSchedule",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "id",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   }
+  ],
+  "name": "spendDay",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   }
+  ],
+  "name": "spentOnDay",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [],
+  "name": "unfreeze",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "reactive",
+    "type": "address"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "label",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "vetoPayee",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   },
+   {
+    "internalType": "address",
+    "name": "token",
+    "type": "address"
+   },
+   {
+    "internalType": "uint256",
+    "name": "amount",
+    "type": "uint256"
+   }
+  ],
+  "name": "withdraw",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "stateMutability": "payable",
+  "type": "receive"
+ }
+]

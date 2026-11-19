@@ -4,7 +4,7 @@
 // tools and records what it did.
 import { formatEther, isAddress, parseEther, stringToHex, decodeEventLog, type Hex } from 'viem';
 import { chat, LLM, type Message, type Tool } from './llm.ts';
-import { artifact, clients, testnetKey, txUrl, type NetworkName } from '../scripts/lib.ts';
+import { abiOf, clients, testnetKey, txUrl, type NetworkName } from '../scripts/lib.ts';
 
 const CODES = ['None', 'Frozen', 'Quarantined', 'UnknownPayee', 'LabelMismatch', 'OverCap', 'OverDailyLimit', 'Duplicate', 'TransferFailed'];
 const ETH = '0x0000000000000000000000000000000000000000';
@@ -30,7 +30,7 @@ Be brief. When you are done, reply with one short sentence saying what you did.`
 
 export async function runSteward(task: string, inbox: InboxMessage[], o: { network: NetworkName; vault: Hex }): Promise<StewardRun> {
   const agent = clients(o.network, testnetKey('agent'));
-  const { abi } = artifact('GuardVault');
+  const abi = abiOf('GuardVault');
   const read = (fn: string, args: unknown[]) => agent.pub.readContract({ address: o.vault, abi, functionName: fn, args });
   const run: StewardRun = { task, model: LLM.model, network: o.network, vault: o.vault, steps: [], answer: null, proposals: [] };
 

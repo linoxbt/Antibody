@@ -10,6 +10,8 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(`${out}/assets/fonts`, { recursive: true });
 cpSync(`${root}web/netlify.toml`, `${out}/netlify.toml`);
 cpSync(`${root}web/guard.css`, `${out}/assets/guard.css`);
+cpSync(`${root}web/live.html`, `${out}/live.html`);
+cpSync(`${root}web/live.js`, `${out}/assets/live.js`);
 for (const f of ['mark.svg', 'favicon.svg']) cpSync(`${brand}/img/${f}`, `${out}/assets/${f}`);
 cpSync(`${brand}/fonts/dm-sans-latin-wght-normal.woff2`, `${out}/assets/fonts/dm-sans.woff2`);
 cpSync(`${brand}/fonts/jetbrains-mono-latin-wght-normal.woff2`, `${out}/assets/fonts/jetbrains-mono.woff2`);

@@ -10,8 +10,16 @@ export type NetworkName = keyof typeof NETWORKS;
 export const KEY_DIR = process.env.GUARD_KEY_DIR ?? join(homedir(), '.antibody-guard');
 const ROOT = new URL('..', import.meta.url).pathname;
 
-/** A testnet key kept outside the repository (created on first use, mode 0600). */
+/**
+ * A testnet key kept outside the repository (created on first use, mode 0600). A service sets
+ * GUARD_<NAME>_KEY instead (for example GUARD_SCORER_KEY on Railway).
+ */
 export function testnetKey(name: string, create = false): Hex {
+  const fromEnv = process.env[`GUARD_${name.toUpperCase()}_KEY`];
+  if (fromEnv) {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(fromEnv.trim())) throw new Error(`GUARD_${name.toUpperCase()}_KEY is not a private key`);
+    return fromEnv.trim() as Hex;
+  }
   const file = join(KEY_DIR, `${name}.key`);
   if (!existsSync(file)) {
     if (!create) throw new Error(`no ${name} key at ${file}`);
@@ -41,6 +49,11 @@ export function clients(name: NetworkName, key: Hex) {
     pub: createPublicClient({ chain, transport }),
     wallet: createWalletClient({ chain, transport, account }),
   };
+}
+
+/** A contract's ABI from abi/ (committed, so a service needs no compiler); `npm run abi` refreshes it. */
+export function abiOf(contract: string): Abi {
+  return JSON.parse(readFileSync(join(ROOT, `abi/${contract}.json`), 'utf8'));
 }
 
 export function artifact(contract: string): { abi: Abi; bytecode: Hex } {

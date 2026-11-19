@@ -9,7 +9,7 @@
 import { getAddress, keccak256, toHex, type Hex } from 'viem';
 import { chat, LLM } from './llm.ts';
 import type { InboxMessage } from './steward.ts';
-import { artifact, clients, testnetKey, txUrl, type NetworkName } from '../scripts/lib.ts';
+import { abiOf, clients, testnetKey, txUrl, type NetworkName } from '../scripts/lib.ts';
 
 export interface Verdict { suspicious: boolean; score: number; reason: string; addresses: string[] }
 export interface ScoreRun { message: string; model: string; verdict: Verdict; reported: { address: string; score: number; tx: string }[]; skipped: { address: string; why: string }[] }
@@ -38,8 +38,8 @@ export async function scoreAndReport(m: InboxMessage, o: { network: NetworkName;
   console.log(`scorer   ${m.id}: score ${verdict.score}, ${verdict.suspicious ? 'suspicious' : 'fine'} - ${verdict.reason}`);
   if (!verdict.suspicious || verdict.score < (o.minScore ?? 50)) return run;
   const c = clients(o.network, testnetKey('scorer'));
-  const vaultAbi = artifact('GuardVault').abi;
-  const oracleAbi = artifact('RiskOracle').abi;
+  const vaultAbi = abiOf('GuardVault');
+  const oracleAbi = abiOf('RiskOracle');
   const evidence = keccak256(toHex(`${m.from}\n${m.subject}\n${m.body}`));
   for (const a of verdict.addresses) {
     const address = getAddress(a);

@@ -1,0 +1,10 @@
+// Write each contract's ABI to abi/<Contract>.json (committed): the Guard service reads these, so it
+// needs neither the compiler nor the Reactive library at runtime. Run after `npm run build`.
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+const root = new URL('..', import.meta.url).pathname;
+mkdirSync(`${root}abi`, { recursive: true });
+for (const c of ['GuardVault', 'GuardReactive', 'RiskOracle', 'IGuardVault']) {
+  const a = JSON.parse(readFileSync(`${root}artifacts/contracts/${c}.sol/${c}.json`, 'utf8'));
+  writeFileSync(`${root}abi/${c}.json`, JSON.stringify(a.abi, null, 1) + '\n');
+}
+console.log('abi/ written');

@@ -1,0 +1,19 @@
+{
+  "name": "antibody-guard",
+  "private": true,
+  "type": "module",
+  "description": "Antibody Guard: a guarded vault and a Reactive contract that protects an AI agent's spending across EVM chains.",
+  "scripts": {
+    "deps": "bash scripts/fetch-deps.sh",
+    "build": "hardhat build",
+    "test": "hardhat test",
+    "deployer": "tsx scripts/deployer.ts",
+    "web": "bash scripts/build-web.sh"
+  },
+  "devDependencies": {
+    "forge-std": "github:foundry-rs/forge-std#v1.9.7",
+    "hardhat": "3.22.0",
+    "tsx": "4.23.15",
+    "viem": "^2.58.1"
+  }
+}

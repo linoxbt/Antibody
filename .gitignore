@@ -23,3 +23,9 @@ video/assets/
 video/*.wav
 video/*.mp4
 video/.venv/
+# Antibody Guard (reactive/): the Reactive library is fetched, not vendored (its licence is UNLICENSED)
+reactive/lib/
+reactive/artifacts/
+reactive/cache/
+reactive/types/
+reactive/web-dist/

@@ -1,0 +1,12 @@
+# Antibody Guard status site (deployed from the reactive-guard branch; built by reactive/scripts/build-web.sh).
+[build]
+  publish = "."
+  command = "echo static"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Strict-Transport-Security = "max-age=31536000"

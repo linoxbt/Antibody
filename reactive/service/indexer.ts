@@ -102,7 +102,9 @@ export class Indexer {
 
   private async poll(net: NetworkName, addresses: Hex[], chunk: bigint) {
     const { pub } = clients(net, this.key);
-    const head = await pub.getBlockNumber();
+    // Ethereum Sepolia's public RPC is load-balanced: the node answering getLogs can be a block behind the
+    // one that reported the head ("Invalid parameters"), so stay one block back there.
+    const head = (await pub.getBlockNumber()) - (net === 'sepolia' ? 1n : 0n);
     for (let rounds = 0; rounds < 60 && this.last[net]! < head; rounds++) {
       const from = this.last[net]! + 1n;
       const to = from + chunk - 1n > head ? head : from + chunk - 1n;

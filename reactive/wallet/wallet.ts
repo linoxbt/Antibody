@@ -86,6 +86,9 @@ export const wallet = {
   /** Send a contract call on `chainId` (switching the wallet's network if needed) and wait for it. */
   async write(chainId: number, address: Hex, abi: Abi, functionName: string, args: unknown[] = [], value?: bigint) {
     const w = await walletOn(chainId);
+    // Simulate on our own RPC first: a call the contract would refuse fails here with its error name
+    // (TooEarly, NotOwner, ...) instead of costing gas, and whatever the wallet's RPC reports.
+    await publicClient(chainId).simulateContract({ address, abi, functionName, args, ...(value ? { value } : {}), account: w.account.address } as any);
     const hash = await w.writeContract({ address, abi, functionName, args, ...(value ? { value } : {}), chain: CHAINS[chainId], account: w.account, ...(await fees(chainId)) } as any);
     const receipt = await publicClient(chainId).waitForTransactionReceipt({ hash });
     return { hash, receipt };

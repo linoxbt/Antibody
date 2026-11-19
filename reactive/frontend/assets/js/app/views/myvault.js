@@ -2,7 +2,7 @@
 // Works for any vault your connected wallet owns (including the demo vaults, for their owner).
 import { el } from '../../ui.js';
 import { head, card, shortAddr } from '../kit.js';
-import { loadWallet, walletIfLoaded, abi, CHAIN_ID, PROXY, ETH, label32, wei, isAddr, myDeployed, rememberVault } from '../../walletapi.js';
+import { loadWallet, walletIfLoaded, abi, CHAIN_ID, PROXY, ETH, label32, wei, isAddr, myDeployed, rememberVault, errorText } from '../../walletapi.js';
 import { chainName, addr, tx } from './common.js';
 
 // topic0 of the vault's PaymentExecuted and PaymentRefused events
@@ -51,7 +51,7 @@ async function act(ctx, what, fn) {
     log.unshift({ what, ok: r?.receipt?.status !== 'reverted', hash: r?.hash, chain: r?.chain ?? selected?.chain, note: r?.note });
     ctx.toast(`${what}: ${r?.receipt?.status === 'reverted' ? 'reverted' : r?.note ?? 'done'}`);
   } catch (e) {
-    const msg = (e?.shortMessage ?? e?.message ?? String(e)).split('\n')[0];
+    const msg = errorText(e);
     log.unshift({ what, ok: false, note: msg });
     ctx.toast(`${what}: ${msg}`);
   } finally {

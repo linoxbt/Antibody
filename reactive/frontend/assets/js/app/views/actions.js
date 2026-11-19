@@ -1,7 +1,7 @@
 // Public actions: anything here is permissionless on-chain, so any connected wallet may do it.
 import { el } from '../../ui.js';
 import { head, card, shortAddr } from '../kit.js';
-import { loadWallet, walletIfLoaded, abi, CHAIN_ID, SYSTEM, label32, wei, isAddr } from '../../walletapi.js';
+import { loadWallet, walletIfLoaded, abi, CHAIN_ID, SYSTEM, label32, wei, isAddr, errorText } from '../../walletapi.js';
 import { chainName, tx } from './common.js';
 
 let busy = false;
@@ -19,7 +19,7 @@ async function act(ctx, what, fn) {
     log.unshift({ what, ok: true, hash: r.hash, chain: r.chain });
     ctx.toast(`${what}: done`);
   } catch (e) {
-    const msg = (e?.shortMessage ?? e?.message ?? String(e)).split('\n')[0];
+    const msg = errorText(e);
     log.unshift({ what, ok: false, note: msg });
     ctx.toast(`${what}: ${msg}`);
   } finally {

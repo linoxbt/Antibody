@@ -49,3 +49,17 @@ export function rememberVault(v) {
   const list = myDeployed().filter((x) => !(x.chain === v.chain && x.address.toLowerCase() === v.address.toLowerCase()));
   localStorage.setItem('guard.myVaults', JSON.stringify([v, ...list].slice(0, 10)));
 }
+
+/** A readable message for a failed wallet action, with the contract's own error when it refused. */
+export function errorText(e) {
+  let x = e;
+  for (let i = 0; x && i < 6; i++, x = x.cause) {
+    const d = x.data;
+    if (d?.errorName) {
+      const a = d.args ?? [];
+      if (d.errorName === 'TooEarly' && a[0] !== undefined) return `too early: wait until ${new Date(Number(a[0]) * 1000).toLocaleTimeString()}`;
+      return `refused by the contract: ${d.errorName}${a.length ? ` (${a.map(String).join(', ')})` : ''}`;
+    }
+  }
+  return (e?.shortMessage ?? e?.message ?? String(e)).split('\n')[0];
+}

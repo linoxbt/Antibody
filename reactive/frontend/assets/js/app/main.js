@@ -186,10 +186,16 @@ function uiState() {
   return {
     open: new Set([...view.querySelectorAll('details[open] > summary')].map((s) => s.textContent)),
     focus: a && a !== document.body && a !== view && document.getElementById('app').contains(a) ? keyOf(a) : null,
+    // what the person has typed or chosen: a re-render of the same view must not wipe a half-filled form
+    values: new Map([...view.querySelectorAll('input[id], select[id], textarea[id]')].filter((x) => x.value !== x.defaultValue).map((x) => [x.id, x.value])),
   };
 }
-function restoreUi({ open, focus }) {
+function restoreUi({ open, focus, values }) {
   for (const s of view.querySelectorAll('details > summary')) if (open.has(s.textContent)) s.parentElement.open = true;
+  for (const [id, value] of values ?? []) {
+    const x = document.getElementById(id);
+    if (x && view.contains(x)) x.value = value;
+  }
   const f = focus && findKey(focus);
   if (f && !f.disabled) f.focus({ preventScroll: true });
 }

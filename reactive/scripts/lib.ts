@@ -49,13 +49,14 @@ export function artifact(contract: string): { abi: Abi; bytecode: Hex } {
 }
 
 /** Deployment records are committed (deployments/<network>.json): addresses and transaction hashes only. */
-export function loadRecord(name: NetworkName): Record<string, any> {
-  const f = join(ROOT, `deployments/${name}.json`);
+/** `file` names a separate record on the same network (for example `baseSepolia-v2`); defaults to the network. */
+export function loadRecord(name: NetworkName, file: string = name): Record<string, any> {
+  const f = join(ROOT, `deployments/${file}.json`);
   return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : { network: name, chainId: NETWORKS[name].chainId, txs: [] };
 }
 
-export function saveRecord(name: NetworkName, rec: Record<string, any>): void {
-  writeFileSync(join(ROOT, `deployments/${name}.json`), JSON.stringify(rec, null, 2) + '\n');
+export function saveRecord(name: NetworkName, rec: Record<string, any>, file: string = name): void {
+  writeFileSync(join(ROOT, `deployments/${file}.json`), JSON.stringify(rec, null, 2) + '\n');
 }
 
 export const txUrl = (name: NetworkName, hash: string) => `${NETWORKS[name].explorer}/tx/${hash}`;

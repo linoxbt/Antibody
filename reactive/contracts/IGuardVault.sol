@@ -45,6 +45,13 @@ interface IGuardVault {
     event AgentSet(address indexed agent);
     event GuardianSet(address indexed guardian);
     event PayeeDelaySet(uint256 delay);
+    /// @notice A pending payee change was cancelled by the guardian (the new address is a known attacker).
+    event PayeeChangeVetoed(bytes32 indexed label, address indexed to);
+    /// @notice A recurring payment was created or changed; it is next due at `nextDue`.
+    event ScheduleSet(uint256 indexed id, bytes32 indexed label, address indexed token, uint256 amount, uint256 interval, uint256 nextDue);
+    event ScheduleCancelled(uint256 indexed id);
+    /// @notice A due recurring payment was attempted (paid or refused under the usual rules); next due at `nextDue`.
+    event ScheduleAdvanced(uint256 indexed id, uint256 indexed proposalId, uint256 nextDue);
 
     // ---- callbacks from GuardReactive (first argument: the injected reactive contract) ----
 
@@ -52,4 +59,8 @@ interface IGuardVault {
     function freeze(address reactive, bytes32 reason) external;
     /// @notice Refuse every payment to `account` (an attacker seen on this or another chain).
     function quarantine(address reactive, address account, bytes32 reason) external;
+    /// @notice Cancel the pending change of `label` if it would point the label at `to`.
+    function vetoPayee(address reactive, bytes32 label, address to) external;
+    /// @notice Attempt recurring payment `id` if it is due (CRON-driven); does nothing otherwise.
+    function payDue(address reactive, uint256 id) external;
 }

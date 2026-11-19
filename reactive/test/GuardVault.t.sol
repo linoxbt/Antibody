@@ -256,6 +256,74 @@ contract GuardVaultTest is Test {
         assertTrue(ok);
     }
 
+    // ---- veto and recurring payments ---------------------------------------------------------
+
+    function test_vetoCancelsOnlyTheMatchingChange() public {
+        address evil = address(0xE71);
+        vault.requestPayee(L_ALICE, evil, 1 ether);
+        vm.startPrank(PROXY);
+        vault.vetoPayee(GUARDIAN, L_ALICE, address(0x1234)); // a different address: no effect
+        (, , address pendingTo,,) = vault.payees(L_ALICE);
+        assertEq(pendingTo, evil);
+        vm.expectEmit(address(vault));
+        emit IGuardVault.PayeeChangeVetoed(L_ALICE, evil);
+        vault.vetoPayee(GUARDIAN, L_ALICE, evil);
+        vault.vetoPayee(GUARDIAN, L_ALICE, evil); // repeated delivery: harmless
+        vm.stopPrank();
+        (, , pendingTo,,) = vault.payees(L_ALICE);
+        assertEq(pendingTo, address(0));
+    }
+
+    function test_newCallbacksNeedTheGuardianThroughTheProxy() public {
+        vm.expectRevert(abi.encodeWithSelector(AbstractPayer.NotAuthorized.selector, address(this), PROXY));
+        vault.vetoPayee(GUARDIAN, L_ALICE, ALICE);
+        vm.expectRevert(abi.encodeWithSelector(AbstractPayer.NotAuthorized.selector, address(this), PROXY));
+        vault.payDue(GUARDIAN, 1);
+        vm.startPrank(PROXY);
+        vm.expectRevert(abi.encodeWithSelector(GuardVault.NotGuardian.selector, address(0xBAD), GUARDIAN));
+        vault.payDue(address(0xBAD), 1);
+        vm.stopPrank();
+    }
+
+    function test_scheduleRules() public {
+        uint64 tooShort = uint64(vault.DUPLICATE_WINDOW() - 1); // shorter than the duplicate window
+        vm.expectRevert(GuardVault.BadSchedule.selector);
+        vault.setSchedule(L_ALICE, ETH, 1, tooShort, 0);
+        vm.expectRevert(GuardVault.BadSchedule.selector);
+        vault.setSchedule(L_ALICE, ETH, 0, 1 hours, 0);
+        vm.prank(AGENT);
+        vm.expectRevert(GuardVault.NotOwner.selector);
+        vault.setSchedule(L_ALICE, ETH, 1, 1 hours, 0);
+        uint256 id = vault.setSchedule(L_ALICE, ETH, 0.1 ether, 1 hours, 0);
+        (,,,, uint64 nextDue, bool active) = vault.schedules(id);
+        assertEq(nextDue, block.timestamp, "a past first-due time starts now");
+        assertTrue(active);
+        vault.cancelSchedule(id);
+        vm.expectRevert(GuardVault.BadSchedule.selector);
+        vault.cancelSchedule(id);
+    }
+
+    function test_payDueAdvancesWithoutCatchUpBursts() public {
+        uint256 id = vault.setSchedule(L_ALICE, ETH, 0.1 ether, 1 hours, 0);
+        vm.warp(block.timestamp + 5 hours); // missed several intervals
+        vm.prank(PROXY);
+        vault.payDue(GUARDIAN, id);
+        assertEq(ALICE.balance, 0.1 ether);
+        (,,,, uint64 nextDue,) = vault.schedules(id);
+        assertEq(nextDue, block.timestamp + 1 hours, "one payment, then the next interval");
+        vm.prank(PROXY);
+        vault.payDue(GUARDIAN, id);
+        assertEq(ALICE.balance, 0.1 ether, "not due");
+    }
+
+    function test_payDuePaysTheCurrentAddressOfTheLabel() public {
+        uint256 id = vault.setSchedule(L_ALICE, ETH, 0.1 ether, 1 hours, 0);
+        vault.removePayee(L_ALICE);
+        vm.prank(PROXY);
+        vault.payDue(GUARDIAN, id); // the label has no address now: refused, nothing sent
+        assertEq(ALICE.balance, 0);
+    }
+
     // ---- invariants by fuzzing ------------------------------------------------------------
 
     /// Whatever the agent proposes, it never moves more than today's limit, never pays an

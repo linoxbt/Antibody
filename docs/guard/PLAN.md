@@ -82,3 +82,23 @@ payments when they fall due, even while the agent is offline.
   by the vault event they produced in a transaction to the callback proxy (`npm run link-callbacks`).
 - 39 Solidity tests, including the full loop simulated in one EVM (real vault events fed to
   GuardReactive, its callbacks delivered back through a stand-in proxy).
+
+## Phase 3 result (Base Sepolia done; Ethereum Sepolia waits for funds)
+- v2 contracts, Sourcify exact matches: `GuardReactive` v2 on Lasna
+  `0x7900d7765473eba75a816ccf58a481399036a282`, `GuardVault` v2 on Base Sepolia
+  `0x114e6c7e2cd7feeec8d75912cf762f1fc45dc7d2`. Version 1 stays deployed as the Phase 1 and 2 record.
+- Lessons: a quarantine confirmed on any vault makes the address a known attacker and is requested on
+  every other watched vault; `watch()` immunizes a new vault with the lessons so far.
+- Veto: a payee change towards a known attacker is cancelled by callback before its timelock ends; the
+  vault also refuses to activate a quarantined address on its own.
+- Recurring payments: the vault holds the schedules and enforces due times; GuardReactive mirrors them
+  and subscribes to Cron100 only while one is active (every tick is billed), unsubscribing on the last
+  cancellation.
+- Following Reactive MCP's pitfalls: every callback is idempotent (logs can be delivered twice), and a
+  freeze or quarantine not confirmed within 10 minutes can be re-requested by anyone (no network retries).
+- 53 Solidity tests, including two vaults on two simulated chains and CRON ticks.
+- Live: D (quarantine and lesson), E (veto), F (two CRON payments, then CRON off) on Base Sepolia;
+  G (Sepolia vault immunized at once, and an attacker seen on Sepolia quarantined on Base Sepolia)
+  runs with `npm run phase3 -- G` once the deployer has about 0.03 ETH on Ethereum Sepolia.
+- Base Sepolia now produces several blocks per second, so some callbacks land within the same second
+  as the agent's transaction (4 blocks later).

@@ -15,8 +15,11 @@ import { IGuardVault } from "./IGuardVault.sol";
  *           timelocked (`payeeDelay`); removing one is immediate.
  *         - A daily limit per token (UTC days); zero means the token cannot be paid at all.
  *         - The same recipient, token and amount twice within `DUPLICATE_WINDOW` is refused.
- *         - GuardReactive (the guardian) can freeze the vault or quarantine an address through
- *           this chain's Reactive callback proxy. Only the owner can undo either.
+ *         - GuardReactive (the guardian) can freeze the vault, quarantine an address, veto a pending
+ *           payee change to a known attacker, and trigger due recurring payments, all through this
+ *           chain's Reactive callback proxy. Only the owner can undo a freeze or a quarantine.
+ *         - Recurring payments are set by the owner and paid when due under the same rules as the
+ *           agent's proposals. Every callback is idempotent: the network may deliver one twice.
  *
  *         The owner is the human. The owner's key is never needed for day-to-day payments.
  *         Callback fees are paid from this contract's native balance (AbstractPayer).
@@ -31,6 +34,8 @@ contract GuardVault is IGuardVault, AbstractPayer {
     error DelayCanOnlyGrow();
     error Reentrancy();
     error WithdrawFailed();
+    error BadSchedule();
+    error QuarantinedPayee();
 
     struct Payee {
         address to;       // the active address for this label (zero when none)
@@ -60,6 +65,19 @@ contract GuardVault is IGuardVault, AbstractPayer {
     mapping(address token => uint256) public spendDay;
     /// @notice keccak(to, token, amount) => when it was last paid.
     mapping(bytes32 => uint256) public lastPaidAt;
+
+    struct Schedule {
+        bytes32 label;
+        address token;
+        uint128 amount;
+        uint64 interval;
+        uint64 nextDue;
+        bool active;
+    }
+
+    uint256 public constant MAX_SCHEDULES = 10;
+    uint256 public scheduleCount;
+    mapping(uint256 id => Schedule) public schedules;
 
     uint256 private _lock = 1;
 
@@ -103,13 +121,18 @@ contract GuardVault is IGuardVault, AbstractPayer {
      */
     function proposePayment(address to, address token, uint256 amount, bytes32 label) external nonReentrant returns (RefusalCode code) {
         if (msg.sender != agent) revert NotAgent();
-        uint256 id = ++proposalCount;
+        (, code) = _execute(to, token, amount, label);
+    }
+
+    /// @dev Checks the rules and pays or refuses; every outcome is an event.
+    function _execute(address to, address token, uint256 amount, bytes32 label) internal returns (uint256 id, RefusalCode code) {
+        id = ++proposalCount;
         emit PaymentProposed(id, to, token, amount, label);
 
         code = check(to, token, amount, label);
         if (code != RefusalCode.None) {
             emit PaymentRefused(id, to, uint8(code), amount);
-            return code;
+            return (id, code);
         }
 
         // effects before the transfer; undone below if the transfer fails
@@ -127,7 +150,7 @@ contract GuardVault is IGuardVault, AbstractPayer {
             spentOnDay[token] -= amount;
             lastPaidAt[key] = previous;
             emit PaymentRefused(id, to, uint8(RefusalCode.TransferFailed), amount);
-            return RefusalCode.TransferFailed;
+            return (id, RefusalCode.TransferFailed);
         }
         emit PaymentExecuted(id, to, token, amount);
     }
@@ -161,6 +184,27 @@ contract GuardVault is IGuardVault, AbstractPayer {
         emit Quarantined(account, reason);
     }
 
+    /// @inheritdoc IGuardVault
+    function vetoPayee(address reactive, bytes32 label, address to) external onlyGuardian(reactive) {
+        Payee storage p = payees[label];
+        if (p.effectiveAt == 0 || p.pendingTo != to) return; // already gone: nothing to do
+        p.pendingTo = address(0);
+        p.pendingCap = 0;
+        p.effectiveAt = 0;
+        emit PayeeChangeVetoed(label, to);
+    }
+
+    /// @inheritdoc IGuardVault
+    function payDue(address reactive, uint256 id) external onlyGuardian(reactive) nonReentrant {
+        Schedule storage sc = schedules[id];
+        if (!sc.active || block.timestamp < sc.nextDue) return; // not due (or a repeated delivery)
+        uint64 next = sc.nextDue + sc.interval;
+        if (next <= block.timestamp) next = uint64(block.timestamp) + sc.interval; // no catch-up bursts
+        sc.nextDue = next;
+        (uint256 proposalId,) = _execute(payees[sc.label].to, sc.token, sc.amount, sc.label);
+        emit ScheduleAdvanced(id, proposalId, next);
+    }
+
     // ---- the owner: payees ------------------------------------------------------------
 
     /// @notice Add a payee, or change a payee's address or cap. Takes effect after `payeeDelay`.
@@ -181,6 +225,7 @@ contract GuardVault is IGuardVault, AbstractPayer {
         if (p.effectiveAt == 0) revert NoPendingChange();
         if (block.timestamp < p.effectiveAt) revert TooEarly(p.effectiveAt);
         address to = p.pendingTo;
+        if (quarantined[to]) revert QuarantinedPayee();
         bytes32 existing = labelOf[to];
         if (existing != bytes32(0) && existing != label) revert BadPayee();
         if (p.to != address(0) && p.to != to) delete labelOf[p.to];
@@ -211,6 +256,27 @@ contract GuardVault is IGuardVault, AbstractPayer {
         p.to = address(0);
         p.cap = 0;
         emit PayeeRemoved(label, to);
+    }
+
+    // ---- the owner: recurring payments -------------------------------------------------
+
+    /**
+     * @notice Pay `amount` of `token` to the payee registered as `label` every `interval` seconds,
+     *         first at `firstDue`. GuardReactive's CRON triggers it; the usual rules still apply.
+     *         The interval is at least the duplicate window, so a schedule never trips that rule.
+     */
+    function setSchedule(bytes32 label, address token, uint128 amount, uint64 interval, uint64 firstDue) external onlyOwner returns (uint256 id) {
+        if (label == bytes32(0) || amount == 0 || interval < DUPLICATE_WINDOW || scheduleCount >= MAX_SCHEDULES) revert BadSchedule();
+        id = ++scheduleCount;
+        uint64 due = firstDue < block.timestamp ? uint64(block.timestamp) : firstDue;
+        schedules[id] = Schedule(label, token, amount, interval, due, true);
+        emit ScheduleSet(id, label, token, amount, interval, due);
+    }
+
+    function cancelSchedule(uint256 id) external onlyOwner {
+        if (!schedules[id].active) revert BadSchedule();
+        schedules[id].active = false;
+        emit ScheduleCancelled(id);
     }
 
     // ---- the owner: everything else ---------------------------------------------------

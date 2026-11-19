@@ -36,10 +36,10 @@ for (const file of existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('
     return `<tr><td>${esc(t.step)}</td><td>${mark}</td><td><a href="${n.explorer}/tx/${t.hash}">${t.hash.slice(0, 10)}…</a></td></tr>`;
   }).join('\n');
   for (const l of rec.loops ?? []) {
-    loops.push(`<tr><td>${esc(l.name)}</td><td>${esc(l.rule)}</td><td>${link(l.origin.chain, l.origin.tx, 'origin')}</td><td>${link(l.reactive.chain, l.reactive.tx, 'reactive')}</td><td>${link(l.callback.chain, l.callback.tx ?? '', 'callback')}</td><td>${l.originToCallbackSeconds ?? "?"}s</td></tr>`);
+    loops.push(`<tr><td>${esc(l.name)}</td><td>${esc(l.rule)}</td><td>${link(l.origin.chain, l.origin.tx, 'origin')}</td><td>${link(l.reactive.chain, l.reactive.tx, 'reactive')}</td><td>${link(l.callback.chain, l.callback.tx ?? '', 'callback')}</td><td>${((n) => (n == null ? '?' : n === 0 ? '&lt;1s' : `${n}s`))(l.originToCallbackSeconds ?? l.reactiveToCallbackSeconds)}</td></tr>`);
   }
   sections.push(`<section class="deploy">
-    <h2>On ${esc(rec.network)} <small class="note">(chain ${n.chainId})</small></h2>
+    <h2>On ${esc(rec.network)}${rec.version ? ` (v${rec.version})` : ''} <small class="note">(chain ${n.chainId})</small></h2>
     <dl>${contracts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${addr(v as string)}</dd>`).join('')}${rec.agent ? `<dt>agent</dt><dd>${addr(rec.agent)}</dd>` : ''}${Object.entries(rec.verified ?? {}).map(([k, u]) => `<dt>source</dt><dd><a href="${esc(String(u))}">${esc(k)} verified on Sourcify</a></dd>`).join('')}</dl>
     <table class="phases txs"><thead><tr><th scope="col">Step</th><th scope="col">Result</th><th scope="col">Transaction</th></tr></thead><tbody>
 ${rows}

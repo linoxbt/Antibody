@@ -16,7 +16,8 @@
     "phase2": "tsx scripts/phase2-loop.ts",
     "link-callbacks": "tsx scripts/link-callbacks.ts",
     "rmcp": "tsx scripts/rmcp.ts",
-    "deposit": "tsx scripts/deposit.ts"
+    "deposit": "tsx scripts/deposit.ts",
+    "phase3": "tsx scripts/phase3.ts"
   },
   "devDependencies": {
     "forge-std": "github:foundry-rs/forge-std#v1.9.7",

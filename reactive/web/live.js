@@ -28,6 +28,11 @@ function loops(s) {
   const row = (l) => `<tr class="${l.source}"><td>${esc(l.rule)}${l.source === 'recorded' ? ' <span class="note">(recorded)</span>' : ''}</td><td>${l.subject ? esc(short(l.subject)) : '<span class="note">vault</span>'}</td><td>${esc(CHAIN[l.destChain] ?? l.destChain ?? '')}</td>
     <td>${l.origin?.tx ? tx(l.origin?.chain, l.origin.tx, 'origin') : '<span class="note">owner call</span>'}</td><td>${tx('lasna', l.reactive?.tx, 'reaction')}</td><td>${tx(l.destChain, l.callback?.tx, 'callback')}</td><td>${secs(l.seconds)}</td></tr>`;
   $('loops').innerHTML = [...(s.live ?? []).map(row), ...(s.recorded ?? []).map(row)].join('');
+  const times = [...(s.live ?? []), ...(s.recorded ?? [])].filter((l) => l.origin?.tx && typeof l.seconds === 'number').map((l) => l.seconds).sort((a, b) => a - b);
+  if (times.length) {
+    const median = times[Math.floor(times.length / 2)];
+    $('latency').innerHTML = `Across ${times.length} loops with an origin transaction: median <b>${secs(median)}</b> from the origin's block to the callback's block, fastest ${secs(times[0])}, slowest ${secs(times.at(-1))} (Ethereum Sepolia's 12-second blocks set the slow end).`;
+  }
 }
 
 function events(s) {

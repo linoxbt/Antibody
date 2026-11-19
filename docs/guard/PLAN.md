@@ -129,3 +129,13 @@ payments when they fall due, even while the agent is offline.
   `NODE_USE_ENV_PROXY=1`; Lasna's RPC refuses a transaction whose worst-case fee exceeds 1 lREACT, so
   the fee ceiling is 1.25 times the base fee.
 - 62 Solidity tests (AI risk rule, untrusted oracles ignored, threshold, lesson import, oracle access).
+
+## Phase 5 progress
+- Guard service on Railway (`antibody-guard`, from this branch): indexer for the three chains with
+  linked loops and block-time latency, and the public AI scorer endpoint.
+- Live dashboard at https://antibody-guard.netlify.app/live.html: contract state, loops (live and
+  recorded) with a latency summary, known attackers, recent events, and "Try the AI scorer".
+- Base Sepolia makes 5 blocks a second (Ethereum Sepolia 12.6 s, Lasna 1.06 s), so the indexer's
+  look-back is set in seconds, not blocks.
+- Netlify injects its own script (`/.netlify/scripts/hud`) whose inline code the page's CSP blocks; the
+  console errors come from it, not from the dashboard.

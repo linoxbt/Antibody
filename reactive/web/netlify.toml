@@ -10,3 +10,10 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     Strict-Transport-Security = "max-age=31536000"
+
+# The Guard service on Railway (indexer and AI scorer endpoint); same origin, so the dashboard's CSP stays 'self'.
+[[redirects]]
+  from = "/api/*"
+  to = "https://antibody-guard-production.up.railway.app/api/:splat"
+  status = 200
+  force = true

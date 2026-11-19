@@ -60,3 +60,18 @@ first contract, on two different chains (Base Sepolia and Lasna).
   `LLM_API_KEY`. In this repository's cloud sessions the key is injected by the network proxy, so
   `npm run phase4` sets `NODE_USE_ENV_PROXY=1` to route Node's `fetch` through it.
 - Every run is saved in `docs/guard/agent-runs/` (the model's tool calls and results, never a key).
+
+## The Guard service (`service/`) and the live dashboard
+
+- `service/indexer.ts` follows the vaults, the RiskOracle and GuardReactive on all three chains, links each
+  GuardReactive decision to its origin transaction and its callback, and measures the time between their
+  blocks. It looks back `LOOKBACK_SECONDS` (default two hours) at start-up.
+- `service/server.ts`: `GET /api/health`, `GET /api/state`, and `POST /api/score`, where anyone can hand
+  the AI scorer a message (2,000 characters; 3 per client per 10 minutes; 30 model calls and 12 on-chain
+  reports per hour overall; reports only at 80 or more, and only restrict).
+- Deployed as the Railway service `antibody-guard` (root directory `reactive/`, `reactive/Dockerfile`)
+  from the `reactive-guard` branch, at https://antibody-guard-production.up.railway.app. Variables:
+  `PORT=8787`, `LOOKBACK_SECONDS`, `GUARD_SCORER_KEY` (the testnet key allowed on the RiskOracle) and
+  `LLM_API_KEY` (the model key; without it `/api/score` answers 503).
+- The dashboard is `web/live.html` on https://antibody-guard.netlify.app/live.html; Netlify sends `/api/*`
+  to the service, so the page's CSP stays `'self'`. Run both locally with `npm run service` and `npm run web`.

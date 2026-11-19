@@ -139,3 +139,9 @@ payments when they fall due, even while the agent is offline.
   look-back is set in seconds, not blocks.
 - Netlify injects its own script (`/.netlify/scripts/hud`) whose inline code the page's CSP blocks; the
   console errors come from it, not from the dashboard.
+- The site was rebuilt on Antibody's own frontend (`reactive/frontend/`, ported from `web/`): the same
+  landing (radar, tunnel, modes, tilt, learning loop, terminal), walkthrough, security page, an
+  Evidence page in the blog layout, and the same console shell with Guard views (Overview, Loops,
+  Vaults, Attackers, Events, AI scorer, Contracts). The console reads the Guard service live and falls
+  back to `evidence.json` (built from the deployment records) when the service does not answer.
+  `/live` now redirects to `/app/loops`.

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Antibody Guard — An immune system for agent wallets</title>
+  <meta name="description" content="Antibody Guard protects AI agents that hold money: the agent can only propose payments, a vault decides by on-chain rules, and a Reactive Network contract watches every chain and freezes or quarantines on its own. Built on Reactive Network, Base and Ethereum." />
+  <meta name="theme-color" content="#030407" />
+  <meta property="og:title" content="Antibody Guard — An immune system for agent wallets" />
+  <meta property="og:description" content="Payments proposed, not signed. Rules on-chain. Reactive on watch. Built on Reactive Network." />
+  <script src="/assets/js/theme-init.js"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+  <link rel="stylesheet" href="/assets/css/landing.css" />
+</head>
+<body data-page="home">
+  <main>
+    <!-- 1 · Hero: planet, orbits, starlight headline -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="planet" aria-hidden="true"><i></i></div>
+      <div class="orbits" aria-hidden="true">
+        <svg viewBox="0 0 1000 1000">
+          <defs>
+            <linearGradient id="arc-a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="ink" stop-opacity=".35" /><stop offset=".6" class="ink" stop-opacity=".06" /><stop offset="1" class="ink" stop-opacity="0" /></linearGradient>
+          </defs>
+          <circle cx="500" cy="500" r="430" fill="none" stroke="url(#arc-a)" stroke-width="1" />
+        </svg>
+        <span class="sat s1"></span><span class="sat s2"></span><span class="sat s3"></span><span class="sat s4"></span>
+      </div>
+      <div class="wrap hero-inner">
+        <a class="eyebrow reveal" href="https://dorahacks.io/hackathon/reactive-omni-buildathon" target="_blank" rel="noopener">Omni Buildathon <b>Reactive Network</b></a>
+        <h1 id="hero-title" class="words glow">An immune system for <span class="tail ul">agent wallets.</span></h1>
+        <p class="lede reveal d2">Payments proposed, not signed. Rules on-chain. Reactive on watch.</p>
+        <div class="ctas reveal d3">
+          <a class="btn btn-primary btn-lg" href="/walkthrough">Watch the story <span class="arrow" aria-hidden="true">→</span></a>
+          <a class="btn btn-ghost btn-lg" href="/app">Open console</a>
+        </div>
+      </div>
+      <a class="scroll-cue" href="#signature" aria-label="Scroll"><i></i></a>
+    </section>
+
+    <!-- 2 · Radar: every memory gets a signature (scroll-scrubbed) -->
+    <section class="radar" id="signature" aria-label="Every payment is a proposal">
+      <div class="sticky">
+        <svg class="radar-grid" viewBox="-720 -450 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <g class="rg-solid" fill="none">
+            <circle r="160" /><circle r="390" /><circle r="620" /><circle r="850" />
+            <path d="M0 -900V900" />
+          </g>
+          <g class="rg-dash" fill="none" stroke-dasharray="6 8">
+            <path d="M-720 0H720" /><path d="M-640 -640L640 640" /><path d="M-640 640L640 -640" />
+          </g>
+          <g id="radar-dot"><circle cx="160" cy="0" r="18" fill="url(#halo)" /><circle cx="160" cy="0" r="7" class="rg-dot" /></g>
+          <defs><radialGradient id="halo"><stop offset="0" class="ink" stop-opacity=".7" /><stop offset="1" class="ink" stop-opacity="0" /></radialGradient></defs>
+        </svg>
+        <div class="wrap radar-copy">
+          <h2 class="scrub">Every payment is a <span class="tail">proposal.</span></h2>
+          <div class="lanes-row" id="lanes-row">
+            <span class="tag derived">agent · proposes</span><span class="tag trusted">vault · decides</span><span class="tag untrusted">reactive · watches</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 · Tunnel: the poison stops before it pays -->
+    <section class="tunnel" id="tunnel" aria-label="Payments decided on-chain">
+      <div class="sticky">
+        <svg class="tunnel-svg" id="tunnel-svg" viewBox="-720 -450 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+        <div class="wrap tunnel-copy">
+          <h2 class="words">Poison stops <span class="tail">before it pays.</span></h2>
+          <form class="prompt reveal d1" id="demo-prompt" aria-label="Try an instruction (illustration)">
+            <input id="demo-input" aria-label="Instruction" autocomplete="off" />
+            <button class="send" type="submit" aria-label="Run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg></button>
+          </form>
+          <div class="verdict-chip" id="demo-verdict" aria-live="off"></div>
+          <p class="demo-note">Illustration: the real rules run in GuardVault, on-chain.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 · Modes: one guard, four moves -->
+    <section class="section modes" aria-labelledby="modes-title">
+      <div class="wrap">
+        <div class="modes-head">
+          <h2 id="modes-title" class="words">One guard.<br />Four <span class="tail">moves.</span></h2>
+          <p class="lede reveal d1">The agent proposes, the vault decides, Reactive Network watches every chain and acts on its own. Same agent, docked over a vault it cannot drain.</p>
+        </div>
+        <div class="modes-grid">
+          <figure class="app-frame reveal" aria-label="Antibody Guard console preview">
+            <div class="app">
+              <aside class="app-side" aria-hidden="true">
+                <div class="app-brand"><img src="/assets/img/mark.svg" alt="" width="20" height="20" />Antibody <span>guard</span></div>
+                <span class="app-sec">Guard</span>
+                <span class="app-nav" data-for="0"><i class="ic ic-sign"></i>Vault</span>
+                <span class="app-nav" data-for="1"><i class="ic ic-trace"></i>Loops</span>
+                <span class="app-nav" data-for="2"><i class="ic ic-pay"></i>Proposals</span>
+                <span class="app-nav" data-for="3"><i class="ic ic-q"></i>Attackers</span>
+                <span class="app-sec">Reactive</span>
+                <span class="app-nav"><i class="ic ic-ledger"></i>Events</span>
+                <span class="app-user"><b>O</b>Owner · testnet</span>
+              </aside>
+              <div class="app-main-mock">
+                <div class="panel" data-mode="0">
+                  <div class="mock-h">Payees <span class="pill ok">2 active</span></div>
+                  <div class="mock-table">
+                    <div class="tr th"><span>Label</span><span>Address</span><span>Cap</span><span>Status</span></div>
+                    <div class="tr"><span>alice</span><span>0x…a11ce</span><span>0.003</span><span><em class="tag trusted">active</em></span></div>
+                    <div class="tr"><span>bob</span><span>0x…0b0b</span><span>0.005</span><span><em class="tag trusted">active</em></span></div>
+                    <div class="tr"><span>carol</span><span>0x…ca01</span><span>0.002</span><span><em class="tag derived">timelock</em></span></div>
+                    <div class="tr"><span>—</span><span>0x…5afe00</span><span>—</span><span><em class="tag untrusted">quarantined</em></span></div>
+                  </div>
+                </div>
+                <div class="panel" data-mode="1">
+                  <div class="mock-h">Loop <span class="pill bad">quarantine</span></div>
+                  <svg class="mini-graph" viewBox="0 0 560 230" aria-hidden="true">
+                    <path class="e hot" d="M150 52 C 190 52, 190 118, 220 118" /><path class="e hot" d="M350 118 C 380 118, 380 52, 410 52" /><path class="e" d="M150 182 C 280 182, 280 182, 410 182" />
+                    <g class="n unt"><rect x="10" y="30" width="140" height="44" rx="22" /><text x="80" y="57">◆ Phishing email</text></g>
+                    <g class="n unt"><rect x="220" y="96" width="130" height="44" rx="10" /><text x="285" y="123">Lasna · react</text></g>
+                    <g class="n bad"><rect x="410" y="30" width="140" height="44" rx="10" /><text x="480" y="57">both chains · blocked</text></g>
+                    <g class="n tru"><rect x="10" y="160" width="140" height="44" rx="10" /><text x="80" y="187">Alice · payee</text></g>
+                    <g class="n tru"><rect x="410" y="160" width="140" height="44" rx="10" /><text x="480" y="187">invoice · paid</text></g>
+                  </svg>
+                </div>
+                <div class="panel" data-mode="2">
+                  <div class="mock-h">Proposal <span class="pill bad">refused</span></div>
+                  <div class="pay-card">
+                    <div class="pay-top"><span>Pay <b>0.001 ETH</b></span><code>→ 0xa11c…fe00</code></div>
+                    <ul class="mock-rules">
+                      <li class="ok"><b>01</b>vault not frozen</li>
+                      <li class="ok"><b>02</b>recipient not quarantined</li>
+                      <li class="no"><b>03</b>not a registered payee</li>
+                      <li class="no"><b>04</b>“alice” is 0x…a11ce</li>
+                    </ul>
+                    <div class="pay-verdict">Refused<small>UnknownPayee · an event, nothing sent</small></div>
+                  </div>
+                </div>
+                <div class="panel" data-mode="3">
+                  <div class="mock-h">Lesson <span class="pill rec">every chain</span></div>
+                  <div class="toggles">
+                    <div class="tg"><span>◆ 0xa11c…fe00</span><em>reported</em><i class="sw"></i></div>
+                    <div class="tg"><span>Base Sepolia vault</span><em>quarantined</em><i class="sw"></i></div>
+                    <div class="tg"><span>Ethereum Sepolia vault</span><em>quarantined</em><i class="sw"></i></div>
+                    <div class="tg"><span>payee change → attacker</span><em>vetoed</em><i class="sw"></i></div>
+                    <div class="tg on"><span>Alice · payee</span><em>still paid</em><i class="sw"></i></div>
+                  </div>
+                  <div class="learned">Lesson #3 learned</div>
+                </div>
+              </div>
+            </div>
+            <figcaption class="mode-cap">
+              <h3 id="mode-title">Proposes, never signs</h3>
+              <p id="mode-text">The agent’s key can only ask the vault.</p>
+            </figcaption>
+          </figure>
+          <div class="chat-col reveal d1">
+            <div class="mode-tabs" role="tablist" aria-label="Modes">
+              <button role="tab" data-tab="0"><span>01</span>Propose</button>
+              <button role="tab" data-tab="1"><span>02</span>React</button>
+              <button role="tab" data-tab="2"><span>03</span>Refuse</button>
+              <button role="tab" data-tab="3"><span>04</span>Quarantine</button>
+            </div>
+            <div class="chat" aria-live="polite">
+              <div class="chat-top" aria-hidden="true"><i></i><i></i><i></i><span>Steward</span></div>
+              <div class="chat-body" id="chat-body"></div>
+              <div class="chat-input" aria-hidden="true"><span>Ask Steward…</span><b></b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 · Tilt: provenance you can rebuild -->
+    <section class="tilt" id="tilt" aria-labelledby="tilt-title">
+      <div class="tilt-grid" aria-hidden="true"></div>
+      <div class="wrap">
+        <h2 id="tilt-title" class="words center">Learned on one chain.<br /><span class="tail">Blocked on every chain.</span></h2>
+      </div>
+      <div class="tilt-stage">
+        <div class="tilt-card" id="tilt-card">
+          <div class="dash">
+            <div class="dash-top"><i></i><i></i><i></i></div>
+            <div class="dash-body">
+              <div class="dash-head"><span>Guard · live</span><span class="btns"><b>Loops</b><b class="hi">Try the AI</b></span></div>
+              <div class="dash-stats">
+                <div><small>Vaults</small><strong>2</strong></div>
+                <div><small>Lessons</small><strong>3</strong></div>
+                <div><small>Median</small><strong>2 s</strong></div>
+                <div><small>Reactive</small><strong class="okc">healthy ✓</strong></div>
+              </div>
+              <div class="dash-list">
+                <span class="dl-h">Loops <b>15</b></span>
+                <div><i class="dot r"></i>AI risk report · both chains<em>2 s · 10 s</em></div>
+                <div><i class="dot y"></i>Learned on Sepolia · Base<em>14 s</em></div>
+                <div><i class="dot g"></i>Invoice to Alice · paid<em>0.001 ETH</em></div>
+              </div>
+            </div>
+          </div>
+          <div class="float-card" aria-hidden="true">
+            <div class="fc-h"><span>Loop</span><em>on-chain · live</em></div>
+            <div class="fc-r"><span>origin</span><code>Base Sepolia</code></div>
+            <div class="fc-r"><span>reaction</span><code>Lasna</code></div>
+            <div class="fc-r"><span>callback</span><code>both vaults</code></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 · Proof strip -->
+    <section class="proof">
+      <div class="wrap">
+        <div class="proof-card reveal">
+          <div class="pc-cell marquee-cell">
+            <div class="marquee" aria-label="Built on Reactive Network, Base, Ethereum and Qwen"><div class="mq-track"><b>Reactive Network</b><b>Base</b><b>Ethereum</b><b>Qwen</b><b>Reactive Network</b><b>Base</b><b>Ethereum</b><b>Qwen</b></div></div>
+            <p>Built on <strong>Reactive Network</strong>, with vaults on Base and Ethereum testnets.</p>
+          </div>
+          <div class="pc-cell"><div class="big"><span class="count" id="proof-median" data-from="30" data-to="2">2</span><small> s</small></div><p><strong>Median time</strong> from the agent’s transaction to the callback that stops it, on testnet.</p></div>
+          <div class="pc-cell"><div class="big"><span class="count" id="proof-loops" data-from="0" data-to="15">15</span><small> loops</small></div><p><strong>On-chain loops</strong> origin → reaction → callback, every one linked in the evidence.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 · Learning loop -->
+    <section class="section loop" aria-labelledby="loop-title">
+      <div class="wrap loop-grid">
+        <div>
+          <h2 id="loop-title" class="words">Fooled once.<br /><span class="tail">Never twice.</span></h2>
+          <p class="lede reveal d1">Every quarantine becomes a lesson in the Reactive contract. Every other vault blocks that address at once, and a vault added later is born immune.</p>
+        </div>
+        <div class="orbit-diagram reveal d2" aria-label="Quarantine, lesson, every chain, caught">
+          <div class="od-ring"></div>
+          <div class="od-runner"><i></i></div>
+          <span class="od-node n1"><b>01</b>Quarantine</span>
+          <span class="od-node n2"><b>02</b>Lesson</span>
+          <span class="od-node n3"><b>03</b>Every chain</span>
+          <span class="od-node n4"><b>04</b>Caught</span>
+          <img class="od-core" src="/assets/img/mark.svg" alt="" width="84" height="84" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 · x402 -->
+    <section class="section x402" aria-labelledby="x402-title">
+      <div class="wrap x402-grid">
+        <h2 id="x402-title" class="words">The AI scores.<br /><span class="tail">Reactive enforces.</span></h2>
+        <div class="term reveal d1" aria-label="An AI risk report, enforced by Reactive">
+          <div class="term-top"><i></i><i></i><i></i><span>scorer · reactive</span></div>
+          <pre><span class="m">qwen</span>    phishing email   <span class="y">95</span>  "new wallet, pre-approved"
+<span class="m">oracle</span>  RiskOracle       <span class="g">REPORT</span>  0xa11c…fe00
+<span class="m">lasna</span>   GuardReactive    <span class="g">REACT</span>   AiRisk
+<span class="m">base</span>    vault            <span class="r">QUARANTINE</span>  2 s
+<span class="m">eth</span>     vault            <span class="r">QUARANTINE</span>  10 s
+
+<span class="c"># the model can only restrict</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 · Final call -->
+    <section class="finale" aria-labelledby="finale-title">
+      <div class="horizon" aria-hidden="true"></div>
+      <div class="wrap finale-inner">
+        <h2 id="finale-title" class="words glow">See it in <span class="tail">three minutes.</span></h2>
+        <div class="ctas reveal d2">
+          <a class="btn btn-primary btn-lg" href="/walkthrough">Start the story <span class="arrow" aria-hidden="true">→</span></a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/linoxbt/Antibody/tree/reactive-guard" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/assets/js/pages/home.js"></script>
+</body>
+</html>

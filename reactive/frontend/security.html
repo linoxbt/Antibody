@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Security model · Antibody Guard</title>
+  <meta name="description" content="Antibody Guard's twelve guarantees, its roles and trust assumptions, and the callback format." />
+  <meta name="theme-color" content="#030407" />
+  <script src="/assets/js/theme-init.js"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+</head>
+<body data-page="security">
+  <div class="app-bg" aria-hidden="true"></div>
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Security <b>02</b></span><h1 class="words">Twelve <span class="tail">guarantees.</span></h1></div>
+    </div>
+    <div class="app-main">
+      <section class="inv-grid" aria-label="Guarantees">
+        <div class="inv reveal"><span class="inv-n">G-01</span><h3>Propose, never sign</h3><span class="inv-t">NotAgent</span></div>
+        <div class="inv reveal"><span class="inv-n">G-02</span><h3>Default deny</h3><span class="inv-t">UnknownPayee</span></div>
+        <div class="inv reveal"><span class="inv-n">G-03</span><h3>Label binding</h3><span class="inv-t">LabelMismatch</span></div>
+        <div class="inv reveal"><span class="inv-n">G-04</span><h3>Caps and daily limits</h3><span class="inv-t">OverCap OverDailyLimit</span></div>
+        <div class="inv reveal"><span class="inv-n">G-05</span><h3>Timelocked payees</h3><span class="inv-t">TooEarly</span></div>
+        <div class="inv reveal"><span class="inv-n">G-06</span><h3>Refusals are events</h3><span class="inv-t">PaymentRefused</span></div>
+        <div class="inv reveal"><span class="inv-n">G-07</span><h3>Authenticated callbacks</h3><span class="inv-t">NotGuardian NotAuthorized</span></div>
+        <div class="inv reveal"><span class="inv-n">G-08</span><h3>The model only restricts</h3><span class="inv-t">riskThreshold</span></div>
+        <div class="inv reveal"><span class="inv-n">G-09</span><h3>Learned once, blocked everywhere</h3><span class="inv-t">Lesson</span></div>
+        <div class="inv reveal"><span class="inv-n">G-10</span><h3>Idempotent callbacks</h3><span class="inv-t">payDue vetoPayee</span></div>
+        <div class="inv reveal"><span class="inv-n">G-11</span><h3>Retry without trust</h3><span class="inv-t">retryFreeze</span></div>
+        <div class="inv reveal"><span class="inv-n">G-12</span><h3>The owner has the last word</h3><span class="inv-t">withdraw unfreeze</span></div>
+      </section>
+      <section class="grid-2">
+        <div class="card reveal">
+          <div class="card-title"><h3>Roles</h3></div>
+          <table class="table"><tbody>
+            <tr><td class="mono">owner</td><td><span class="tag trusted">trusted</span></td><td class="muted">payees, limits, unfreeze, release, withdraw</td></tr>
+            <tr><td class="mono">agent</td><td><span class="tag derived">proposes</span></td><td class="muted">proposePayment, nothing else</td></tr>
+            <tr><td class="mono">GuardReactive</td><td><span class="tag record">guardian</span></td><td class="muted">freeze, quarantine, veto, payDue: through the proxy only</td></tr>
+            <tr><td class="mono">AI scorer</td><td><span class="tag untrusted">restricts</span></td><td class="muted">reports to the RiskOracle; can only quarantine</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card reveal d1">
+          <div class="card-title"><h3>Trust assumptions</h3></div>
+          <table class="table"><tbody>
+            <tr><td>Owner key</td><td class="muted">root of trust</td></tr>
+            <tr><td>Reactive Network</td><td class="muted">a lost callback is retried by anyone after 10 minutes; the vault's rules hold regardless</td></tr>
+            <tr><td>Callback proxy</td><td class="muted">checked twice: the proxy and the injected sender</td></tr>
+            <tr><td>The model</td><td class="muted">untrusted: fooled → refused, never paid</td></tr>
+          </tbody></table>
+        </div>
+      </section>
+      <section class="card glow reveal">
+        <div class="card-title"><h3>Callback</h3><span class="pill rec plain">V_1_0</span></div>
+        <pre class="quote">SYSTEM.requestCallbackV_1_0({ chainId, recipient: vault, gasLimit, payload })
+payload = quarantine(address reactive, address account, bytes32 reason)
+          └─ the proxy writes GuardReactive's address here; the vault checks it equals its guardian</pre>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/static.js"></script>
+</body>
+</html>

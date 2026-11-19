@@ -1,0 +1,48 @@
+# Antibody Guard site (built from reactive/frontend by reactive/scripts/build-web.ts, deployed from the
+# reactive-guard branch). The Guard service on Railway answers /api/*, same origin.
+[build]
+  publish = "."
+  command = "echo static"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Strict-Transport-Security = "max-age=31536000"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+[[headers]]
+  for = "/assets/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/evidence.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://antibody-guard-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+# the console is a single-page app
+[[redirects]]
+  from = "/app/*"
+  to = "/app.html"
+  status = 200
+
+# the earlier status page
+[[redirects]]
+  from = "/live"
+  to = "/app/loops"
+  status = 301
+[[redirects]]
+  from = "/live.html"
+  to = "/app/loops"
+  status = 301

@@ -1,0 +1,106 @@
+// Public site shell: navigation (with mobile drawer), footer, toast,
+// starfield and motion. The signed-in console has its own shell (app/main.js).
+import './pwa.js';
+import { el } from './ui.js';
+import { sky, armReveals } from './motion.js';
+import { themeSwitch } from './theme.js';
+
+export const REPO = 'https://github.com/linoxbt/Antibody';
+export const TREE = `${REPO}/tree/reactive-guard`;
+export const BLOB = `${REPO}/blob/reactive-guard`;
+
+const PAGES = [
+  { href: '/', id: 'home', label: 'Overview', hint: '00' },
+  { href: '/walkthrough', id: 'walkthrough', label: 'Walkthrough', hint: '01' },
+  { href: '/security', id: 'security', label: 'Security', hint: '02' },
+  { href: '/evidence', id: 'evidence', label: 'Evidence', hint: '03' },
+  { href: '/app', id: 'console', label: 'Console', hint: '04' },
+];
+const NAV_LINKS = ['walkthrough', 'security', 'evidence'];
+
+function brand() {
+  return el('a', { class: 'brand', href: '/', 'aria-label': 'Antibody Guard home' }, el('img', { src: '/assets/img/mark.svg', alt: '', width: 30, height: 30 }), el('span', { class: 'wordmark' }, 'antibody'), el('span', { class: 'chip-v' }, 'guard'));
+}
+
+export function mountShell(current) {
+  const here = (p) => (p.id === current ? { 'aria-current': 'page' } : {});
+  const burger = el('button', { class: 'burger', 'aria-label': 'Open menu', 'aria-expanded': 'false', 'aria-controls': 'drawer' }, el('span'), el('span'), el('span'));
+  const drawer = el(
+    'nav',
+    { class: 'drawer', id: 'drawer', 'aria-label': 'Site', inert: '' },
+    ...PAGES.map((p) => el('a', { href: p.href, ...here(p) }, p.label, el('span', {}, p.hint))),
+    el('div', { class: 'drawer-theme' }, el('span', {}, 'Appearance'), themeSwitch()),
+    el('a', { class: 'btn btn-primary', href: '/app' }, 'Open console'),
+    el('a', { class: 'btn btn-ghost', href: TREE, target: '_blank', rel: 'noopener', style: 'margin-top:10px' }, 'View on GitHub'),
+  );
+  const header = el(
+    'header',
+    { class: 'nav' },
+    el(
+      'div',
+      { class: 'wrap' },
+      brand(),
+      el('nav', { class: 'nav-links', 'aria-label': 'Primary' }, ...PAGES.filter((p) => NAV_LINKS.includes(p.id)).map((p) => el('a', { href: p.href, ...here(p) }, p.label))),
+      el('nav', { class: 'nav-links', 'aria-label': 'Resources' }, el('a', { href: TREE, target: '_blank', rel: 'noopener' }, 'GitHub')),
+      el('div', { class: 'nav-cta' }, el('a', { class: 'btn btn-ghost btn-sm', href: '/app/scorer' }, 'Try the AI'), el('a', { class: 'btn btn-primary btn-sm', href: '/app' }, 'Open console')),
+      burger,
+    ),
+  );
+  const setOpen = (open) => {
+    drawer.classList.toggle('open', open);
+    drawer.inert = !open; // closed: out of the tab order and the accessibility tree
+    burger.setAttribute('aria-expanded', String(open));
+    burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    document.body.classList.toggle('no-scroll', open);
+    header.classList.toggle('scrolled', open || scrollY > 8);
+    if (open) drawer.querySelector('a')?.focus();
+  };
+  burger.addEventListener('click', () => setOpen(burger.getAttribute('aria-expanded') !== 'true'));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && drawer.classList.contains('open')) {
+      setOpen(false);
+      burger.focus();
+    }
+  });
+  matchMedia('(min-width: 1081px)').addEventListener('change', (m) => m.matches && setOpen(false));
+  const onScroll = () => header.classList.toggle('scrolled', scrollY > 8 || drawer.classList.contains('open'));
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  document.body.prepend(header, drawer);
+  // Code blocks that scroll sideways must be reachable by keyboard.
+  for (const pre of document.querySelectorAll('pre')) if (!pre.hasAttribute('tabindex')) pre.tabIndex = 0;
+
+  const col = (title, links) => el('div', {}, el('h4', {}, title), ...links.map(([t, h, ext]) => el('a', { href: h, ...(ext ? { target: '_blank', rel: 'noopener' } : {}) }, t)));
+  document.body.append(
+    el(
+      'footer',
+      { class: 'footer' },
+      el(
+        'div',
+        { class: 'wrap' },
+        el(
+          'div',
+          { class: 'footer-grid' },
+          el('div', {}, brand(), el('p', {}, 'An immune system for agent wallets.')),
+          col('Product', [['Walkthrough', '/walkthrough'], ['Security', '/security'], ['Evidence', '/evidence'], ['Console', '/app'], ['Try the AI', '/app/scorer']]),
+          col('Build', [['Contracts', `${TREE}/reactive/contracts`, true], ['Build plan', `${BLOB}/docs/guard/PLAN.md`, true], ['Reactive MCP notes', `${BLOB}/docs/guard/reactive-mcp.md`, true]]),
+          col('Project', [['Source', TREE, true], ['Reactive Network', 'https://dev.reactive.network', true], ['Omni Buildathon', 'https://dorahacks.io/hackathon/reactive-omni-buildathon', true]]),
+        ),
+        el('div', { class: 'giant', 'aria-hidden': 'true' }, 'antibody'),
+        el('div', { class: 'legal' }, el('span', {}, `© ${new Date().getFullYear()} Antibody Guard · MIT · testnets only: Base Sepolia, Ethereum Sepolia, Reactive Lasna`), themeSwitch()),
+      ),
+    ),
+  );
+  sky();
+  armReveals();
+}
+
+let toastTimer;
+export function toast(msg, ms = 4200) {
+  let t = document.querySelector('.toast');
+  if (!t) document.body.append((t = el('div', { class: 'toast', role: 'status', 'aria-live': 'polite' })));
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}

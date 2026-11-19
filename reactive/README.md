@@ -73,5 +73,5 @@ first contract, on two different chains (Base Sepolia and Lasna).
   from the `reactive-guard` branch, at https://antibody-guard-production.up.railway.app. Variables:
   `PORT=8787`, `LOOKBACK_SECONDS`, `GUARD_SCORER_KEY` (the testnet key allowed on the RiskOracle) and
   `LLM_API_KEY` (the model key; without it `/api/score` answers 503).
-- The dashboard is `web/live.html` on https://antibody-guard.netlify.app/live.html; Netlify sends `/api/*`
+- The site is Antibody's frontend, ported in `frontend/` (landing, walkthrough, security, evidence, and the console at `/app`) on https://antibody-guard.netlify.app; Netlify sends `/api/*`
   to the service, so the page's CSP stays `'self'`. Run both locally with `npm run service` and `npm run web`.

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evidence · Antibody Guard</title>
+  <meta name="description" content="Every Antibody Guard contract, verified on Sourcify, and every origin → reaction → callback loop on Base Sepolia, Ethereum Sepolia and Reactive Lasna." />
+  <meta name="theme-color" content="#030407" />
+  <script src="/assets/js/theme-init.js"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+  <link rel="preload" href="/assets/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/assets/css/brand.css" />
+  <link rel="stylesheet" href="/assets/css/docs.css" />
+</head>
+<body data-page="evidence">
+  <div class="app-bg" aria-hidden="true"></div>
+  <main class="wrap">
+    <div class="page-head">
+      <div><span class="eyebrow">Evidence <b>03</b></span><h1 class="words">Everything that happened, <span class="tail">on-chain.</span></h1></div>
+    </div>
+    <div class="docs">
+      <nav class="toc" aria-label="On this page">
+        <a href="#contracts">Contracts</a>
+        <a href="#loops">Loops</a>
+        <a href="#phase-1">The vault's rules</a>
+        <a href="#the-ai">The AI</a>
+        <a href="#reproduce">Reproduce it</a>
+      </nav>
+      <article class="doc blog">
+<p><em>Antibody Guard on testnets: vaults on Base Sepolia and Ethereum Sepolia, GuardReactive on Reactive Lasna. Generated from the deployment records on <!--GENERATED-->; the console shows the same chains live.</em></p>
+<h2 id="contracts">Contracts</h2>
+<p>All verified on Sourcify (exact match).</p>
+<div class="table-wrap"><table class="table"><thead><tr><th>Contract</th><th>Chain</th><th>Address</th><th>Source</th><th>Role</th></tr></thead><tbody><!--CURRENT--></tbody></table></div>
+<p>Earlier versions stay deployed as the record of each phase:</p>
+<div class="table-wrap"><table class="table"><thead><tr><th>Contract</th><th>Chain</th><th>Address</th><th>Source</th><th>Status</th></tr></thead><tbody><!--HISTORY--></tbody></table></div>
+<h2 id="loops">Loops: origin → reaction → callback</h2>
+<p>Each row is one decision by GuardReactive on Reactive Lasna, with the transaction that caused it and the callback that carried it out. Time runs from the origin's block to the callback's block (block timestamps). Base Sepolia makes about five blocks a second; Ethereum Sepolia about one every twelve seconds.</p>
+<div class="table-wrap"><table class="table"><thead><tr><th>Scenario</th><th>Origin</th><th>Reaction</th><th>Callback</th><th>Time</th></tr></thead><tbody><!--LOOPS--></tbody></table></div>
+<h2 id="phase-1">The vault's rules</h2>
+<p>The agent's first proposals on Base Sepolia (GuardVault v1). A refusal is an event, not a revert, so Reactive can see it.</p>
+<div class="table-wrap"><table class="table"><thead><tr><th>What the agent tried</th><th>Result</th><th>Transaction</th></tr></thead><tbody><!--PHASE1--></tbody></table></div>
+<h2 id="the-ai">The AI</h2>
+<!--AI-->
+<p>The scorer can only report an address that appears in the message, never a registered payee, and a report can only quarantine. Every model run is saved in <a href="https://github.com/linoxbt/Antibody/tree/reactive-guard/docs/guard/agent-runs" target="_blank" rel="noopener">docs/guard/agent-runs</a>.</p>
+<h2 id="reproduce">Reproduce it</h2>
+<pre><code>git clone -b reactive-guard https://github.com/linoxbt/Antibody && cd Antibody/reactive
+npm ci && npm run deps && npm run build && npm test     # 62 Solidity tests
+npm run evidence -- lasna-v4                            # re-read the loops from the chains
+npm run rmcp -- get_rc_health '{"rc":"&lt;GuardReactive&gt;"}'   # Reactive MCP diagnosis</code></pre>
+      </article>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/pages/static.js"></script>
+</body>
+</html>
